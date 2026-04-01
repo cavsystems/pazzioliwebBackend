@@ -1,0 +1,94 @@
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+    <persistence-unit name="default">
+        <!-- Usuarios -->
+        <class>com.pazzioliweb.usuariosbacken.entity.Usuario</class>
+        <class>com.pazzioliweb.usuariosbacken.entity.Roles</class>
+         <class>com.pazzioliweb.usuariosbacken.entity.Permiso</class>
+          <class>com.pazzioliweb.usuariosbacken.entity.PermisoRol</class>
+            <class>com.pazzioliweb.usuariosbacken.entity.Tipopersona</class>
+                        <class>com.pazzioliweb.productosmodule.entity.Usuariobodega</class>
+                           <class>com.pazzioliweb.usuariosbacken.entity.Usuarioclientes</class>
+                            <class>com.pazzioliweb.usuariosbacken.entity.Usuarioclientesusuario</class>
+          
+          
+        
+        <!-- Empresas -->
+        <class>com.pazzioliweb.empresasback.entity.Actividadeconomica</class>
+          <class>com.pazzioliweb.empresasback.entity.Empresa</class>
+           <class>com.pazzioliweb.empresasback.entity.Empresas</class>
+            <class>com.pazzioliweb.empresasback.entity.Regimen</class>
+        <!-- Common (si tiene entidades) -->
+        <class>com.pazzioliweb.commonbacken.entity.Administrador</class>
+        <class>com.pazzioliweb.commonbacken.entity.CodigoPostal</class>
+        <class>com.pazzioliweb.commonbacken.entity.Departamento</class>
+        <class>com.pazzioliweb.commonbacken.entity.Impuestos</class>
+        <class>com.pazzioliweb.commonbacken.entity.Municipio</class>
+        <class>com.pazzioliweb.commonbacken.entity.Sesiones</class>
+        <class>com.pazzioliweb.commonbacken.entity.Pais</class>
+        <class>com.pazzioliweb.commonbacken.entity.Tipoidentificacion</class>
+        <class>com.pazzioliweb.commonbacken.entity.Retenciones</class>
+
+        <!--  Productos -->
+        <class>com.pazzioliweb.productosmodule.entity.Bodegas</class>
+        <class>com.pazzioliweb.productosmodule.entity.Existencias</class>
+        <class>com.pazzioliweb.productosmodule.entity.Grupos</class>
+        <class>com.pazzioliweb.productosmodule.entity.Lineas</class>
+        <class>com.pazzioliweb.productosmodule.entity.Precios</class>
+        <class>com.pazzioliweb.productosmodule.entity.PreciosProductoVariante</class>
+        <class>com.pazzioliweb.productosmodule.entity.Productos</class>
+        <class>com.pazzioliweb.productosmodule.entity.UnidadesMedida</class>
+        <class>com.pazzioliweb.productosmodule.entity.UnidadesMedidaProducto</class>
+        <class>com.pazzioliweb.productosmodule.entity.UnidadesMedidaProductoId</class>
+        <class>com.pazzioliweb.productosmodule.entity.ProductoVariante</class>
+        <class>com.pazzioliweb.productosmodule.entity.ProductoVarianteDetalle</class>
+        <class>com.pazzioliweb.productosmodule.entity.TipoCaracteristica</class>
+        <class>com.pazzioliweb.productosmodule.entity.Caracteristica</class>
+        <class>com.pazzioliweb.productosmodule.entity.TipoProducto</class>
+        
+        <!-- Terceros -->
+        <class>com.pazzioliweb.tercerosmodule.entity.ClasificacionTercero</class>    
+        <class>com.pazzioliweb.tercerosmodule.entity.ContactoTercero</class>
+        <class>com.pazzioliweb.tercerosmodule.entity.SedeTercero</class>
+        <class>com.pazzioliweb.tercerosmodule.entity.Terceros</class>
+        <class>com.pazzioliweb.tercerosmodule.entity.TipoContacto</class>
+        
+        <!-- Comprobantes -->
+        <class>com.pazzioliweb.comprobantesmodule.entity.CategoriasComprobantes</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.Comprobantes</class>
+        
+        <!-- Cajas -->
+        <class>com.pazzioliweb.cajasmodule.entity.Cajas</class>
+        
+        <!-- Vendedores -->
+        <class>com.pazzioliweb.vendedoresmodule.entity.Vendedores</class>
+        
+        <!-- Metodos pago -->
+        <class>com.pazzioliweb.metodospagomodule.entity.MetodosPago</class>
+        <class>com.pazzioliweb.metodospagomodule.entity.TipoTotales</class>
+        
+        <!-- Facturacion -->
+        <class>com.pazzioliweb.facturacionmodule.entity.Facturas</class>
+        <class>com.pazzioliweb.facturacionmodule.entity.TipoTotalesFacturas</class>
+        <class>com.pazzioliweb.facturacionmodule.entity.MetodosPagoFacturas</class>
+        <!-- Compras -->
+        <class>com.pazzioliweb.comprasmodule.entity.OrdenCompra</class>
+        <class>com.pazzioliweb.comprasmodule.entity.DetalleOrdenCompra</class>
+        <class>com.pazzioliweb.comprasmodule.entity.CuentaPorPagar</class>
+        <class>com.pazzioliweb.comprasmodule.entity.Legalizacion</class>
+        <!-- Ventas -->
+        <class>com.pazzioliweb.ventasmodule.entity.DetalleVenta</class>
+        <class>com.pazzioliweb.ventasmodule.entity.Venta</class>
+        <class>com.pazzioliweb.ventasmodule.entity.Cotizacion</class>
+        <class>com.pazzioliweb.ventasmodule.entity.DetalleCotizacion</class>
+        <class>com.pazzioliweb.ventasmodule.entity.Pedido</class>
+        <class>com.pazzioliweb.ventasmodule.entity.DetallePedido</class>
+        <class>com.pazzioliweb.ventasmodule.entity.VentaMetodoPago</class>
+        <!-- Cajeros -->
+        <class>com.pazzioliweb.cajerosmodule.entity.Cajero</class>
+        <class>com.pazzioliweb.cajerosmodule.entity.DetalleCajero</class>
+        <class>com.pazzioliweb.cajerosmodule.entity.MovimientoCajero</class>
+    </persistence-unit>
+</persistence>

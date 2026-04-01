@@ -1,0 +1,126 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+ 
+  <parent>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>mi-proyecto</artifactId>
+    <version>1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>web</artifactId>
+   
+   <dependencies>
+  <dependency>
+  <!--siempre que requiero de un modulo debo establecerlo como dependencia en el modulo de pom que lo requiere
+  como como este modulo representa el modulo puntual del prollecto deber establecer todos los modulos que creo para trabajar con
+  la aplicacion aqui -->
+  <groupId>com.pazzioliweb</groupId>
+  <artifactId>auth</artifactId>
+  <version>1.0-SNAPSHOT</version>
+</dependency>
+
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>usuarios</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>common</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>productosmodule</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>empresas</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>facturacionmodule</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>tercerosmodule</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>comprobantesmodule</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>cajasmodule</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>vendedoresmodule</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+   <groupId>com.pazzioliweb</groupId>
+   <artifactId>cajerosmodule</artifactId>
+   <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.pazzioliweb</groupId>
+    <artifactId>metodospagomodule</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+   <groupId>com.pazzioliweb</groupId>
+   <artifactId>comprasmodule</artifactId>
+   <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+   <groupId>com.pazzioliweb</groupId>
+   <artifactId>ventasmodule</artifactId>
+   <version>1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>org.flywaydb</groupId>
+  <artifactId>flyway-mysql</artifactId>
+  <version>9.16.3</version>
+</dependency>
+
+
+<dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <version>1.18.30</version>
+    <scope>provided</scope>
+</dependency>
+
+
+<dependency>
+    <groupId>org.springframework.security</groupId>
+    <artifactId>spring-security-crypto</artifactId>
+</dependency>
+
+ </dependencies>
+
+
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <version>4.0.1</version>
+            <executions>
+                <execution>
+                    <goals>
+                        <goal>repackage</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+</build>
+
+</project>
