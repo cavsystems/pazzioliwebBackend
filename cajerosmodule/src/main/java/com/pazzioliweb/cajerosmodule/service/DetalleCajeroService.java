@@ -23,6 +23,8 @@ import com.pazzioliweb.cajerosmodule.entity.DetalleCajero;
 import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
 import com.pazzioliweb.cajerosmodule.repositori.DetalleCajeroRepository;
 import com.pazzioliweb.cajerosmodule.repositori.MovimientoCajeroRepository;
+import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
+import com.pazzioliweb.comprobantesmodule.repositori.ComprobantesRepository;
 
 @Service
 public class DetalleCajeroService {
@@ -31,12 +33,15 @@ public class DetalleCajeroService {
 
     private final DetalleCajeroRepository detalleCajeroRepository;
     private final MovimientoCajeroRepository movimientoCajeroRepository;
+    private final ComprobantesRepository comprobantesRepository;
 
     @Autowired
     public DetalleCajeroService(DetalleCajeroRepository detalleCajeroRepository,
-                                 MovimientoCajeroRepository movimientoCajeroRepository) {
+                                MovimientoCajeroRepository movimientoCajeroRepository,
+                                ComprobantesRepository comprobantesRepository) {
         this.detalleCajeroRepository = detalleCajeroRepository;
         this.movimientoCajeroRepository = movimientoCajeroRepository;
+        this.comprobantesRepository = comprobantesRepository;
     }
 
     // ========================
@@ -102,8 +107,25 @@ public class DetalleCajeroService {
     // APERTURA DE SESIÓN
     // ========================
 
+    /**
+     * Abre sesión de caja sin comprobante (usado en login automático).
+     * Si ya hay una sesión abierta, la retorna sin crear una nueva.
+     */
     @Transactional
     public DetalleCajero abrirSesionCajero(Cajero cajero, BigDecimal baseCaja) {
+        return abrirSesionCajero(cajero, baseCaja, null);
+    }
+
+    /**
+     * Abre sesión de caja asignando un comprobante específico.
+     * Si ya hay una sesión abierta, la retorna sin crear una nueva.
+     *
+     * @param cajero         Cajero que abre la caja
+     * @param baseCaja       Monto inicial con el que arranca
+     * @param comprobanteId  ID del comprobante de caja a usar (puede ser null)
+     */
+    @Transactional
+    public DetalleCajero abrirSesionCajero(Cajero cajero, BigDecimal baseCaja, Integer comprobanteId) {
         List<DetalleCajero> sesionesAbiertas = detalleCajeroRepository
                 .findByCajero_CajeroIdAndEstado(cajero.getCajeroId(), DetalleCajero.EstadoDetalleCajero.ABIERTA);
 
@@ -124,6 +146,11 @@ public class DetalleCajeroService {
         detalle.setTotalEfectivo(BigDecimal.ZERO);
         detalle.setTotalMediosElectronicos(BigDecimal.ZERO);
 
+        // Asignar comprobante si se proporcionó
+        if (comprobanteId != null) {
+            comprobantesRepository.findById(comprobanteId).ifPresent(detalle::setComprobante);
+        }
+
         return detalleCajeroRepository.save(detalle);
     }
 
@@ -143,8 +170,8 @@ public class DetalleCajeroService {
      */
     @Transactional
     public DetalleCajero cerrarSesionCajero(Integer cajeroId,
-                                             BigDecimal efectivoDeclarado,
-                                             BigDecimal mediosElectronicosDeclarado) {
+                                            BigDecimal efectivoDeclarado,
+                                            BigDecimal mediosElectronicosDeclarado) {
         List<DetalleCajero> sesionesAbiertas = detalleCajeroRepository
                 .findByCajero_CajeroIdAndEstado(cajeroId, DetalleCajero.EstadoDetalleCajero.ABIERTA);
 
@@ -186,9 +213,9 @@ public class DetalleCajeroService {
             detalle.setFechaCierre(LocalDateTime.now(ZONA_BOGOTA));
             detalle.setEstado(DetalleCajero.EstadoDetalleCajero.CERRADA);
             detalle.setMontoFinal(
-                detalle.getBaseCaja()
-                    .add(detalle.getTotalEfectivo())
-                    .add(detalle.getTotalMediosElectronicos())
+                    detalle.getBaseCaja()
+                            .add(detalle.getTotalEfectivo())
+                            .add(detalle.getTotalMediosElectronicos())
             );
             detalleCajeroRepository.save(detalle);
         }
@@ -219,14 +246,14 @@ public class DetalleCajeroService {
      */
     @Transactional
     public MovimientoCajero registrarMovimiento(Long detalleCajeroId,
-                                                  MovimientoCajero.TipoMovimiento tipoMovimiento,
-                                                  String numeroComprobante,
-                                                  Long referenciaDocumentoId,
-                                                  BigDecimal montoTotal,
-                                                  BigDecimal montoCosto,
-                                                  BigDecimal montoEfectivo,
-                                                  BigDecimal montoElectronico,
-                                                  String descripcion) {
+                                                MovimientoCajero.TipoMovimiento tipoMovimiento,
+                                                String numeroComprobante,
+                                                Long referenciaDocumentoId,
+                                                BigDecimal montoTotal,
+                                                BigDecimal montoCosto,
+                                                BigDecimal montoEfectivo,
+                                                BigDecimal montoElectronico,
+                                                String descripcion) {
         DetalleCajero detalle = detalleCajeroRepository.findById(detalleCajeroId)
                 .orElseThrow(() -> new RuntimeException("Sesión de cajero no encontrada: " + detalleCajeroId));
 
@@ -278,13 +305,73 @@ public class DetalleCajeroService {
 
         // Recalcular monto_final en tiempo real
         detalle.setMontoFinal(
-            detalle.getBaseCaja()
-                .add(detalle.getTotalEfectivo())
-                .add(detalle.getTotalMediosElectronicos())
+                detalle.getBaseCaja()
+                        .add(detalle.getTotalEfectivo())
+                        .add(detalle.getTotalMediosElectronicos())
         );
 
         detalleCajeroRepository.save(detalle);
         return guardado;
+    }
+
+    // ============================================================
+    // EGRESO MANUAL — salida de efectivo de caja
+    // ============================================================
+
+    /**
+     * Registra una salida manual de efectivo (pago a proveedor, gastos, etc.).
+     * Afecta el cuadre: resta del total efectivo de la sesión.
+     *
+     * @param detalleCajeroId ID de la sesión activa
+     * @param monto           Monto a retirar
+     * @param descripcion     Concepto del egreso
+     */
+    @Transactional
+    public MovimientoCajero registrarEgreso(Long detalleCajeroId, BigDecimal monto, String descripcion) {
+        if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("El monto del egreso debe ser mayor a cero");
+        }
+        return registrarMovimiento(
+                detalleCajeroId,
+                MovimientoCajero.TipoMovimiento.EGRESO,
+                "EGRESO-" + System.currentTimeMillis(),
+                null,
+                monto,
+                BigDecimal.ZERO,
+                monto,           // todo el egreso sale en efectivo
+                BigDecimal.ZERO,
+                descripcion
+        );
+    }
+
+    // ============================================================
+    // INGRESO EFECTIVO MANUAL — entrada de efectivo a caja
+    // ============================================================
+
+    /**
+     * Registra una entrada manual de efectivo (cambio inicial, fondos, etc.).
+     * Afecta el cuadre: suma al total efectivo de la sesión.
+     *
+     * @param detalleCajeroId ID de la sesión activa
+     * @param monto           Monto a ingresar
+     * @param descripcion     Concepto del ingreso
+     */
+    @Transactional
+    public MovimientoCajero registrarIngresoEfectivo(Long detalleCajeroId, BigDecimal monto, String descripcion) {
+        if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("El monto del ingreso debe ser mayor a cero");
+        }
+        return registrarMovimiento(
+                detalleCajeroId,
+                MovimientoCajero.TipoMovimiento.INGRESO_EFECTIVO,
+                "ING-" + System.currentTimeMillis(),
+                null,
+                monto,
+                BigDecimal.ZERO,
+                monto,           // todo el ingreso entra en efectivo
+                BigDecimal.ZERO,
+                descripcion
+        );
     }
 
     // ============================================================
@@ -352,14 +439,14 @@ public class DetalleCajeroService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             desglose.add(new ResumenTipoDocumento(
-                tipo.name(),
-                tipo.name().replace("_", " "),
-                del_tipo.size(),
-                totalMonto,
-                totalEf,
-                totalEl,
-                tipo.isAfectaCaja(),
-                tipo.getSigno()
+                    tipo.name(),
+                    tipo.name().replace("_", " "),
+                    del_tipo.size(),
+                    totalMonto,
+                    totalEf,
+                    totalEl,
+                    tipo.isAfectaCaja(),
+                    tipo.getSigno()
             ));
         }
         cuadre.setDesglosePorTipo(desglose);

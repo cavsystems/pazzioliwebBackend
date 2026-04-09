@@ -2,6 +2,7 @@ package com.pazzioliweb.ventasmodule.repository;
 
 import com.pazzioliweb.ventasmodule.entity.Venta;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -9,7 +10,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-public interface VentaRepository extends JpaRepository<Venta, Long> {
+public interface VentaRepository extends JpaRepository<Venta, Long>, JpaSpecificationExecutor<Venta> {
 
     Optional<Venta> findByNumeroVenta(String numeroVenta);
 
@@ -31,4 +32,9 @@ public interface VentaRepository extends JpaRepository<Venta, Long> {
 
     @Query("SELECT SUM(v.totalVenta) FROM Venta v WHERE v.cajero.cajeroId = :cajeroId AND v.fechaEmision BETWEEN :fechaInicio AND :fechaFin AND v.estado = 'COMPLETADA'")
     Optional<Double> getTotalVentasByCajero(@Param("cajeroId") Integer cajeroId, @Param("fechaInicio") LocalDate fechaInicio, @Param("fechaFin") LocalDate fechaFin);
+
+
+    @Query("SELECT MAX(v.id) FROM Venta v")
+    Long getUltimaVentaId();
+
 }

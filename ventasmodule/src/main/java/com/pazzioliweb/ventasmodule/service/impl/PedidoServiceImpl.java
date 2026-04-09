@@ -1,5 +1,7 @@
 package com.pazzioliweb.ventasmodule.service.impl;
 
+import com.pazzioliweb.productosmodule.entity.Bodegas;
+import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.PedidoDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
@@ -9,10 +11,21 @@ import com.pazzioliweb.ventasmodule.entity.Pedido;
 import com.pazzioliweb.ventasmodule.exception.PedidoException;
 import com.pazzioliweb.ventasmodule.mapper.PedidoMapper;
 import com.pazzioliweb.ventasmodule.repository.PedidoRepository;
+import com.pazzioliweb.cajerosmodule.entity.Cajero;
+import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
+import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
+import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
+import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
+import com.pazzioliweb.ventasmodule.repository.PedidoSpecification;
 import com.pazzioliweb.ventasmodule.service.PedidoService;
 import com.pazzioliweb.ventasmodule.service.VentaService;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
+import com.pazzioliweb.vendedoresmodule.repositori.VendedoresRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,22 +41,69 @@ public class PedidoServiceImpl implements PedidoService {
     private final PedidoRepository pedidoRepository;
     private final PedidoMapper pedidoMapper;
     private final VentaService ventaService;
+    private final VendedoresRepository vendedoresRepository;
+    private final CajeroRepository cajeroRepository;
+    private final DetalleCajeroService detalleCajeroService;
+    private final RedisTemplate<String, DatosSesiones> redisTemplate;
 
     @Autowired
     public PedidoServiceImpl(PedidoRepository pedidoRepository,
-                              PedidoMapper pedidoMapper,
-                              @Lazy VentaService ventaService) {
+                             PedidoMapper pedidoMapper,
+                             @Lazy VentaService ventaService,
+                             VendedoresRepository vendedoresRepository,
+                             CajeroRepository cajeroRepository,
+                             DetalleCajeroService detalleCajeroService,
+                             RedisTemplate<String, DatosSesiones> redisTemplate) {
         this.pedidoRepository = pedidoRepository;
         this.pedidoMapper = pedidoMapper;
         this.ventaService = ventaService;
+        this.vendedoresRepository = vendedoresRepository;
+        this.cajeroRepository = cajeroRepository;
+        this.detalleCajeroService = detalleCajeroService;
+        this.redisTemplate = redisTemplate;
+    }
+
+    // ─── Helper: sesión activa desde Redis ───────────────────────────────────
+    private DatosSesiones obtenerSesionActiva() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getCredentials() != null) {
+                String sessionId = auth.getCredentials().toString();
+                return redisTemplate.opsForValue().get(sessionId);
+            }
+        } catch (Exception e) {
+            System.out.println("Error al obtener sesión activa en pedido: " + e.getMessage());
+        }
+        return null;
     }
 
     @Override
     @Transactional
-    public void crearPedido(PedidoDTO pedidoDTO) {
+    public PedidoDTO crearPedido(PedidoDTO pedidoDTO) {
         Pedido pedido = pedidoMapper.toEntity(pedidoDTO);
         pedido.setEstado("PENDIENTE");
         pedido.setFechaCreacion(LocalDate.now());
+
+        // ── Asignar cajero: explícito en DTO o auto-detectar desde sesión Redis ──
+        if (pedidoDTO.getCajeroId() != null) {
+            Cajero cajero = cajeroRepository.findById(pedidoDTO.getCajeroId().intValue())
+                    .orElseThrow(() -> new PedidoException("Cajero no encontrado: " + pedidoDTO.getCajeroId()));
+            pedido.setCajero(cajero);
+        } else {
+            DatosSesiones sesion = obtenerSesionActiva();
+            if (sesion != null && sesion.getCajeroId() != null) {
+                Cajero cajero = cajeroRepository.findById(sesion.getCajeroId())
+                        .orElseThrow(() -> new PedidoException("Cajero de sesión no encontrado: " + sesion.getCajeroId()));
+                pedido.setCajero(cajero);
+            }
+        }
+
+        // ── Asignar vendedor si viene en el DTO ──────────────────────────────
+        if (pedidoDTO.getVendedorId() != null) {
+            Vendedores vendedor = vendedoresRepository.findById(pedidoDTO.getVendedorId())
+                    .orElseThrow(() -> new PedidoException("Vendedor no encontrado: " + pedidoDTO.getVendedorId()));
+            pedido.setVendedor(vendedor);
+        }
 
         // Calcular totales
         BigDecimal subtotal = BigDecimal.ZERO;
@@ -56,13 +116,49 @@ public class PedidoServiceImpl implements PedidoService {
             ivaTotal = ivaTotal.add(detalle.getIva());
             descuentosTotal = descuentosTotal.add(detalle.getDescuento());
         }
+        Bodegas bodega=new Bodegas();
+        Terceros tercero=new Terceros();
+        Cajero cajero=new Cajero();
+        Vendedores vendedor=new Vendedores();
+                bodega.setCodigo(pedidoDTO.getBodegaId());
+        tercero.setTerceroId(pedidoDTO.getClienteId().intValue());
+        cajero.setCajeroId(pedidoDTO.getCajeroId().intValue());
+        vendedor.setVendedor_id(pedidoDTO.getVendedorId().intValue());
 
+                pedido.setBodega(bodega);
+                pedido.setCliente(tercero);
+                pedido.setCajero(cajero);
+                pedido.setVendedor(vendedor);
+        pedido.setBodega(bodega);
         pedido.setGravada(subtotal.subtract(ivaTotal));
         pedido.setIva(ivaTotal);
         pedido.setDescuentos(descuentosTotal);
         pedido.setTotalPedido(subtotal);
 
-        pedidoRepository.save(pedido);
+        Pedido guardado = pedidoRepository.save(pedido);
+
+        final PedidoDTO pedidocreado= pedidoMapper.toDto(guardado);
+
+        // ── Registrar movimiento PEDIDO en el cajero (informativo, no afecta caja) ──
+        DatosSesiones sesion = obtenerSesionActiva();
+        if (sesion != null && sesion.getDetalleCajeroId() != null) {
+            try {
+                detalleCajeroService.registrarMovimiento(
+                        sesion.getDetalleCajeroId(),
+                        MovimientoCajero.TipoMovimiento.PEDIDO,
+                        guardado.getNumeroPedido(),
+                        guardado.getId(),
+                        guardado.getTotalPedido(),
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        "Pedido " + guardado.getNumeroPedido()
+                );
+            } catch (Exception e) {
+                System.out.println("Error al registrar pedido en cajero: " + e.getMessage());
+            }
+        }
+        return pedidocreado;
     }
 
     @Override
@@ -135,8 +231,10 @@ public class PedidoServiceImpl implements PedidoService {
         }
 
         // Crear VentaDTO a partir del pedido
+
         VentaDTO ventaDTO = new VentaDTO();
         ventaDTO.setClienteId(pedido.getCliente().getTerceroId().longValue());
+        ventaDTO.setNumeroVenta(String.valueOf(ventaService.getUltimaVentaId() + 1));
         ventaDTO.setBodegaId(pedido.getBodega().getCodigo());
         ventaDTO.setFechaEmision(LocalDate.now());
         ventaDTO.setFechaEntregaEsperada(pedido.getFechaEntregaEsperada());
@@ -149,6 +247,11 @@ public class PedidoServiceImpl implements PedidoService {
 
         if (pedido.getCajero() != null) {
             ventaDTO.setCajeroId(Long.valueOf(pedido.getCajero().getCajeroId()));
+        }
+
+        // Propagar vendedor del pedido a la venta
+        if (pedido.getVendedor() != null) {
+            ventaDTO.setVendedorId(pedido.getVendedor().getVendedor_id());
         }
 
         // Mapear items
@@ -174,6 +277,26 @@ public class PedidoServiceImpl implements PedidoService {
         pedidoRepository.save(pedido);
 
         return ventaDTO;
+    }
+
+
+/*
+metodo para filtrar pedidos segun parametros
+ */
+    @Transactional
+    @Override
+    public List<PedidoDTO> getPedidosByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
+                                             LocalDate fechaInicio, LocalDate fechaFin) {
+        return  pedidoRepository
+                .findAll(PedidoSpecification.conFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
+                .stream()
+                .map(pedidoMapper::toDto)
+                .collect(Collectors.toList());
+    }
+    @Transactional
+    @Override
+    public Long getUltimopedido() {
+       return  pedidoRepository.getUltimopedidoId();
     }
 }
 

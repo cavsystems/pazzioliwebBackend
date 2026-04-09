@@ -19,6 +19,9 @@ public class PedidoDTO {
     private Long cajeroId;
     private String cajeroNombre;
 
+    private Integer vendedorId;
+    private String vendedorNombre;
+
     private Long cotizacionId;
 
     @JsonFormat(pattern = "yyyy-MM-dd")

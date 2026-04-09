@@ -21,7 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.pazzioliweb.cajerosmodule.dtos.CuadreCajaDTO;
 import com.pazzioliweb.cajerosmodule.dtos.DetalleCajeroDTO;
 import com.pazzioliweb.cajerosmodule.dtos.MovimientoCajeroDTO;
+import com.pazzioliweb.cajerosmodule.entity.Cajero;
 import com.pazzioliweb.cajerosmodule.entity.DetalleCajero;
+import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 
 /**
@@ -38,10 +40,48 @@ import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 public class DetalleCajeroController {
 
     private final DetalleCajeroService detalleCajeroService;
+    private final CajeroRepository cajeroRepository;
 
     @Autowired
-    public DetalleCajeroController(DetalleCajeroService detalleCajeroService) {
+    public DetalleCajeroController(DetalleCajeroService detalleCajeroService,
+                                   CajeroRepository cajeroRepository) {
         this.detalleCajeroService = detalleCajeroService;
+        this.cajeroRepository = cajeroRepository;
+    }
+
+    // ============================================================
+    // APERTURA MANUAL DE SESIÓN
+    // ============================================================
+
+    /**
+     * Abre una sesión de caja manualmente para un cajero específico.
+     * Permite indicar la base de caja y el comprobante a usar.
+     * Si ya hay una sesión abierta, la retorna sin crear una nueva.
+     *
+     * Body: { "baseCaja": 200000, "comprobanteId": 1 }
+     */
+    @PostMapping("/cajero/{cajeroId}/abrir")
+    public ResponseEntity<?> abrirSesion(
+            @PathVariable Integer cajeroId,
+            @RequestBody Map<String, Object> body) {
+        try {
+            Cajero cajero = cajeroRepository.findById(cajeroId)
+                    .orElseThrow(() -> new RuntimeException("Cajero no encontrado: " + cajeroId));
+            BigDecimal baseCaja = new java.math.BigDecimal(
+                    body.getOrDefault("baseCaja", "0").toString());
+            Integer comprobanteId = body.containsKey("comprobanteId")
+                    ? Integer.valueOf(body.get("comprobanteId").toString()) : null;
+            DetalleCajero detalle = detalleCajeroService.abrirSesionCajero(cajero, baseCaja, comprobanteId);
+            return ResponseEntity.ok(Map.of(
+                    "detalleCajeroId", detalle.getDetalleCajeroId(),
+                    "cajeroId", cajeroId,
+                    "estado", detalle.getEstado(),
+                    "baseCaja", detalle.getBaseCaja(),
+                    "fechaApertura", detalle.getFechaApertura()
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // ========================
@@ -198,6 +238,62 @@ public class DetalleCajeroController {
         response.put("totalItems", movimientosPage.getTotalElements());
         response.put("totalPages", movimientosPage.getTotalPages());
         return ResponseEntity.ok(response);
+    }
+
+    // ============================================================
+    // EGRESO MANUAL — salida de efectivo de caja
+    // ============================================================
+
+    /**
+     * Registra una salida manual de efectivo de la sesión activa.
+     * Ejemplo de uso: pagar un servicio, gastos de papelería, fondos a otro cajero.
+     *
+     * Body: { "monto": 50000, "descripcion": "Pago factura servicios" }
+     */
+    @PostMapping("/{detalleCajeroId}/egreso")
+    public ResponseEntity<?> registrarEgreso(
+            @PathVariable Long detalleCajeroId,
+            @RequestBody Map<String, Object> body) {
+        try {
+            BigDecimal monto = new java.math.BigDecimal(body.get("monto").toString());
+            String descripcion = body.getOrDefault("descripcion", "Egreso de caja").toString();
+            detalleCajeroService.registrarEgreso(detalleCajeroId, monto, descripcion);
+            return ResponseEntity.ok(Map.of(
+                    "mensaje", "Egreso registrado correctamente",
+                    "monto", monto,
+                    "descripcion", descripcion
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ============================================================
+    // INGRESO EFECTIVO MANUAL — entrada de efectivo a caja
+    // ============================================================
+
+    /**
+     * Registra una entrada manual de efectivo en la sesión activa.
+     * Ejemplo de uso: fondos de cambio, reposición de base, ingresos no documentados.
+     *
+     * Body: { "monto": 100000, "descripcion": "Reposición de base" }
+     */
+    @PostMapping("/{detalleCajeroId}/ingreso-efectivo")
+    public ResponseEntity<?> registrarIngresoEfectivo(
+            @PathVariable Long detalleCajeroId,
+            @RequestBody Map<String, Object> body) {
+        try {
+            BigDecimal monto = new java.math.BigDecimal(body.get("monto").toString());
+            String descripcion = body.getOrDefault("descripcion", "Ingreso de efectivo").toString();
+            detalleCajeroService.registrarIngresoEfectivo(detalleCajeroId, monto, descripcion);
+            return ResponseEntity.ok(Map.of(
+                    "mensaje", "Ingreso de efectivo registrado correctamente",
+                    "monto", monto,
+                    "descripcion", descripcion
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 }
 

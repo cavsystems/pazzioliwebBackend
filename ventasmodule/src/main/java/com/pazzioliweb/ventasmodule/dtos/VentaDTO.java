@@ -15,12 +15,15 @@ public class VentaDTO {
     private String clienteNombre;
     private Integer bodegaId;
     private String bodegaNombre;
-    
+
     private Long cajeroId;
     private String cajeroNombre;
 
+    private Integer vendedorId;
+    private String vendedorNombre;
+
     private List<VentaMetodoPagoDTO> metodosPago;
-    
+
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate fechaEmision;
 

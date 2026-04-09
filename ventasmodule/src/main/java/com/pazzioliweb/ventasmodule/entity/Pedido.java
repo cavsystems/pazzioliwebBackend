@@ -3,6 +3,7 @@ package com.pazzioliweb.ventasmodule.entity;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.cajerosmodule.entity.Cajero;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -59,6 +60,10 @@ public class Pedido {
     @ManyToOne
     @JoinColumn(name = "cajero_id")
     private Cajero cajero;
+
+    @ManyToOne
+    @JoinColumn(name = "vendedor_id")
+    private Vendedores vendedor;
 
     @Column(name = "cotizacion_id")
     private Long cotizacionId;

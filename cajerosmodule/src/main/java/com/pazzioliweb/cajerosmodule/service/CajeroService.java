@@ -1,8 +1,10 @@
 package com.pazzioliweb.cajerosmodule.service;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
+import com.pazzioliweb.cajerosmodule.dtos.CajerobasicoDto;
 import com.pazzioliweb.cajerosmodule.dtos.ReponsecajeroDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -58,7 +60,12 @@ public class CajeroService {
                         c.getNombre()
                 ));
     }
-
+/**
+ * metodo encargado de traer todos los cajeros de una bodega
+ */
+public List<CajerobasicoDto> cajerobasicobodega(int bodegaid){
+    return  cajeroRepository.buscarCajerosPorBodega(bodegaid);
+}
 
     // ─────────────────────────────────────────────
     // ASOCIACIÓN — crear cajero para un usuario

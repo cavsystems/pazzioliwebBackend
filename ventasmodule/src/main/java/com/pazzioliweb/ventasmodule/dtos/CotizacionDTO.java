@@ -19,6 +19,9 @@ public class CotizacionDTO {
     private Long cajeroId;
     private String cajeroNombre;
 
+    private Integer vendedorId;
+    private String vendedorNombre;
+
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate fechaEmision;
 

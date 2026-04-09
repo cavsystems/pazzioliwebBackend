@@ -18,6 +18,8 @@ import com.pazzioliweb.cajerosmodule.entity.Cajero;
 import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
 import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
+import com.pazzioliweb.vendedoresmodule.repositori.VendedoresRepository;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
@@ -28,6 +30,7 @@ import com.pazzioliweb.ventasmodule.entity.VentaMetodoPago;
 import com.pazzioliweb.ventasmodule.exception.VentaException;
 import com.pazzioliweb.ventasmodule.mapper.VentaMapper;
 import com.pazzioliweb.ventasmodule.repository.VentaRepository;
+import com.pazzioliweb.ventasmodule.repository.VentaSpecification;
 import com.pazzioliweb.ventasmodule.service.VentaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -57,6 +60,7 @@ public class VentaServiceImpl implements VentaService {
     private final TercerosRepository tercerosRepository;
     private final BodegasRepository bodegasRepository;
     private final CajeroRepository cajeroRepository;
+    private final VendedoresRepository vendedoresRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
 
@@ -70,6 +74,7 @@ public class VentaServiceImpl implements VentaService {
                             TercerosRepository tercerosRepository,
                             BodegasRepository bodegasRepository,
                             CajeroRepository cajeroRepository,
+                            VendedoresRepository vendedoresRepository,
                             DetalleCajeroService detalleCajeroService,
                             RedisTemplate<String, DatosSesiones> redisTemplate) {
         this.ventaRepository = ventaRepository;
@@ -82,6 +87,7 @@ public class VentaServiceImpl implements VentaService {
         this.tercerosRepository = tercerosRepository;
         this.bodegasRepository = bodegasRepository;
         this.cajeroRepository = cajeroRepository;
+        this.vendedoresRepository = vendedoresRepository;
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
     }
@@ -135,6 +141,13 @@ public class VentaServiceImpl implements VentaService {
                         .orElseThrow(() -> new VentaException("Cajero de sesión no encontrado: " + sesionActiva.getCajeroId()));
                 venta.setCajero(cajero);
             }
+        }
+
+        // Asignar vendedor si viene en el DTO
+        if (ventaDTO.getVendedorId() != null) {
+            Vendedores vendedor = vendedoresRepository.findById(ventaDTO.getVendedorId())
+                    .orElseThrow(() -> new VentaException("Vendedor no encontrado: " + ventaDTO.getVendedorId()));
+            venta.setVendedor(vendedor);
         }
 
         // Resolver métodos de pago desde la lista
@@ -192,15 +205,15 @@ public class VentaServiceImpl implements VentaService {
                     montoEfectivo = venta.getTotalVenta();
                 }
                 detalleCajeroService.registrarMovimiento(
-                    sesion.getDetalleCajeroId(),
-                    MovimientoCajero.TipoMovimiento.VENTA,
-                    venta.getNumeroVenta(),
-                    venta.getId(),
-                    venta.getTotalVenta(),
-                    venta.getGravada(),
-                    montoEfectivo,
-                    montoElectronico,
-                    "Venta " + venta.getNumeroVenta()
+                        sesion.getDetalleCajeroId(),
+                        MovimientoCajero.TipoMovimiento.VENTA,
+                        venta.getNumeroVenta(),
+                        venta.getId(),
+                        venta.getTotalVenta(),
+                        venta.getGravada(),
+                        montoEfectivo,
+                        montoElectronico,
+                        "Venta " + venta.getNumeroVenta()
                 );
             } catch (Exception e) {
                 System.out.println("Error al registrar movimiento en cajero: " + e.getMessage());
@@ -365,15 +378,15 @@ public class VentaServiceImpl implements VentaService {
         if (sesionDev != null && sesionDev.getDetalleCajeroId() != null) {
             try {
                 detalleCajeroService.registrarMovimiento(
-                    sesionDev.getDetalleCajeroId(),
-                    MovimientoCajero.TipoMovimiento.DEVOLUCION,
-                    venta.getNumeroVenta(),
-                    venta.getId(),
-                    venta.getTotalVenta(),
-                    venta.getGravada(),
-                    venta.getTotalVenta(), // devolución = todo efectivo
-                    BigDecimal.ZERO,
-                    "Devolución venta " + venta.getNumeroVenta()
+                        sesionDev.getDetalleCajeroId(),
+                        MovimientoCajero.TipoMovimiento.DEVOLUCION,
+                        venta.getNumeroVenta(),
+                        venta.getId(),
+                        venta.getTotalVenta(),
+                        venta.getGravada(),
+                        venta.getTotalVenta(), // devolución = todo efectivo
+                        BigDecimal.ZERO,
+                        "Devolución venta " + venta.getNumeroVenta()
                 );
             } catch (Exception e) {
                 System.out.println("Error al registrar devolución en cajero: " + e.getMessage());
@@ -399,15 +412,15 @@ public class VentaServiceImpl implements VentaService {
         if (sesionAnul != null && sesionAnul.getDetalleCajeroId() != null) {
             try {
                 detalleCajeroService.registrarMovimiento(
-                    sesionAnul.getDetalleCajeroId(),
-                    MovimientoCajero.TipoMovimiento.ANULACION,
-                    venta.getNumeroVenta(),
-                    venta.getId(),
-                    venta.getTotalVenta(),
-                    venta.getGravada(),
-                    venta.getTotalVenta(),
-                    BigDecimal.ZERO,
-                    "Anulación venta " + venta.getNumeroVenta()
+                        sesionAnul.getDetalleCajeroId(),
+                        MovimientoCajero.TipoMovimiento.ANULACION,
+                        venta.getNumeroVenta(),
+                        venta.getId(),
+                        venta.getTotalVenta(),
+                        venta.getGravada(),
+                        venta.getTotalVenta(),
+                        BigDecimal.ZERO,
+                        "Anulación venta " + venta.getNumeroVenta()
                 );
             } catch (Exception e) {
                 System.out.println("Error al registrar anulación en cajero: " + e.getMessage());
@@ -428,6 +441,22 @@ public class VentaServiceImpl implements VentaService {
     @Override
     public Double getTotalVentasByCajero(Integer cajeroId, LocalDate fechaInicio, LocalDate fechaFin) {
         return ventaRepository.getTotalVentasByCajero(cajeroId, fechaInicio, fechaFin).orElse(0.0);
+    }
+    @Transactional
+    @Override
+    public List<VentaDTO> getVentasByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
+                                             LocalDate fechaInicio, LocalDate fechaFin) {
+        return ventaRepository
+                .findAll(VentaSpecification.conFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
+                .stream()
+                .map(ventaMapper::toDto)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    @Override
+    public Long getUltimaVentaId() {
+        return ventaRepository.getUltimaVentaId();
     }
 
     /**

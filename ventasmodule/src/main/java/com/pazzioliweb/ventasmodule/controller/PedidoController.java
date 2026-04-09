@@ -5,9 +5,11 @@ import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaMetodoPagoDTO;
 import com.pazzioliweb.ventasmodule.service.PedidoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -22,11 +24,16 @@ public class PedidoController {
     }
 
     @PostMapping("/crear")
-    public ResponseEntity<Void> crearPedido(@RequestBody PedidoDTO pedidoDTO) {
-        pedidoService.crearPedido(pedidoDTO);
-        return ResponseEntity.ok().build();
-    }
+    public ResponseEntity<PedidoDTO> crearPedido(@RequestBody PedidoDTO pedidoDTO) {
 
+        return ResponseEntity.ok( pedidoService.crearPedido(pedidoDTO));
+    }
+    @GetMapping("/ultimo-pedido-id")
+    public ResponseEntity<Long> getUltimaVentaId() {
+        Long id = pedidoService.getUltimopedido();
+
+        return ResponseEntity.ok(id+1);
+    }
     @GetMapping("/cliente/{clienteId}")
     public ResponseEntity<List<PedidoDTO>> getPedidosByCliente(@PathVariable Long clienteId) {
         List<PedidoDTO> pedidos = pedidoService.getPedidosByCliente(clienteId);
@@ -62,5 +69,27 @@ public class PedidoController {
         VentaDTO venta = pedidoService.convertirAVenta(pedidoId, metodosPago);
         return ResponseEntity.ok(venta);
     }
+
+
+
+
+
+    /**
+     * Consulta pedidos con filtros opcionales combinables.
+     * Todos los parámetros son opcionales y se pueden usar juntos o por separado.
+     *
+     * GET /api/ventas/filtrar?terceroId=1&vendedorId=2&cajeroId=3&fechaInicio=2025-01-01&fechaFin=2025-12-31
+     */
+    @GetMapping("/filtrar")
+    public ResponseEntity<List<PedidoDTO>> filtrarVentas(
+            @RequestParam(required = false) Long terceroId,
+            @RequestParam(required = false) Integer vendedorId,
+            @RequestParam(required = false) Integer cajeroId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        List<PedidoDTO> ventas = pedidoService.getPedidosByFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin);
+        return ResponseEntity.ok(ventas);
+    }
 }
+
 

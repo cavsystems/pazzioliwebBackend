@@ -1,5 +1,12 @@
 package com.pazzioliweb.ventasmodule.service.impl;
 
+import com.pazzioliweb.cajerosmodule.entity.Cajero;
+import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
+import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
+import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
+import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
+import com.pazzioliweb.vendedoresmodule.repositori.VendedoresRepository;
 import com.pazzioliweb.ventasmodule.dtos.CotizacionDTO;
 import com.pazzioliweb.ventasmodule.dtos.DetallePedidoDTO;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
@@ -16,6 +23,9 @@ import com.pazzioliweb.ventasmodule.service.PedidoService;
 import com.pazzioliweb.ventasmodule.service.VentaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,16 +41,42 @@ public class CotizacionServiceImpl implements CotizacionService {
     private final CotizacionMapper cotizacionMapper;
     private final PedidoService pedidoService;
     private final VentaService ventaService;
+    private final VendedoresRepository vendedoresRepository;
+    private final CajeroRepository cajeroRepository;
+    private final DetalleCajeroService detalleCajeroService;
+    private final RedisTemplate<String, DatosSesiones> redisTemplate;
 
     @Autowired
     public CotizacionServiceImpl(CotizacionRepository cotizacionRepository,
-                                  CotizacionMapper cotizacionMapper,
-                                  @Lazy PedidoService pedidoService,
-                                  @Lazy VentaService ventaService) {
+                                 CotizacionMapper cotizacionMapper,
+                                 @Lazy PedidoService pedidoService,
+                                 @Lazy VentaService ventaService,
+                                 VendedoresRepository vendedoresRepository,
+                                 CajeroRepository cajeroRepository,
+                                 DetalleCajeroService detalleCajeroService,
+                                 RedisTemplate<String, DatosSesiones> redisTemplate) {
         this.cotizacionRepository = cotizacionRepository;
         this.cotizacionMapper = cotizacionMapper;
         this.pedidoService = pedidoService;
         this.ventaService = ventaService;
+        this.vendedoresRepository = vendedoresRepository;
+        this.cajeroRepository = cajeroRepository;
+        this.detalleCajeroService = detalleCajeroService;
+        this.redisTemplate = redisTemplate;
+    }
+
+    // ─── Helper: sesión activa desde Redis ───────────────────────────────────
+    private DatosSesiones obtenerSesionActiva() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getCredentials() != null) {
+                String sessionId = auth.getCredentials().toString();
+                return redisTemplate.opsForValue().get(sessionId);
+            }
+        } catch (Exception e) {
+            System.out.println("Error al obtener sesión activa en cotización: " + e.getMessage());
+        }
+        return null;
     }
 
     @Override
@@ -50,7 +86,28 @@ public class CotizacionServiceImpl implements CotizacionService {
         cotizacion.setEstado("BORRADOR");
         cotizacion.setFechaCreacion(LocalDate.now());
 
-        // Calcular totales
+        // ── Asignar cajero: explícito en DTO o auto-detectar desde sesión Redis ──
+        if (cotizacionDTO.getCajeroId() != null) {
+            Cajero cajero = cajeroRepository.findById(cotizacionDTO.getCajeroId().intValue())
+                    .orElseThrow(() -> new CotizacionException("Cajero no encontrado: " + cotizacionDTO.getCajeroId()));
+            cotizacion.setCajero(cajero);
+        } else {
+            DatosSesiones sesion = obtenerSesionActiva();
+            if (sesion != null && sesion.getCajeroId() != null) {
+                Cajero cajero = cajeroRepository.findById(sesion.getCajeroId())
+                        .orElseThrow(() -> new CotizacionException("Cajero de sesión no encontrado: " + sesion.getCajeroId()));
+                cotizacion.setCajero(cajero);
+            }
+        }
+
+        // ── Asignar vendedor si viene en el DTO ──────────────────────────────
+        if (cotizacionDTO.getVendedorId() != null) {
+            Vendedores vendedor = vendedoresRepository.findById(cotizacionDTO.getVendedorId())
+                    .orElseThrow(() -> new CotizacionException("Vendedor no encontrado: " + cotizacionDTO.getVendedorId()));
+            cotizacion.setVendedor(vendedor);
+        }
+
+        // ── Calcular totales ─────────────────────────────────────────────────
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal ivaTotal = BigDecimal.ZERO;
         BigDecimal descuentosTotal = BigDecimal.ZERO;
@@ -67,7 +124,27 @@ public class CotizacionServiceImpl implements CotizacionService {
         cotizacion.setDescuentos(descuentosTotal);
         cotizacion.setTotalCotizacion(subtotal);
 
-        cotizacionRepository.save(cotizacion);
+        Cotizacion guardada = cotizacionRepository.save(cotizacion);
+
+        // ── Registrar movimiento COTIZACION en el cajero (informativo, no afecta caja) ──
+        DatosSesiones sesion = obtenerSesionActiva();
+        if (sesion != null && sesion.getDetalleCajeroId() != null) {
+            try {
+                detalleCajeroService.registrarMovimiento(
+                        sesion.getDetalleCajeroId(),
+                        MovimientoCajero.TipoMovimiento.COTIZACION,
+                        guardada.getNumeroCotizacion(),
+                        guardada.getId(),
+                        guardada.getTotalCotizacion(),
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        "Cotización " + guardada.getNumeroCotizacion()
+                );
+            } catch (Exception e) {
+                System.out.println("Error al registrar cotización en cajero: " + e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -175,8 +252,14 @@ public class CotizacionServiceImpl implements CotizacionService {
         pedidoDTO.setUsuarioCreacion(cotizacion.getUsuarioCreacion());
         pedidoDTO.setCotizacionId(cotizacionId);
 
+        // Propagar cajero de la cotización al pedido
         if (cotizacion.getCajero() != null) {
             pedidoDTO.setCajeroId(Long.valueOf(cotizacion.getCajero().getCajeroId()));
+        }
+
+        // Propagar vendedor de la cotización al pedido
+        if (cotizacion.getVendedor() != null) {
+            pedidoDTO.setVendedorId(cotizacion.getVendedor().getVendedor_id());
         }
 
         // Mapear items
@@ -223,8 +306,14 @@ public class CotizacionServiceImpl implements CotizacionService {
         ventaDTO.setUsuarioCreacion(cotizacion.getUsuarioCreacion());
         ventaDTO.setMetodosPago(metodosPago);
 
+        // Propagar cajero de la cotización a la venta
         if (cotizacion.getCajero() != null) {
             ventaDTO.setCajeroId(Long.valueOf(cotizacion.getCajero().getCajeroId()));
+        }
+
+        // Propagar vendedor de la cotización a la venta
+        if (cotizacion.getVendedor() != null) {
+            ventaDTO.setVendedorId(cotizacion.getVendedor().getVendedor_id());
         }
 
         // Mapear items de cotización a detalles de venta
@@ -253,8 +342,4 @@ public class CotizacionServiceImpl implements CotizacionService {
         return ventaDTO;
     }
 }
-
-
-
-
 

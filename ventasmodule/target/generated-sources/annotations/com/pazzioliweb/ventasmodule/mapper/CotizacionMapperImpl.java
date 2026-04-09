@@ -3,6 +3,7 @@ package com.pazzioliweb.ventasmodule.mapper;
 import com.pazzioliweb.cajerosmodule.entity.Cajero;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
 import com.pazzioliweb.ventasmodule.dtos.CotizacionDTO;
 import com.pazzioliweb.ventasmodule.dtos.DetalleCotizacionDTO;
 import com.pazzioliweb.ventasmodule.entity.Cotizacion;
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-03-27T16:52:23-0500",
+    date = "2026-04-01T22:19:23-0500",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
 )
 @Component
@@ -42,6 +43,8 @@ public class CotizacionMapperImpl implements CotizacionMapper {
             cotizacionDTO.setCajeroId( cajeroId.longValue() );
         }
         cotizacionDTO.setCajeroNombre( cotizacionCajeroNombre( cotizacion ) );
+        cotizacionDTO.setVendedorId( cotizacionVendedorVendedor_id( cotizacion ) );
+        cotizacionDTO.setVendedorNombre( cotizacionVendedorNombre( cotizacion ) );
         cotizacionDTO.setFechaEmision( cotizacion.getFechaEmision() );
         cotizacionDTO.setFechaVencimiento( cotizacion.getFechaVencimiento() );
         cotizacionDTO.setEstado( cotizacion.getEstado() );
@@ -221,6 +224,36 @@ public class CotizacionMapperImpl implements CotizacionMapper {
             return null;
         }
         String nombre = cajero.getNombre();
+        if ( nombre == null ) {
+            return null;
+        }
+        return nombre;
+    }
+
+    private Integer cotizacionVendedorVendedor_id(Cotizacion cotizacion) {
+        if ( cotizacion == null ) {
+            return null;
+        }
+        Vendedores vendedor = cotizacion.getVendedor();
+        if ( vendedor == null ) {
+            return null;
+        }
+        Integer vendedor_id = vendedor.getVendedor_id();
+        if ( vendedor_id == null ) {
+            return null;
+        }
+        return vendedor_id;
+    }
+
+    private String cotizacionVendedorNombre(Cotizacion cotizacion) {
+        if ( cotizacion == null ) {
+            return null;
+        }
+        Vendedores vendedor = cotizacion.getVendedor();
+        if ( vendedor == null ) {
+            return null;
+        }
+        String nombre = vendedor.getNombre();
         if ( nombre == null ) {
             return null;
         }

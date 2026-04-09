@@ -42,6 +42,13 @@
             <artifactId>cajerosmodule</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
+
+        <!-- Dependencia del módulo de Vendedores -->
+        <dependency>
+            <groupId>com.pazzioliweb</groupId>
+            <artifactId>vendedoresmodule</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
         
         <!-- Dependencia del módulo Common (DatosSesiones, Redis) -->
         <dependency>

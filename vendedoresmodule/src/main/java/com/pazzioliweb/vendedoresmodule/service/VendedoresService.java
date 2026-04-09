@@ -1,5 +1,6 @@
 package com.pazzioliweb.vendedoresmodule.service;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +33,12 @@ public class VendedoresService {
     	
     	return listadoVendedores;
 	}
-	
+	/*
+	metodo para listar vendedores por cede
+	 */
+	public List<Vendedores> findByBodegaId(Integer bodegaId) {
+        return vendedorRepository.findByBodegaId(bodegaId);
+    }
 	public Optional<Vendedores> buscarPorId(Integer id) {
         return vendedorRepository.findById(id);
     }

@@ -38,7 +38,15 @@ public class VentaController {
         VentaDTO venta = ventaService.getVentaByNumero(numeroVenta);
         return ResponseEntity.ok(venta);
     }
-
+/*
+obtener el id de la ultima venta
+ */
+    @GetMapping("/ultima-venta-id")
+    public ResponseEntity<Long> getUltimaVentaId() {
+        Long id = ventaService.getUltimaVentaId();
+        
+        return ResponseEntity.ok(id+1);
+    }
     @PostMapping("/crear")
     public ResponseEntity<VentaDTO> crearVenta(@RequestBody VentaDTO ventaDTO) {
 
@@ -93,5 +101,22 @@ public class VentaController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
         Double total = ventaService.getTotalVentasByCajero(cajeroId, fechaInicio, fechaFin);
         return ResponseEntity.ok(total);
+    }
+
+    /**
+     * Consulta ventas con filtros opcionales combinables.
+     * Todos los parámetros son opcionales y se pueden usar juntos o por separado.
+     *
+     * GET /api/ventas/filtrar?terceroId=1&vendedorId=2&cajeroId=3&fechaInicio=2025-01-01&fechaFin=2025-12-31
+     */
+    @GetMapping("/filtrar")
+    public ResponseEntity<List<VentaDTO>> filtrarVentas(
+            @RequestParam(required = false) Long terceroId,
+            @RequestParam(required = false) Integer vendedorId,
+            @RequestParam(required = false) Integer cajeroId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
+        List<VentaDTO> ventas = ventaService.getVentasByFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin);
+        return ResponseEntity.ok(ventas);
     }
 }

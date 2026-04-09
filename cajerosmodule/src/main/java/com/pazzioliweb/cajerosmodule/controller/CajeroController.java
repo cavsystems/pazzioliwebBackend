@@ -1,8 +1,10 @@
 package com.pazzioliweb.cajerosmodule.controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import com.pazzioliweb.cajerosmodule.dtos.CajerobasicoDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -72,6 +74,15 @@ public class CajeroController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    /**
+     *
+     * obtiene todos los cajeros pertenecientes a una sede esto solo si el usuario es nivel adminsede
+     */
+    @GetMapping("/bodega/{bodegaid}")
+    public ResponseEntity<List<CajerobasicoDto>> obtenerPorbodega(@PathVariable int bodegaid) {
+        List<CajerobasicoDto> lista = cajeroService.cajerobasicobodega(bodegaid);
+        return ResponseEntity.ok(lista);
+    }
     /**
      * GET /api/cajeros/usuario/{usuarioId}
      * Obtiene el cajero asociado a un usuario específico.

@@ -64,6 +64,8 @@
         
         <!-- Vendedores -->
         <class>com.pazzioliweb.vendedoresmodule.entity.Vendedores</class>
+        <class>com.pazzioliweb.vendedoresmodule.entity.Usuariosvendedor</class>
+
         
         <!-- Metodos pago -->
         <class>com.pazzioliweb.metodospagomodule.entity.MetodosPago</class>

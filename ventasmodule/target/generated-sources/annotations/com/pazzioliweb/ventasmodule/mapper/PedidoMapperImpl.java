@@ -3,6 +3,7 @@ package com.pazzioliweb.ventasmodule.mapper;
 import com.pazzioliweb.cajerosmodule.entity.Cajero;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
 import com.pazzioliweb.ventasmodule.dtos.DetallePedidoDTO;
 import com.pazzioliweb.ventasmodule.dtos.PedidoDTO;
 import com.pazzioliweb.ventasmodule.entity.DetallePedido;
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-03-27T16:52:23-0500",
+    date = "2026-04-08T02:53:45-0500",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
 )
 @Component
@@ -42,6 +43,8 @@ public class PedidoMapperImpl implements PedidoMapper {
             pedidoDTO.setCajeroId( cajeroId.longValue() );
         }
         pedidoDTO.setCajeroNombre( pedidoCajeroNombre( pedido ) );
+        pedidoDTO.setVendedorId( pedidoVendedorVendedor_id( pedido ) );
+        pedidoDTO.setVendedorNombre( pedidoVendedorNombre( pedido ) );
         pedidoDTO.setCotizacionId( pedido.getCotizacionId() );
         pedidoDTO.setFechaEmision( pedido.getFechaEmision() );
         pedidoDTO.setFechaEntregaEsperada( pedido.getFechaEntregaEsperada() );
@@ -223,6 +226,36 @@ public class PedidoMapperImpl implements PedidoMapper {
             return null;
         }
         String nombre = cajero.getNombre();
+        if ( nombre == null ) {
+            return null;
+        }
+        return nombre;
+    }
+
+    private Integer pedidoVendedorVendedor_id(Pedido pedido) {
+        if ( pedido == null ) {
+            return null;
+        }
+        Vendedores vendedor = pedido.getVendedor();
+        if ( vendedor == null ) {
+            return null;
+        }
+        Integer vendedor_id = vendedor.getVendedor_id();
+        if ( vendedor_id == null ) {
+            return null;
+        }
+        return vendedor_id;
+    }
+
+    private String pedidoVendedorNombre(Pedido pedido) {
+        if ( pedido == null ) {
+            return null;
+        }
+        Vendedores vendedor = pedido.getVendedor();
+        if ( vendedor == null ) {
+            return null;
+        }
+        String nombre = vendedor.getNombre();
         if ( nombre == null ) {
             return null;
         }

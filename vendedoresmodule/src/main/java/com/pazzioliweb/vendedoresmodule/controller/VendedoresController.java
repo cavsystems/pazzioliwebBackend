@@ -1,6 +1,7 @@
 package com.pazzioliweb.vendedoresmodule.controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.data.domain.Page;
@@ -46,7 +47,17 @@ public class VendedoresController {
 
         return ResponseEntity.ok(response);
     }
-	
+
+
+    /*
+    controlador que me permite buscor vendedores pertenecientes a una cede
+     */
+
+    @GetMapping("/bodega/{bodegaId}")
+    public ResponseEntity<List<Vendedores>> buscarVendedoresPorBodegaId(@PathVariable Integer bodegaId) {
+        List<Vendedores> vendedores = vendedorService.findByBodegaId(bodegaId);
+        return ResponseEntity.ok(vendedores);
+    }
 	@GetMapping("/{id}")
     public ResponseEntity<Vendedores> obtener(@PathVariable Integer id) {
         return vendedorService.buscarPorId(id)

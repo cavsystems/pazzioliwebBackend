@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import com.pazzioliweb.cajerosmodule.entity.Cajero;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
 
 @Data
 @Entity
@@ -51,17 +52,21 @@ public class Venta {
     private BigDecimal descuentos = BigDecimal.ZERO;
     @Column(name = "total_venta", nullable = false)
     private BigDecimal totalVenta = BigDecimal.ZERO;
-    
+
     @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleVenta> items;
-    
+
     @ManyToOne
     @JoinColumn(name = "cajero_id")
     private Cajero cajero;
 
+    @ManyToOne
+    @JoinColumn(name = "vendedor_id")
+    private Vendedores vendedor;
+
     @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<VentaMetodoPago> metodosPago;
-    
+
     @Column(name = "usuario_creacion", nullable = false)
     private String usuarioCreacion;
 

@@ -49,8 +49,9 @@ public class JwUtilJava {
 	public String generateToken(Usuario usuario, String db, Long numerosession) {
 		int boid = 0;
 		String sessionId = UUID.randomUUID().toString();
-		Optional<Usuario> optional = usuarioRepository.findByNombreRol(usuario.getCodigorol().getCodigo());
-		Optional<BodegaDTO> bodegaid = usuarioRepository.findBybo(usuario.getCodigorol().getCodigo());
+		System.out.println("codigo rol"+usuario.getCodigorol().getCodigo());
+		Optional<Usuario> optional = usuarioRepository.findByNombreRol(usuario.getCodigo());
+		Optional<BodegaDTO> bodegaid = usuarioRepository.findBybo(usuario.getCodigo());
 		if (bodegaid.isPresent()) {
 			boid = bodegaid.get().bodegaid();
 		}

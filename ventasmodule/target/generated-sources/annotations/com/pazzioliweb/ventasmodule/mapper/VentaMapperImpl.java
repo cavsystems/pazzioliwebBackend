@@ -4,6 +4,7 @@ import com.pazzioliweb.cajerosmodule.entity.Cajero;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
+import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaMetodoPagoDTO;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-03-27T16:52:23-0500",
+    date = "2026-04-01T17:21:02-0500",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
 )
 @Component
@@ -45,6 +46,8 @@ public class VentaMapperImpl implements VentaMapper {
             ventaDTO.setCajeroId( cajeroId.longValue() );
         }
         ventaDTO.setCajeroNombre( ventaCajeroNombre( venta ) );
+        ventaDTO.setVendedorId( ventaVendedorVendedor_id( venta ) );
+        ventaDTO.setVendedorNombre( ventaVendedorNombre( venta ) );
         ventaDTO.setFechaEmision( venta.getFechaEmision() );
         ventaDTO.setFechaEntregaEsperada( venta.getFechaEntregaEsperada() );
         ventaDTO.setEstado( venta.getEstado() );
@@ -259,6 +262,36 @@ public class VentaMapperImpl implements VentaMapper {
             return null;
         }
         String nombre = cajero.getNombre();
+        if ( nombre == null ) {
+            return null;
+        }
+        return nombre;
+    }
+
+    private Integer ventaVendedorVendedor_id(Venta venta) {
+        if ( venta == null ) {
+            return null;
+        }
+        Vendedores vendedor = venta.getVendedor();
+        if ( vendedor == null ) {
+            return null;
+        }
+        Integer vendedor_id = vendedor.getVendedor_id();
+        if ( vendedor_id == null ) {
+            return null;
+        }
+        return vendedor_id;
+    }
+
+    private String ventaVendedorNombre(Venta venta) {
+        if ( venta == null ) {
+            return null;
+        }
+        Vendedores vendedor = venta.getVendedor();
+        if ( vendedor == null ) {
+            return null;
+        }
+        String nombre = vendedor.getNombre();
         if ( nombre == null ) {
             return null;
         }

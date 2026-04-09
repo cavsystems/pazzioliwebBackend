@@ -2,13 +2,14 @@ package com.pazzioliweb.ventasmodule.repository;
 
 import com.pazzioliweb.ventasmodule.entity.Pedido;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface PedidoRepository extends JpaRepository<Pedido, Long> {
+public interface PedidoRepository extends JpaRepository<Pedido, Long>, JpaSpecificationExecutor<Pedido> {
 
     Optional<Pedido> findByNumeroPedido(String numeroPedido);
 
@@ -23,5 +24,9 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
 
     @Query("SELECT p FROM Pedido p WHERE p.cotizacionId = :cotizacionId")
     Optional<Pedido> findByCotizacionId(@Param("cotizacionId") Long cotizacionId);
+
+
+    @Query("SELECT MAX(p.id) FROM Pedido p")
+    Long getUltimopedidoId();
 }
 

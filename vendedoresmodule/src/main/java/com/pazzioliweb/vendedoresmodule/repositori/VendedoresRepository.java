@@ -7,6 +7,9 @@ import org.springframework.data.jpa.repository.Query;
 
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorDTO;
 import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
 
 public interface VendedoresRepository extends JpaRepository<Vendedores, Integer>{
 	@Query("""
@@ -21,4 +24,17 @@ public interface VendedoresRepository extends JpaRepository<Vendedores, Integer>
 	           FROM Vendedores v
 	           """)
 	    Page<VendedorDTO> listarVendedoresDTO(Pageable pageable);
+
+	/*
+	query para buscar todos los vendedores pertenecientes a una sede
+
+	 */
+	@Query("SELECT DISTINCT v FROM Usuariosvendedor uv " +
+            "JOIN uv.vendedor v " +
+            "JOIN uv.usuario u " +
+            "JOIN com.pazzioliweb.productosmodule.entity.Usuariobodega ub " +
+            "WITH ub.usuarioid = u " +
+            "JOIN ub.bodegaid b " +
+            "WHERE b.codigo = :bodegaId")
+	List<Vendedores> findByBodegaId(@Param("bodegaId") Integer bodegaId);
 }

@@ -69,58 +69,66 @@ public class AuthController {
     // ──────────────────────────────────────────────────────────────────────────
     @PostMapping("/login/destroit")
     public ResponseEntity<Map<String, Object>> logindestroit(@RequestBody LoginRequest request) {
+        try {
+            Optional<Usuario> optional = usuarioRepository.findByUsuario(request.usuario.trim());
+            Map<String, Object> response = new HashMap<>();
+            response.clear();
+            System.out.println(optional.isPresent());
+            if (optional.isPresent()) {
 
-        Optional<Usuario> optional = usuarioRepository.findByUsuario(request.usuario.trim());
-        Map<String, Object> response = new HashMap<>();
-        response.clear();
-        System.out.println(optional.isPresent());
-        if (optional.isPresent()) {
+                Usuario usuario = optional.get();
+                System.out.println(usuario.getUsuario());
+                if (usuario.getContrasena().equals(request.password)) {
+                    Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
 
-            Usuario usuario = optional.get();
-            System.out.println(usuario.getUsuario());
-            if (usuario.getContrasena().equals(request.password)) {
-                Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
+                    Sesiones sesion = optionalsession.get();
+                    sesion.setEstado("INACTIVO");
+                    sessionRepository.save(sesion);
 
-                Sesiones sesion = optionalsession.get();
-                sesion.setEstado("INACTIVO");
-                sessionRepository.save(sesion);
+                    Optional<Sesiones> sesioncodigo = sessionRepository.findTopByOrderByCodigoDesc();
+                    String token = jwtUtil.generateToken(usuario, request.db.trim(), sesioncodigo.get().getCodigo() + 1);
+                    crearSesion(usuario.getCodigo(), token);
+                    System.out.println("TOKEN => [" + token + "]");
+                    Claims claims = jwtUtil.extraerClaims(token);
+                    System.out.println("token creado obtener claims2");
+                    DatosSesiones datos = redisTemplate.opsForValue().get(claims.get("idsecion", String.class));
+                    System.out.println("codigo usuario" + usuario.getCodigo());
 
-                Optional<Sesiones> sesioncodigo = sessionRepository.findTopByOrderByCodigoDesc();
-                String token = jwtUtil.generateToken(usuario, request.db.trim(), sesioncodigo.get().getCodigo() + 1);
-                crearSesion(usuario.getCodigo(), token);
-                Claims claims = jwtUtil.extraerClaims(token);
-                DatosSesiones datos = redisTemplate.opsForValue().get(claims.get("idsecion", String.class));
-                System.out.println("codigo usuario" + usuario.getCodigo());
+                    // ✅ Verificar si el usuario es cajero y abrir sesión de caja
+                    verificarYAbrirSesionCajero(usuario, datos, claims);
 
-                // ✅ Verificar si el usuario es cajero y abrir sesión de caja
-                verificarYAbrirSesionCajero(usuario, datos, claims);
+                    Cookie jwtCookie = new Cookie("token", token);
+                    jwtCookie.setHttpOnly(true);
+                    jwtCookie.setSecure(false);
+                    jwtCookie.setPath("/");
+                    jwtCookie.setMaxAge(24 * 60 * 60);
+                    jwtCookie.setDomain("localhost");
+                    servletResponse.addCookie(jwtCookie);
+                    response.put("success", true);
+                    response.put("sesion", datos);
+                    response.put("permisos", datos.getPermisos());
 
-                Cookie jwtCookie = new Cookie("token", token);
-                jwtCookie.setHttpOnly(true);
-                jwtCookie.setSecure(false);
-                jwtCookie.setPath("/");
-                jwtCookie.setMaxAge(24 * 60 * 60);
-                jwtCookie.setDomain("localhost");
-                servletResponse.addCookie(jwtCookie);
-                response.put("success", true);
-                response.put("sesion", datos);
-                response.put("permisos", datos.getPermisos());
+                    return ResponseEntity.ok().body(response);
+                } else {
+                    response.put("success", false);
+                    response.put("message", "Credenciales inválidas");
+                    response.put("Activa", false);
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+                }
 
-                return ResponseEntity.ok().body(response);
             } else {
                 response.put("success", false);
                 response.put("message", "Credenciales inválidas");
                 response.put("Activa", false);
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             }
-
-        } else {
-            response.put("success", false);
-            response.put("message", "Credenciales inválidas");
-            response.put("Activa", false);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
         }
+
+return  null;
     }
+
 
     // ──────────────────────────────────────────────────────────────────────────
     // /login  →  login normal; avisa si ya hay sesión activa
@@ -154,7 +162,7 @@ public class AuthController {
                 }
 
                 Optional<Sesiones> sesioncodigo = sessionRepository.findTopByOrderByCodigoDesc();
-                String token = jwtUtil.generateToken(usuario, request.db.trim(), sesioncodigo.get().getCodigo() + 1);
+                String token = jwtUtil.generateToken(usuario, request.db.trim(), sesioncodigo.isPresent() ? sesioncodigo.get().getCodigo() + 1:1);
                 crearSesion(usuario.getCodigo(), token);
                 Claims claims = jwtUtil.extraerClaims(token);
                 DatosSesiones datos = redisTemplate.opsForValue().get(claims.get("idsecion", String.class));

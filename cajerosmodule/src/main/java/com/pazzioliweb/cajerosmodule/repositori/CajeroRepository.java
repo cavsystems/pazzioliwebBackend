@@ -1,7 +1,9 @@
 package com.pazzioliweb.cajerosmodule.repositori;
 
+import java.util.List;
 import java.util.Optional;
 
+import com.pazzioliweb.cajerosmodule.dtos.CajerobasicoDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,6 +24,21 @@ public interface CajeroRepository extends JpaRepository<Cajero, Integer> {
      * Busca el cajero de un usuario (sin filtrar por estado)
      */
     Optional<Cajero> findByUsuario_Codigo(int codigoUsuario);
+/*
+
+buscar cajeros por bodega o sede
+este query se ejecutara si el usuario tiene rol de adminsede
+ */
+
+    @Query(value = """
+            select c.cajero_id as cajeroId, c.nombre as nombre from usuariobodega usb
+            join usuarios u on usb.usuarioid=u.codigo
+            join bodegas b on b.codigo=usb.bodegaid
+            join cajeros c on c.usuario_id=u.codigo
+            where b.codigo=:bodegaid""", nativeQuery = true)
+    List<CajerobasicoDto> buscarCajerosPorBodega(@Param("bodegaid") int bodegaid);
+
+
 
 
  /*   @Query("""
