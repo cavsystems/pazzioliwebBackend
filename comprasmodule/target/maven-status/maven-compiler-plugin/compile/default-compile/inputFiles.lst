@@ -1,44 +1,44 @@
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\ComprasMetricsController.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ItemRecibidoDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\LegalizacionServiceImpl.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\Legalizacion.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\client\ProductoClient.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\OrdenCompra.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\GlobalExceptionHandler.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\EstadisticasProveedorDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\HistorialCompraService.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\HistorialCompraController.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\LegalizacionController.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\LegalizacionDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\IngresoOrdenCompraServiceImpl.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\ProductoService.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\CuentaPorPagarRepository.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\OrdenCompraServiceImpl.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\OrdenCompraRepository.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\CuentaPorPagarService.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\HistorialCompraServiceImpl.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\EstadisticasPorEstadoDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\client\FeignConfig.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\OrdenCompraException.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\OrdenCompraRequestDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\OrdenCompraController.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\HistorialCompraDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\IngresoOrdenCompraController.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ProveedorDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\LegalizacionRepository.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\ProductoServiceImpl.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\LegalizacionRequestDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\CuentaPorPagarDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\CuentaPorPagar.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\DetalleOrdenCompraDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\DetalleOrdenCompra.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\LegalizacionService.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\OrdenCompraDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\IngresoOrdenCompraService.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\mapper\OrdenCompraMapper.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\mapper\ProveedorMapper.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ProductoRequestDTO.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\OrdenCompraService.java
-C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\CuentaPorPagarServiceImpl.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\OrdenCompraDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\HistorialCompraServiceImpl.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\HistorialCompraService.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\OrdenCompraRepository.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\IngresoOrdenCompraServiceImpl.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\IngresoOrdenCompraService.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\GlobalExceptionHandler.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\CuentaPorPagarService.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\OrdenCompraService.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\DetalleOrdenCompra.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\LegalizacionRepository.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\mapper\OrdenCompraMapper.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\DetalleOrdenCompraDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\LegalizacionDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\EstadisticasPorEstadoDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\client\FeignConfig.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ItemRecibidoDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\LegalizacionServiceImpl.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\HistorialCompraDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\OrdenCompraException.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\ComprasMetricsController.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\LegalizacionService.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\CuentaPorPagarRepository.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\mapper\ProveedorMapper.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\Legalizacion.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\HistorialCompraController.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ProductoRequestDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\CuentaPorPagarServiceImpl.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\IngresoOrdenCompraController.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\LegalizacionRequestDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\client\ProductoClient.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\OrdenCompraRequestDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\CuentaPorPagar.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\CuentaPorPagarDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\EstadisticasProveedorDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\ProductoService.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ProveedorDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\OrdenCompraServiceImpl.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\LegalizacionController.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\OrdenCompra.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\OrdenCompraController.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\ProductoServiceImpl.java

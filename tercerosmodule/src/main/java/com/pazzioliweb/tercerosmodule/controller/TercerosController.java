@@ -154,4 +154,10 @@ public class TercerosController {
     public ResponseEntity<TerceroDTOImpl> crear(@RequestBody TerceroDTOImpl terceroDTO) {
         return ResponseEntity.ok(terceroService.guardar(terceroDTO));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
+        terceroService.eliminar(id);
+        return ResponseEntity.noContent().build();
+    }
 }

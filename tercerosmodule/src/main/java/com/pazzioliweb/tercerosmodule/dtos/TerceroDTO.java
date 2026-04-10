@@ -30,4 +30,8 @@ public interface TerceroDTO {
     String getMatriculaMercantil();
     Integer getActividadEconomicaId();
     TipoPersonaDTO getTipoPersona();
+
+    com.pazzioliweb.tercerosmodule.dtos.DepartamentoInfoDTOImpl getDepartamento();
+    com.pazzioliweb.tercerosmodule.dtos.MunicipioInfoDTOImpl getCiudad();
+    String getCodigoPostal();
 }

@@ -9,10 +9,13 @@ com\pazzioliweb\cajerosmodule\entity\MovimientoCajero.class
 com\pazzioliweb\cajerosmodule\dtos\CajeroDTO.class
 com\pazzioliweb\cajerosmodule\repositori\MovimientoCajeroRepository.class
 com\pazzioliweb\cajerosmodule\service\CajeroService.class
+com\pazzioliweb\cajerosmodule\dtos\ReponsecajeroDTO.class
 com\pazzioliweb\cajerosmodule\controller\DetalleCajeroController.class
 com\pazzioliweb\cajerosmodule\entity\Cajero$EstadoCajero.class
 com\pazzioliweb\cajerosmodule\repositori\CajeroRepository.class
 com\pazzioliweb\cajerosmodule\dtos\MovimientoCajeroDTO.class
 com\pazzioliweb\cajerosmodule\dtos\CuadreCajaDTO$ResumenTipoDocumento.class
 com\pazzioliweb\cajerosmodule\entity\DetalleCajero.class
+com\pazzioliweb\cajerosmodule\dtos\CajerobasicoDto.class
 com\pazzioliweb\cajerosmodule\entity\MovimientoCajero$TipoMovimiento.class
+com\pazzioliweb\cajerosmodule\dtos\CajeroRequestDTO.class

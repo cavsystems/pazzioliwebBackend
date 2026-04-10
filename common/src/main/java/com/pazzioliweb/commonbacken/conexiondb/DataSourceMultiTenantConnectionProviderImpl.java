@@ -37,7 +37,7 @@ public class DataSourceMultiTenantConnectionProviderImpl implements MultiTenantC
         HikariDataSource ds = new HikariDataSource();
         ds.setJdbcUrl("jdbc:mysql://localhost:3306/" + dbName);
         ds.setUsername("root");
-        ds.setPassword("root125");
+        ds.setPassword("root");
         ds.setDriverClassName("com.mysql.cj.jdbc.Driver");
         /*ds.setJdbcUrl("jdbc:mysql://" + dbHost + ":" + dbPort + "/" + dbName);
         ds.setUsername(dbUser);

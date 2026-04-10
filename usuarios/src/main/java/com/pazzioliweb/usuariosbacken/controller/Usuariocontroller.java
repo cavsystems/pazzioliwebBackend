@@ -474,9 +474,22 @@ return ResponseEntity.ok().body(response);
 	    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(false);
   }
 
-
+  @Transactional
+  @DeleteMapping("/eliminar/{id}")
+  public ResponseEntity<Map<String, Object>> eliminarUsuario(@PathVariable Integer id) {
+      Map<String, Object> response = new HashMap<>();
+      Optional<Usuario> usuarioop = usurepo.findByCodigo(id);
+      if (usuarioop.isEmpty()) {
+          response.put("mensaje", "Usuario no encontrado");
+          return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+      }
+      try {
+          usurepo.deleteById(id);
+          response.put("mensaje", "Usuario eliminado correctamente");
+          return ResponseEntity.ok(response);
+      } catch (org.springframework.dao.DataIntegrityViolationException e) {
+          response.put("mensaje", "Este usuario no puede ser eliminado, tiene movimientos asociados");
+          return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+      }
   }
-
-
-
 
