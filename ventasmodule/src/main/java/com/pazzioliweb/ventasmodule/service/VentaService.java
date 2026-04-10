@@ -18,7 +18,7 @@ public interface VentaService {
     Double getTotalVentasByFecha(LocalDate fechaInicio, LocalDate fechaFin);
     Long getCantidadVendidaByProducto(String codigoProducto, LocalDate fechaInicio, LocalDate fechaFin);
     Double getTotalVentasByCajero(Integer cajeroId, LocalDate fechaInicio, LocalDate fechaFin);
-    List<VentaDTO> getVentasByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
+    List<VentaDTO> getVentasByFiltros(String numeroventa,Long terceroId, Integer vendedorId, Integer cajeroId,
                                       LocalDate fechaInicio, LocalDate fechaFin);
     Long getUltimaVentaId();
 

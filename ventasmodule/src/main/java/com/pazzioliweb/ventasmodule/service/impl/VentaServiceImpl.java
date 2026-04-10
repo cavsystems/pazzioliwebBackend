@@ -444,10 +444,10 @@ public class VentaServiceImpl implements VentaService {
     }
     @Transactional
     @Override
-    public List<VentaDTO> getVentasByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
+    public List<VentaDTO> getVentasByFiltros(String numeroventa,Long terceroId, Integer vendedorId, Integer cajeroId,
                                              LocalDate fechaInicio, LocalDate fechaFin) {
         return ventaRepository
-                .findAll(VentaSpecification.conFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
+                .findAll(VentaSpecification.conFiltros(numeroventa,terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
                 .stream()
                 .map(ventaMapper::toDto)
                 .collect(Collectors.toList());

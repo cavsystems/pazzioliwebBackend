@@ -111,12 +111,13 @@ obtener el id de la ultima venta
      */
     @GetMapping("/filtrar")
     public ResponseEntity<List<VentaDTO>> filtrarVentas(
+            @RequestParam(required = false) String numeroventa,
             @RequestParam(required = false) Long terceroId,
             @RequestParam(required = false) Integer vendedorId,
             @RequestParam(required = false) Integer cajeroId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
-        List<VentaDTO> ventas = ventaService.getVentasByFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin);
+        List<VentaDTO> ventas = ventaService.getVentasByFiltros(numeroventa,terceroId, vendedorId, cajeroId, fechaInicio, fechaFin);
         return ResponseEntity.ok(ventas);
     }
 }

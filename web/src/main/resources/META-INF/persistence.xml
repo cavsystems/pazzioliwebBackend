@@ -82,6 +82,8 @@
         <class>com.pazzioliweb.comprasmodule.entity.Legalizacion</class>
         <!-- Ventas -->
         <class>com.pazzioliweb.ventasmodule.entity.DetalleVenta</class>
+        <class>com.pazzioliweb.ventasmodule.entity.Devolucion</class>
+        <class>com.pazzioliweb.ventasmodule.entity.DetalleDevolucion</class>
         <class>com.pazzioliweb.ventasmodule.entity.Venta</class>
         <class>com.pazzioliweb.ventasmodule.entity.Cotizacion</class>
         <class>com.pazzioliweb.ventasmodule.entity.DetalleCotizacion</class>

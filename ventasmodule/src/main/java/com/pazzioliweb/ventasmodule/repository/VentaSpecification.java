@@ -23,6 +23,7 @@ public class VentaSpecification {
      * @return Specification que aplica solo los filtros que no son null.
      */
     public static Specification<Venta> conFiltros(
+            String numeroventa,
             Long terceroId,
             Integer vendedorId,
             Integer cajeroId,
@@ -31,6 +32,12 @@ public class VentaSpecification {
 
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+
+            if ( numeroventa != null ) {
+                predicates.add(cb.equal(root.get("numeroVenta"), numeroventa));
+                predicates.add(cb.equal(root.get("estado"), "COMPLETADA"));
+            }
 
             if (terceroId != null  && terceroId != 0) {
                 predicates.add(cb.equal(root.get("cliente").get("terceroId"), terceroId));
