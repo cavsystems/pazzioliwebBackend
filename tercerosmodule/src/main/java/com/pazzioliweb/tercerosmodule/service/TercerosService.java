@@ -53,6 +53,7 @@ public class TercerosService {
         this.entityManager = entityManager;
     }
 
+    @Transactional(readOnly = true)
     public Page<TerceroDTOImpl> listar(int page, int size, String sortField, String sortDirection) {
         Sort sort = sortDirection.equalsIgnoreCase("asc")
                 ? Sort.by(sortField).ascending()
