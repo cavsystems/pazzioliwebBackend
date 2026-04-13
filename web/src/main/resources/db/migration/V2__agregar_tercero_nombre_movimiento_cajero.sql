@@ -4,7 +4,7 @@
 
 -- 1. Agregar columna tercero_nombre a movimiento_cajero
 ALTER TABLE movimiento_cajero
-    ADD COLUMN IF NOT EXISTS tercero_nombre VARCHAR(200) NULL
+    ADD COLUMN tercero_nombre VARCHAR(200) NULL
         COMMENT 'Nombre del tercero (proveedor en EGRESO, cliente en ABONO)'
         AFTER descripcion;
 
