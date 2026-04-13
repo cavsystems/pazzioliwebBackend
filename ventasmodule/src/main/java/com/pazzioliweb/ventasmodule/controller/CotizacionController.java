@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/cotizaciones")
@@ -78,6 +79,32 @@ public class CotizacionController {
         cotizacionService.anularCotizacion(cotizacionId);
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * Cambia el estado de una cotización con validación de transiciones.
+     * Estados válidos: BORRADOR, ENVIADA, ACEPTADA, RECHAZADA, VENCIDA
+     *
+     * Transiciones permitidas:
+     *   BORRADOR  → ENVIADA, VENCIDA
+     *   ENVIADA   → ACEPTADA, RECHAZADA, BORRADOR, VENCIDA
+     *   ACEPTADA  → VENCIDA
+     *
+     * PATCH /api/cotizaciones/{id}/estado
+     * Body: { "estado": "ENVIADA" }
+     */
+    @PatchMapping("/{cotizacionId}/estado")
+    public ResponseEntity<Void> cambiarEstado(
+            @PathVariable Long cotizacionId,
+            @RequestBody Map<String, String> body) {
+        String nuevoEstado = body.get("estado");
+        if (nuevoEstado == null || nuevoEstado.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        cotizacionService.cambiarEstado(cotizacionId, nuevoEstado);
+        return ResponseEntity.ok().build();
+    }
+
+
 
     @PostMapping("/{cotizacionId}/convertir-pedido")
     public ResponseEntity<PedidoDTO> convertirAPedido(@PathVariable Long cotizacionId) {

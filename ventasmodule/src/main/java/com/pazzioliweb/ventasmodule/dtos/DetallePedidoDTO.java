@@ -10,6 +10,7 @@ public class DetallePedidoDTO {
     private String codigoProducto;
     private String codigoBarras;
     private String descripcionProducto;
+    private String observacionProducto;
     private String referenciaVariantes;
     private Integer cantidad;
     private BigDecimal precioUnitario;
