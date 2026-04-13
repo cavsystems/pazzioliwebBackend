@@ -1,2 +1,7 @@
 /target/
-/.metadata/
+
+/common/src/main/java/com/pazzioliweb/commonbacken/conexiondb/
+
+.idea/
+.metadata/
+.settings/
