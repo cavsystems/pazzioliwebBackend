@@ -64,18 +64,24 @@ public class TercerosController {
 
 
     /*
-     * Listado Completo para consulta de terceros, trae todo los detalles.
+     * Listado Completo para consulta de terceros, trae todo los detalles (paginado).
      *
      */
     @GetMapping("/listar")
-    public ResponseEntity<Map<String, Object>> listar() {
+    public ResponseEntity<Map<String, Object>> listar(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "razonSocial") String sortField,
+            @RequestParam(defaultValue = "asc") String sortDirection) {
         System.out.println("Método listar terceros ejecutado");
 
-        List<TerceroDTOImpl> terceros = terceroService.listarTercerosConDetalles();
+        Page<TerceroDTOImpl> tercerosPage = terceroService.listar(page, size, sortField, sortDirection);
 
         Map<String, Object> response = new HashMap<>();
-        response.put("content", terceros);
-        response.put("totalItems", terceros.size());
+        response.put("content", tercerosPage.getContent());
+        response.put("currentPage", tercerosPage.getNumber());
+        response.put("totalItems", tercerosPage.getTotalElements());
+        response.put("totalPages", tercerosPage.getTotalPages());
 
         return ResponseEntity.ok(response);
     }
@@ -153,5 +159,11 @@ public class TercerosController {
     @PostMapping("/crear")
     public ResponseEntity<TerceroDTOImpl> crear(@RequestBody TerceroDTOImpl terceroDTO) {
         return ResponseEntity.ok(terceroService.guardar(terceroDTO));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
+        terceroService.eliminar(id);
+        return ResponseEntity.noContent().build();
     }
 }

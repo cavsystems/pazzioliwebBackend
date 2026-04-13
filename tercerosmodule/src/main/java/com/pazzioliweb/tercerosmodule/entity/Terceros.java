@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.pazzioliweb.commonbacken.entity.Departamento;
+import com.pazzioliweb.commonbacken.entity.Municipio;
 import com.pazzioliweb.commonbacken.entity.Retenciones;
 import com.pazzioliweb.commonbacken.entity.Tipoidentificacion;
 import com.pazzioliweb.empresasback.entity.Regimen;
@@ -65,6 +67,17 @@ public class Terceros {
 
 	@Column(name = "direccion", length = 100)
 	private String direccion;
+
+	@ManyToOne
+	@JoinColumn(name = "departamento_id")
+	private Departamento departamento;
+
+	@ManyToOne
+	@JoinColumn(name = "ciudad_id")
+	private Municipio ciudad;
+
+	@Column(name = "codigo_postal", length = 20)
+	private String codigoPostal;
 
 	@Column(name = "plazo", nullable = false)
 	private Integer plazo = 0;
@@ -296,5 +309,14 @@ public class Terceros {
 	public void setTipoPersona(Tipopersona tipoPersona) {
 		this.tipoPersona = tipoPersona;
 	}
+
+	public Departamento getDepartamento() { return departamento; }
+	public void setDepartamento(Departamento departamento) { this.departamento = departamento; }
+
+	public Municipio getCiudad() { return ciudad; }
+	public void setCiudad(Municipio ciudad) { this.ciudad = ciudad; }
+
+	public String getCodigoPostal() { return codigoPostal; }
+	public void setCodigoPostal(String codigoPostal) { this.codigoPostal = codigoPostal; }
 }
 

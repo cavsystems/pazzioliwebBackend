@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @ControllerAdvice
-public class GlobalExceptionHandler {
+public class ComprasExceptionHandler {
 
     @ExceptionHandler(OrdenCompraException.class)
     public ResponseEntity<Map<String, String>> handleOrdenCompraException(OrdenCompraException ex) {
@@ -40,3 +40,4 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }
+

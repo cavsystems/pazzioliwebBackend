@@ -20,11 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.pazzioliweb.cajerosmodule.dtos.CuadreCajaDTO;
 import com.pazzioliweb.cajerosmodule.dtos.DetalleCajeroDTO;
+import com.pazzioliweb.cajerosmodule.dtos.InformeDiarioVentasDTO;
 import com.pazzioliweb.cajerosmodule.dtos.MovimientoCajeroDTO;
 import com.pazzioliweb.cajerosmodule.entity.Cajero;
 import com.pazzioliweb.cajerosmodule.entity.DetalleCajero;
 import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
+import com.pazzioliweb.cajerosmodule.service.InformeDiarioService;
 
 /**
  * Controlador para la gestión del detalle de cajeros (sesiones de caja).
@@ -40,13 +42,16 @@ import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 public class DetalleCajeroController {
 
     private final DetalleCajeroService detalleCajeroService;
-    private final CajeroRepository cajeroRepository;
+    private final CajeroRepository     cajeroRepository;
+    private final InformeDiarioService informeDiarioService;
 
     @Autowired
     public DetalleCajeroController(DetalleCajeroService detalleCajeroService,
-                                   CajeroRepository cajeroRepository) {
+                                   CajeroRepository cajeroRepository,
+                                   InformeDiarioService informeDiarioService) {
         this.detalleCajeroService = detalleCajeroService;
-        this.cajeroRepository = cajeroRepository;
+        this.cajeroRepository     = cajeroRepository;
+        this.informeDiarioService = informeDiarioService;
     }
 
     // ============================================================
@@ -291,6 +296,36 @@ public class DetalleCajeroController {
                     "monto", monto,
                     "descripcion", descripcion
             ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  INFORME DIARIO DE VENTAS  (Reporte Z / Cuadre de Caja)
+    // ══════════════════════════════════════════════════════════════════
+
+    /**
+     * Genera el Informe Diario de Ventas completo de una sesión.
+     *
+     * Secciones del reporte:
+     *   - Encabezado      → cajero, fecha, hora, transacción inicial/final, N° transacciones, Z
+     *   - Movimiento de Cuentas → bruta, descuentos, retenciones, gravadas, exentas, IVA, total
+     *   - Ventas por Línea
+     *   - Formas de Pago
+     *   - Recibos de Caja  (abonos recibidos)
+     *   - Comprobantes de Egreso
+     *   - Vales
+     *   - Devoluciones     → devGravada, ivaDevGravada, devExentas, contado, CxC, DSC, total
+     *   - Resumen Final    → Neto Caja, UPT, VPT, VPU
+     *
+     * GET /api/detalle-cajeros/{detalleCajeroId}/informe-diario
+     */
+    @GetMapping("/{detalleCajeroId}/informe-diario")
+    public ResponseEntity<?> generarInformeDiario(@PathVariable Long detalleCajeroId) {
+        try {
+            InformeDiarioVentasDTO informe = informeDiarioService.generarInforme(detalleCajeroId);
+            return ResponseEntity.ok(informe);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

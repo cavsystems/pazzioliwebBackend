@@ -25,7 +25,7 @@ public class HibernateConfig {
 	            CurrentTenantIdentifierResolver tenantResolver) {
 
 	        LocalContainerEntityManagerFactoryBean emf = new LocalContainerEntityManagerFactoryBean();
-	        emf.setPackagesToScan("com.pazzioliweb.usuriosbacken.entyti","com.pazzioliweb.commonbacken.entyti", "com.pazzioliweb.empresasback.entyti");
+	        emf.setPackagesToScan("com.pazzioliweb");
 	        emf.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
 
 	        Map<String, Object> props = new HashMap<>();

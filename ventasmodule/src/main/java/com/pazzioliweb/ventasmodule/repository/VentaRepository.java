@@ -23,7 +23,6 @@ public interface VentaRepository extends JpaRepository<Venta, Long>, JpaSpecific
     @Query("SELECT DISTINCT v FROM Venta v LEFT JOIN FETCH v.items WHERE v.estado IN ('PENDIENTE', 'COMPLETADA') AND v.cliente.terceroId = :clienteId")
     List<Venta> findVentasByClienteId(@Param("clienteId") Long clienteId);
 
-    // Reportes
     @Query("SELECT SUM(v.totalVenta) FROM Venta v WHERE v.fechaEmision BETWEEN :fechaInicio AND :fechaFin AND v.estado = 'COMPLETADA'")
     Optional<Double> getTotalVentasByFecha(@Param("fechaInicio") LocalDate fechaInicio, @Param("fechaFin") LocalDate fechaFin);
 
@@ -33,8 +32,8 @@ public interface VentaRepository extends JpaRepository<Venta, Long>, JpaSpecific
     @Query("SELECT SUM(v.totalVenta) FROM Venta v WHERE v.cajero.cajeroId = :cajeroId AND v.fechaEmision BETWEEN :fechaInicio AND :fechaFin AND v.estado = 'COMPLETADA'")
     Optional<Double> getTotalVentasByCajero(@Param("cajeroId") Integer cajeroId, @Param("fechaInicio") LocalDate fechaInicio, @Param("fechaFin") LocalDate fechaFin);
 
-
     @Query("SELECT MAX(v.id) FROM Venta v")
     Long getUltimaVentaId();
-
 }
+
+

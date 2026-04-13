@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventarioDetalle;
 
-public interface MovimientoInventarioDetalleRepository extends JpaRepository<MovimientoInventarioDetalle, Long>{
-	List<MovimientoInventarioDetalle> findByMovimiento(Long id);
+public interface MovimientoInventarioDetalleRepository extends JpaRepository<MovimientoInventarioDetalle, Long> {
+        List<MovimientoInventarioDetalle> findByMovimiento_MovimientoId(Long id);
+
 }

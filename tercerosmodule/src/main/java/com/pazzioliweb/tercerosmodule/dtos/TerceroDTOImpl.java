@@ -14,6 +14,8 @@ import com.pazzioliweb.empresaback.dtos.RegimenDTOImpl;
 
 import com.pazzioliweb.tercerosmodule.entity.ContactoTercero;
 import com.pazzioliweb.tercerosmodule.entity.SedeTercero;
+import com.pazzioliweb.commonbacken.entity.Departamento;
+import com.pazzioliweb.commonbacken.entity.Municipio;
 
 public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.TerceroDTO {
 
@@ -47,6 +49,10 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
     private String matriculaMercantil;
     private Integer actividadEconomicaId;
     private TipoPersonaDTOImpl tipoPersona;
+    
+    private DepartamentoInfoDTOImpl departamento;
+    private MunicipioInfoDTOImpl ciudad;
+    private String codigoPostal;
     
     public List<RetencionesDTO> getRetenciones() {
 		return retenciones;
@@ -117,6 +123,15 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
 	
 	public TipoPersonaDTOImpl getTipoPersona() {return tipoPersona;}
 	public void setTipoPersona(TipoPersonaDTOImpl tipoPersona) {this.tipoPersona = tipoPersona;}
+
+	public DepartamentoInfoDTOImpl getDepartamento() { return departamento; }
+	public void setDepartamento(DepartamentoInfoDTOImpl departamento) { this.departamento = departamento; }
+
+	public MunicipioInfoDTOImpl getCiudad() { return ciudad; }
+	public void setCiudad(MunicipioInfoDTOImpl ciudad) { this.ciudad = ciudad; }
+
+	public String getCodigoPostal() { return codigoPostal; }
+	public void setCodigoPostal(String codigoPostal) { this.codigoPostal = codigoPostal; }
 
 	private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	// Método helper para convertir desde la entidad
@@ -190,6 +205,19 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
         	dto.setTipoPersona(TipoPersonaDTOImpl.fromEntity(t.getTipoPersona()));
         }
         
+        
+        if(t.getDepartamento() != null) {
+            dto.setDepartamento(new DepartamentoInfoDTOImpl(t.getDepartamento()));
+        }
+
+        if(t.getCiudad() != null) {
+            dto.setCiudad(new MunicipioInfoDTOImpl(t.getCiudad()));
+        }
+
+        if(t.getCodigoPostal() != null) {
+            dto.setCodigoPostal(t.getCodigoPostal());
+        }
+        
         return dto;
     }
     
@@ -260,6 +288,8 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
         
         if(this.tipoPersona != null)
         	entidad.setTipoPersona(this.tipoPersona.toEntity());
+
+        // departamento, ciudad, codigoPostal are set in the service layer
         
         return entidad;
     }

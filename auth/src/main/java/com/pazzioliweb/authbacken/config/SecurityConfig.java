@@ -60,6 +60,7 @@ public class SecurityConfig {
 						.permitAll().requestMatchers("/api/tipos-caracteristica/**").permitAll().requestMatchers("/api/caracteristicas/**").permitAll().requestMatchers("/api/variantes/**")
 						.permitAll().requestMatchers("/api/variante-detalle/**").permitAll().requestMatchers("/api/precios-producto-variante/**").permitAll().requestMatchers("/api/productoMaster/**")
 						.permitAll().requestMatchers("/api/unidadesMedida/**").permitAll().requestMatchers("/api/unidadesMedidaProducto/**").permitAll().requestMatchers("/api/tipo-producto/**").permitAll().requestMatchers("/api/cajeros/**")
+						.permitAll().requestMatchers("/api/detalle-cajeros/**").permitAll().requestMatchers("/api/ventas/**").permitAll().requestMatchers("/api/devoluciones/**").permitAll().requestMatchers("/api/inventario/**")
 						.permitAll().anyRequest().authenticated()).exceptionHandling(ex -> ex
 						.accessDeniedHandler((request, response, accessDeniedException) -> {
 							if (!response.isCommitted()) {

@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pazzioliweb.commonbacken.entity.Departamento;
@@ -52,6 +53,7 @@ public class TercerosService {
         this.entityManager = entityManager;
     }
 
+    @Transactional(readOnly = true)
     public Page<TerceroDTOImpl> listar(int page, int size, String sortField, String sortDirection) {
         Sort sort = sortDirection.equalsIgnoreCase("asc")
                 ? Sort.by(sortField).ascending()
@@ -258,6 +260,18 @@ public class TercerosService {
             tercero.setTipoPersona(entityManager.getReference(Tipopersona.class, dto.getTipoPersona().getCodigo()));
         }
 
+        if (dto.getDepartamento() != null && dto.getDepartamento().getDepartamentoId() != null) {
+            tercero.setDepartamento(entityManager.getReference(Departamento.class, dto.getDepartamento().getDepartamentoId()));
+        }
+
+        if (dto.getCiudad() != null && dto.getCiudad().getMunicipioId() != null) {
+            tercero.setCiudad(entityManager.getReference(Municipio.class, dto.getCiudad().getMunicipioId()));
+        }
+
+        if (dto.getCodigoPostal() != null) {
+            tercero.setCodigoPostal(dto.getCodigoPostal());
+        }
+
         // Guardar en BD
         Terceros guardado = terceroRepository.save(tercero);
 
@@ -308,6 +322,18 @@ public class TercerosService {
         }
         if (dto.getTipoPersona() != null && dto.getTipoPersona().getCodigo() != null) {
             tercero.setTipoPersona(entityManager.getReference(Tipopersona.class, dto.getTipoPersona().getCodigo()));
+        }
+
+        if (dto.getDepartamento() != null && dto.getDepartamento().getDepartamentoId() != null) {
+            tercero.setDepartamento(entityManager.getReference(Departamento.class, dto.getDepartamento().getDepartamentoId()));
+        }
+
+        if (dto.getCiudad() != null && dto.getCiudad().getMunicipioId() != null) {
+            tercero.setCiudad(entityManager.getReference(Municipio.class, dto.getCiudad().getMunicipioId()));
+        }
+
+        if (dto.getCodigoPostal() != null) {
+            tercero.setCodigoPostal(dto.getCodigoPostal());
         }
 
         // SEDES
@@ -381,7 +407,11 @@ public class TercerosService {
         if (!terceroRepository.existsById(id)) {
             throw new RuntimeException("No existe un tercero con el ID: " + id);
         }
-        terceroRepository.deleteById(id);
+        try {
+            terceroRepository.deleteById(id);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalStateException("Este tercero no puede ser eliminado, tiene movimientos asociados");
+        }
     }
 
     private TerceroDTOImpl convertirADTO(Terceros t) {
