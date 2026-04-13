@@ -124,6 +124,15 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
 	public TipoPersonaDTOImpl getTipoPersona() {return tipoPersona;}
 	public void setTipoPersona(TipoPersonaDTOImpl tipoPersona) {this.tipoPersona = tipoPersona;}
 
+	public DepartamentoInfoDTOImpl getDepartamento() { return departamento; }
+	public void setDepartamento(DepartamentoInfoDTOImpl departamento) { this.departamento = departamento; }
+
+	public MunicipioInfoDTOImpl getCiudad() { return ciudad; }
+	public void setCiudad(MunicipioInfoDTOImpl ciudad) { this.ciudad = ciudad; }
+
+	public String getCodigoPostal() { return codigoPostal; }
+	public void setCodigoPostal(String codigoPostal) { this.codigoPostal = codigoPostal; }
+
 	private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	// Método helper para convertir desde la entidad
     public static TerceroDTOImpl fromEntity(Terceros t) {

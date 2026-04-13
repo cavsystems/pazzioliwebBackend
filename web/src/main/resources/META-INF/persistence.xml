@@ -94,5 +94,9 @@
         <class>com.pazzioliweb.cajerosmodule.entity.Cajero</class>
         <class>com.pazzioliweb.cajerosmodule.entity.DetalleCajero</class>
         <class>com.pazzioliweb.cajerosmodule.entity.MovimientoCajero</class>
+        <!-- Movimiento Inventario -->
+        <class>com.pazzioliweb.movimientosinventariomodule.entity.Kardex</class>
+        <class>com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventario</class>
+        <class>com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventarioDetalle</class>
     </persistence-unit>
 </persistence>

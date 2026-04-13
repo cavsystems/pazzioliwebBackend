@@ -403,17 +403,28 @@ public class ProductosServiceImpl implements ProductosService{
 
                 // Handle precios
                 if (varianteDto.getPrecios() != null && !varianteDto.getPrecios().isEmpty()) {
-                    System.out.println("precios" + varianteDto.getPrecios());
                     for (ProductoActualizarCrearDTO.PrecioDTO precioDto : varianteDto.getPrecios()) {
                         com.pazzioliweb.productosmodule.entity.Precios precio = preciosRepository.findById(precioDto.getIdTipoPrecio())
                                 .orElseThrow(() -> new EntityNotFoundException("Precio no encontrado: " + precioDto.getIdTipoPrecio()));
 
-                        PreciosProductoVariante ppv = new PreciosProductoVariante();
-                        ppv.setProductoVariante(variante);
-                        ppv.setPrecio(precio);
-                        ppv.setValor(precioDto.getValor().doubleValue());
-                        ppv.setFechaCreacion(LocalDateTime.now());
-                        ppv.setFechaInicio(LocalDateTime.now());
+                        Optional<PreciosProductoVariante> existente =
+                                preciosProductoVarianteRepository.findByProductoVariante_ProductoVarianteIdAndPrecio_PrecioId(
+                                        variante.getProductoVarianteId(), precio.getPrecioId());
+
+                        PreciosProductoVariante ppv;
+                        if (existente.isPresent()) {
+                            // Ya existe: solo actualiza el valor
+                            ppv = existente.get();
+                            ppv.setValor(precioDto.getValor().doubleValue());
+                        } else {
+                            // No existe: crea uno nuevo
+                            ppv = new PreciosProductoVariante();
+                            ppv.setProductoVariante(variante);
+                            ppv.setPrecio(precio);
+                            ppv.setValor(precioDto.getValor().doubleValue());
+                            ppv.setFechaCreacion(LocalDateTime.now());
+                            ppv.setFechaInicio(LocalDateTime.now());
+                        }
                         preciosProductoVarianteRepository.save(ppv);
                     }
                 }

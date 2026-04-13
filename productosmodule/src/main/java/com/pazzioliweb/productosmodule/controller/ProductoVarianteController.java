@@ -146,7 +146,7 @@ public class ProductoVarianteController {
     		    @RequestParam(name = "estadova", defaultValue = "1") String estadova,
     		    @RequestParam(name = "bodega", defaultValue = "0") String bodega,
     		    @RequestParam(name = "consultarentradasalida", defaultValue = "NO") String consultarentradasalida,
-    		    @RequestParam(name = "sortField", defaultValue = "varianteId") String sortField,
+    		    @RequestParam(name = "sortField", defaultValue = "productoVarianteId") String sortField,
     		    @RequestParam(name = "sortDirection", defaultValue = "asc") String sortDirection
     ){
     	System.out.println("pagina actual es esta"+page+" "+estadoproducto+" "+estadova);

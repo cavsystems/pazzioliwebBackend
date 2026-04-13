@@ -93,6 +93,10 @@ public class MovimientoCajero {
     @Column(name = "descripcion", length = 500)
     private String descripcion;
 
+    /** Nombre del tercero asociado (proveedor en EGRESO, cliente en ABONO/recibo de caja) */
+    @Column(name = "tercero_nombre", length = 200)
+    private String terceroNombre;
+
     /** Fecha y hora exacta del movimiento */
     @Column(name = "fecha_movimiento", nullable = false)
     private LocalDateTime fechaMovimiento;
@@ -160,6 +164,8 @@ public class MovimientoCajero {
     public void setMontoElectronico(BigDecimal m) { this.montoElectronico = m; }
     public String getDescripcion() { return descripcion; }
     public void setDescripcion(String d) { this.descripcion = d; }
+    public String getTerceroNombre() { return terceroNombre; }
+    public void setTerceroNombre(String t) { this.terceroNombre = t; }
     public LocalDateTime getFechaMovimiento() { return fechaMovimiento; }
     public void setFechaMovimiento(LocalDateTime f) { this.fechaMovimiento = f; }
 }

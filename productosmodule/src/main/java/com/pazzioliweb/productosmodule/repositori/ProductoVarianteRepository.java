@@ -187,15 +187,12 @@ FROM (
 			  	SELECT *
 FROM (
     SELECT
-      
-        pv.producto_variantes_id AS varianteId,
-        pv.activo as activo,
-        pv.codigo_barras as codigobarravariante,
-        p.codigo_barras as codigobarra,
+        pv.producto_variantes_id AS productoVarianteId,
+        pv.activo AS activo,
+        p.codigo_barras AS codigobarras,
         p.producto_id AS productoId,
-        ex.bodegaid as bodegaid,
+        ex.bodegaid AS bodegaid,
         p.referencia,
-       
         p.estado,
         p.grupo_id AS grupoid,
         p.linea_id AS lineaid,
@@ -209,34 +206,59 @@ FROM (
           p.descripcion
         ) AS descripcion,
         COALESCE(ex.totalExistencia, 0) AS cantidadGlobal,
-        p.costo,
+        0 AS totalGlobalInventario,
+        p.costo AS costo,
         u.sigla AS unidadMedida,
         l.descripcion AS linea,
         g.descripcion AS grupo,
-        p.fecha_ultima_compra,
-        p.fecha_ultima_venta
+        COALESCE(i.tarifa, 0) AS tarifa,
+        p.fecha_ultima_compra AS fechaUltimaCompra,
+        p.fecha_ultima_venta AS fechaUltimaVenta
     FROM producto_variantes pv
     JOIN productos p ON p.producto_id = pv.producto_id
+    LEFT JOIN impuestos i ON i.codigo = p.impuesto_id
     LEFT JOIN unidades_medida_producto ump ON ump.producto_id = p.producto_id
     LEFT JOIN unidades_medida u ON u.unidad_medida_id = ump.unidad_medida_id
     LEFT JOIN lineas l ON l.linea_id = p.linea_id
     LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
     LEFT JOIN (
         SELECT
-             
             e.producto_variantes_id AS varianteId,
-            e.bodega_id as bodegaid,
+            e.bodega_id AS bodegaid,
             e.existencia AS totalExistencia
         FROM existencias e
-       
     ) ex ON ex.varianteId = pv.producto_variantes_id
 ) t
-WHERE LOWER(t.descripcion)LIKE LOWER(CONCAT('%', :productodes, '%')) or LOWER(t.codigobarra)LIKE LOWER(CONCAT('%', :productodes, '%')) or  LOWER(t.codigoContable)LIKE LOWER(CONCAT('%', :productodes, '%'))  or  LOWER(t.codigobarravariante)LIKE LOWER(CONCAT('%', :productodes, '%')) or  LOWER(t.referencia)LIKE LOWER(CONCAT('%', :productodes, '%'))  
-and  t.estado="ACTIVO"
-and t.activo=:activo
-and t.bodegaid=:bodega
+WHERE (
+    LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.codigoContable) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.referencia) LIKE LOWER(CONCAT('%', :productodes, '%'))
+)
+AND t.estado = 'ACTIVO'
+AND t.activo = :activo
+AND t.bodegaid = :bodega
 			        """,
-			  countQuery = "SELECT COUNT(*) FROM producto_variantes",
+			  countQuery = """
+			      SELECT COUNT(*) FROM (
+			          SELECT pv.producto_variantes_id
+			          FROM producto_variantes pv
+			          JOIN productos p ON p.producto_id = pv.producto_id
+			          LEFT JOIN (
+			              SELECT e.producto_variantes_id AS varianteId, e.bodega_id AS bodegaid
+			              FROM existencias e
+			          ) ex ON ex.varianteId = pv.producto_variantes_id
+			          WHERE (
+			              LOWER(IF(pv.predeterminada = 0, CONCAT(p.descripcion, '-', pv.referencia_variantes), p.descripcion)) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(p.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(p.codigo_contable) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(p.referencia) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			          )
+			          AND p.estado = 'ACTIVO'
+			          AND pv.activo = :activo
+			          AND ex.bodegaid = :bodega
+			      ) cnt
+			      """,
 			  nativeQuery = true
 			)
 			Page<ProductoInventarioDTO> listarInventarioentradasalida( @Param("activo") int activo, @Param("bodega") int bodega,@Param("productodes") String desproduct,Pageable pageable);
