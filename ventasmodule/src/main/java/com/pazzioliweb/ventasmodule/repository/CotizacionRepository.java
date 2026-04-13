@@ -2,13 +2,14 @@ package com.pazzioliweb.ventasmodule.repository;
 
 import com.pazzioliweb.ventasmodule.entity.Cotizacion;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface CotizacionRepository extends JpaRepository<Cotizacion, Long> {
+public interface CotizacionRepository extends JpaRepository<Cotizacion, Long>  , JpaSpecificationExecutor<Cotizacion> {
 
     Optional<Cotizacion> findByNumeroCotizacion(String numeroCotizacion);
 
@@ -23,5 +24,12 @@ public interface CotizacionRepository extends JpaRepository<Cotizacion, Long> {
 
     @Query("SELECT DISTINCT c FROM Cotizacion c LEFT JOIN FETCH c.items WHERE c.estado = 'ACEPTADA' AND c.cliente.terceroId = :clienteId")
     List<Cotizacion> findCotizacionesAceptadasByClienteId(@Param("clienteId") Long clienteId);
+
+
+    @Query("SELECT MAX(p.id) FROM Cotizacion p")
+    Long getUltimacotizacionId();
+
+
+
 }
 

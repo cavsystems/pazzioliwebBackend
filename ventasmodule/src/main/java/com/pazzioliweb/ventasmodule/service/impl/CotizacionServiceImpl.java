@@ -5,6 +5,10 @@ import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
 import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
+import com.pazzioliweb.productosmodule.entity.Bodegas;
+import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
+import com.pazzioliweb.tercerosmodule.entity.Terceros;
+import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
 import com.pazzioliweb.vendedoresmodule.repositori.VendedoresRepository;
 import com.pazzioliweb.ventasmodule.dtos.CotizacionDTO;
@@ -18,6 +22,8 @@ import com.pazzioliweb.ventasmodule.entity.DetalleCotizacion;
 import com.pazzioliweb.ventasmodule.exception.CotizacionException;
 import com.pazzioliweb.ventasmodule.mapper.CotizacionMapper;
 import com.pazzioliweb.ventasmodule.repository.CotizacionRepository;
+import com.pazzioliweb.ventasmodule.repository.CotizacionSpecification;
+import com.pazzioliweb.ventasmodule.repository.PedidoSpecification;
 import com.pazzioliweb.ventasmodule.service.CotizacionService;
 import com.pazzioliweb.ventasmodule.service.PedidoService;
 import com.pazzioliweb.ventasmodule.service.VentaService;
@@ -40,12 +46,16 @@ public class CotizacionServiceImpl implements CotizacionService {
     private final CotizacionRepository cotizacionRepository;
     private final CotizacionMapper cotizacionMapper;
     private final PedidoService pedidoService;
+
     private final VentaService ventaService;
     private final VendedoresRepository vendedoresRepository;
     private final CajeroRepository cajeroRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
-
+@Autowired
+BodegasRepository bodegaRepository;
+@Autowired
+TercerosRepository terceroRepository;
     @Autowired
     public CotizacionServiceImpl(CotizacionRepository cotizacionRepository,
                                  CotizacionMapper cotizacionMapper,
@@ -54,7 +64,9 @@ public class CotizacionServiceImpl implements CotizacionService {
                                  VendedoresRepository vendedoresRepository,
                                  CajeroRepository cajeroRepository,
                                  DetalleCajeroService detalleCajeroService,
-                                 RedisTemplate<String, DatosSesiones> redisTemplate) {
+                                 RedisTemplate<String, DatosSesiones> redisTemplate,
+                                 TercerosRepository terceroRepository
+                              ) {
         this.cotizacionRepository = cotizacionRepository;
         this.cotizacionMapper = cotizacionMapper;
         this.pedidoService = pedidoService;
@@ -63,6 +75,7 @@ public class CotizacionServiceImpl implements CotizacionService {
         this.cajeroRepository = cajeroRepository;
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
+        this.terceroRepository = terceroRepository;
     }
 
     // ─── Helper: sesión activa desde Redis ───────────────────────────────────
@@ -100,6 +113,12 @@ public class CotizacionServiceImpl implements CotizacionService {
             }
         }
 
+        if (cotizacionDTO.getVendedorId() != null) {
+            Vendedores vendedor = vendedoresRepository.findById(cotizacionDTO.getVendedorId())
+                    .orElseThrow(() -> new CotizacionException("Vendedor no encontrado: " + cotizacionDTO.getVendedorId()));
+            cotizacion.setVendedor(vendedor);
+        }
+
         // ── Asignar vendedor si viene en el DTO ──────────────────────────────
         if (cotizacionDTO.getVendedorId() != null) {
             Vendedores vendedor = vendedoresRepository.findById(cotizacionDTO.getVendedorId())
@@ -107,6 +126,15 @@ public class CotizacionServiceImpl implements CotizacionService {
             cotizacion.setVendedor(vendedor);
         }
 
+        Bodegas bodega = bodegaRepository.getReferenceById(cotizacionDTO.getBodegaId());
+        System.out.println("BODEGA ENCONTRADAS"+bodega.getNombre()+cotizacionDTO.getBodegaId());
+         cotizacion.setBodega(bodega);
+       Terceros tercero = terceroRepository.getReferenceById(cotizacionDTO.getClienteId().intValue());
+       if(tercero==null){
+           throw new CotizacionException("Tercero no encontrado: " + cotizacionDTO.getClienteId());
+       }
+
+        cotizacion.setCliente(tercero);
         // ── Calcular totales ─────────────────────────────────────────────────
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal ivaTotal = BigDecimal.ZERO;
@@ -340,6 +368,27 @@ public class CotizacionServiceImpl implements CotizacionService {
         cotizacionRepository.save(cotizacion);
 
         return ventaDTO;
+    }
+
+    @Transactional
+    @Override
+    public Long getUltimacotizacion() {
+        return  cotizacionRepository.getUltimacotizacionId();
+    }
+
+
+    /*
+metodo para filtrar pedidos segun parametros
+ */
+    @Transactional
+    @Override
+    public List<CotizacionDTO> getCotizacionesByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
+                                               LocalDate fechaInicio, LocalDate fechaFin) {
+        return  cotizacionRepository
+                .findAll(CotizacionSpecification.conFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
+                .stream()
+                .map( cotizacionMapper::toDto)
+                .collect(Collectors.toList());
     }
 }
 

@@ -15,6 +15,7 @@
     <description>Módulo de Ventas para Pazzioli Web</description>
     
     <dependencies>
+
         <!-- Dependencia del módulo de Terceros -->
         <dependency>
             <groupId>com.pazzioliweb</groupId>

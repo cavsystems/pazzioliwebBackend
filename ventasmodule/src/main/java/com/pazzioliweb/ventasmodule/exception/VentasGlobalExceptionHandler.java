@@ -1,6 +1,8 @@
 package com.pazzioliweb.ventasmodule.exception;
 
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -9,13 +11,19 @@ import java.util.HashMap;
 import java.util.Map;
 
 @ControllerAdvice
+
 public class VentasGlobalExceptionHandler {
+
 
     @ExceptionHandler(VentaException.class)
     public ResponseEntity<Map<String, String>> handleVentaException(VentaException ex) {
         Map<String, String> errorResponse = new HashMap<>();
         errorResponse.put("message", ex.getMessage());
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.parseMediaType("application/json;charset=UTF-8")) // 👈 correcto
+                .body(errorResponse);
     }
 
     @ExceptionHandler(CotizacionException.class)

@@ -5,6 +5,7 @@ import com.pazzioliweb.ventasmodule.dtos.PedidoDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaMetodoPagoDTO;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface CotizacionService {
@@ -18,6 +19,9 @@ public interface CotizacionService {
     void anularCotizacion(Long cotizacionId);
     PedidoDTO convertirAPedido(Long cotizacionId);
     VentaDTO convertirAVenta(Long cotizacionId, List<VentaMetodoPagoDTO> metodosPago);
+    Long getUltimacotizacion();
+    List<CotizacionDTO> getCotizacionesByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
+                                             LocalDate fechaInicio, LocalDate fechaFin) ;
 }
 
 
