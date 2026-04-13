@@ -57,6 +57,7 @@ public interface PedidoMapper {
     @Mapping(target = "codigoProducto", source = "codigoProducto")
     @Mapping(target = "codigoBarras", source = "codigoBarras")
     @Mapping(target = "descripcionProducto", source = "descripcionProducto")
+    @Mapping(target = "observacionProducto", source = "observacionProducto")
     @Mapping(target = "referenciaVariantes", source = "referenciaVariantes")
     @Mapping(target = "cantidad", source = "cantidad")
     @Mapping(target = "precioUnitario", source = "precioUnitario")
@@ -70,6 +71,7 @@ public interface PedidoMapper {
     @Mapping(target = "codigoProducto", source = "codigoProducto")
     @Mapping(target = "codigoBarras", source = "codigoBarras")
     @Mapping(target = "descripcionProducto", source = "descripcionProducto")
+    @Mapping(target = "observacionProducto", source = "observacionProducto")
     @Mapping(target = "referenciaVariantes", source = "referenciaVariantes")
     @Mapping(target = "cantidad", source = "cantidad")
     @Mapping(target = "precioUnitario", source = "precioUnitario")
@@ -77,7 +79,6 @@ public interface PedidoMapper {
     @Mapping(target = "iva", source = "ivaPorcentaje")
     @Mapping(target = "total", source = "total")
     @Mapping(target = "pedido", ignore = true)
-    @Mapping(target = "observacionProducto", ignore = true)
     DetallePedido detalleToEntity(DetallePedidoDTO detalleDTO);
 
     List<DetallePedidoDTO> toDetalleDtoList(List<DetallePedido> detalles);

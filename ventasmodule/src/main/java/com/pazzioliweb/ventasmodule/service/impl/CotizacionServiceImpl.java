@@ -296,6 +296,7 @@ TercerosRepository terceroRepository;
             dp.setCodigoProducto(dc.getCodigoProducto());
             dp.setCodigoBarras(dc.getCodigoBarras());
             dp.setDescripcionProducto(dc.getDescripcionProducto());
+            dp.setObservacionProducto(dc.getObservacionProducto() != null ? dc.getObservacionProducto() : "");
             dp.setReferenciaVariantes(dc.getReferenciaVariantes());
             dp.setCantidad(dc.getCantidad());
             dp.setPrecioUnitario(dc.getPrecioUnitario());
@@ -306,9 +307,14 @@ TercerosRepository terceroRepository;
         }).collect(Collectors.toList());
         pedidoDTO.setItems(items);
 
-        pedidoService.crearPedido(pedidoDTO);
+        // ── Bug 2 fix: retornar el pedido creado (con numeroPedido e id generados) ──
+        PedidoDTO pedidoCreado = pedidoService.crearPedido(pedidoDTO);
 
-        return pedidoDTO;
+        // ── Bug 1 fix: marcar la cotización como convertida a pedido ──────────
+        cotizacion.setEstado("PEDIDO");
+        cotizacionRepository.save(cotizacion);
+
+        return pedidoCreado;
     }
 
     @Override
@@ -389,6 +395,53 @@ metodo para filtrar pedidos segun parametros
                 .stream()
                 .map( cotizacionMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    // ─── Cambiar estado de una cotización con validación de transiciones ─────
+    @Transactional
+    @Override
+    public void cambiarEstado(Long cotizacionId, String nuevoEstado) {
+        Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId)
+                .orElseThrow(() -> new CotizacionException("Cotización no encontrada con ID: " + cotizacionId));
+
+        String estadoActual = cotizacion.getEstado();
+        String estadoNuevo  = nuevoEstado.toUpperCase().trim();
+
+        validarTransicion(estadoActual, estadoNuevo, cotizacionId);
+
+        cotizacion.setEstado(estadoNuevo);
+        cotizacionRepository.save(cotizacion);
+    }
+
+    /**
+     * Tabla de transiciones permitidas:
+     *  BORRADOR   → ENVIADA, VENCIDA
+     *  ENVIADA    → ACEPTADA, RECHAZADA, BORRADOR, VENCIDA
+     *  ACEPTADA   → VENCIDA
+     *  RECHAZADA  → (terminal)
+     *  VENCIDA    → (terminal)
+     *  PEDIDO     → (terminal – convertida a pedido)
+     *  FACTURADA  → (terminal – convertida a venta)
+     */
+    private void validarTransicion(String actual, String nuevo, Long cotizacionId) {
+        java.util.Map<String, java.util.Set<String>> transiciones = java.util.Map.of(
+            "BORRADOR",  java.util.Set.of("ENVIADA", "VENCIDA"),
+            "ENVIADA",   java.util.Set.of("ACEPTADA", "RECHAZADA", "BORRADOR", "VENCIDA"),
+            "ACEPTADA",  java.util.Set.of("VENCIDA")
+        );
+
+        java.util.Set<String> permitidos = transiciones.getOrDefault(actual, java.util.Set.of());
+
+        if (permitidos.isEmpty()) {
+            throw new CotizacionException(
+                "La cotización " + cotizacionId + " está en estado " + actual + " y no admite cambios de estado");
+        }
+
+        if (!permitidos.contains(nuevo)) {
+            throw new CotizacionException(
+                "Transición no permitida: " + actual + " → " + nuevo +
+                ". Estados permitidos desde " + actual + ": " + permitidos);
+        }
     }
 }
 
