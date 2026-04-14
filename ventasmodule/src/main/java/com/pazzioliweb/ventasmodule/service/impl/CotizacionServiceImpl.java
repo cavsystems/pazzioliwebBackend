@@ -52,10 +52,10 @@ public class CotizacionServiceImpl implements CotizacionService {
     private final CajeroRepository cajeroRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
-@Autowired
-BodegasRepository bodegaRepository;
-@Autowired
-TercerosRepository terceroRepository;
+    @Autowired
+    BodegasRepository bodegaRepository;
+    @Autowired
+    TercerosRepository terceroRepository;
     @Autowired
     public CotizacionServiceImpl(CotizacionRepository cotizacionRepository,
                                  CotizacionMapper cotizacionMapper,
@@ -66,7 +66,7 @@ TercerosRepository terceroRepository;
                                  DetalleCajeroService detalleCajeroService,
                                  RedisTemplate<String, DatosSesiones> redisTemplate,
                                  TercerosRepository terceroRepository
-                              ) {
+    ) {
         this.cotizacionRepository = cotizacionRepository;
         this.cotizacionMapper = cotizacionMapper;
         this.pedidoService = pedidoService;
@@ -128,11 +128,11 @@ TercerosRepository terceroRepository;
 
         Bodegas bodega = bodegaRepository.getReferenceById(cotizacionDTO.getBodegaId());
         System.out.println("BODEGA ENCONTRADAS"+bodega.getNombre()+cotizacionDTO.getBodegaId());
-         cotizacion.setBodega(bodega);
-       Terceros tercero = terceroRepository.getReferenceById(cotizacionDTO.getClienteId().intValue());
-       if(tercero==null){
-           throw new CotizacionException("Tercero no encontrado: " + cotizacionDTO.getClienteId());
-       }
+        cotizacion.setBodega(bodega);
+        Terceros tercero = terceroRepository.getReferenceById(cotizacionDTO.getClienteId().intValue());
+        if(tercero==null){
+            throw new CotizacionException("Tercero no encontrado: " + cotizacionDTO.getClienteId());
+        }
 
         cotizacion.setCliente(tercero);
         // ── Calcular totales ─────────────────────────────────────────────────
@@ -389,7 +389,7 @@ metodo para filtrar pedidos segun parametros
     @Transactional
     @Override
     public List<CotizacionDTO> getCotizacionesByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
-                                               LocalDate fechaInicio, LocalDate fechaFin) {
+                                                        LocalDate fechaInicio, LocalDate fechaFin) {
         return  cotizacionRepository
                 .findAll(CotizacionSpecification.conFiltros(terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
                 .stream()
@@ -425,22 +425,22 @@ metodo para filtrar pedidos segun parametros
      */
     private void validarTransicion(String actual, String nuevo, Long cotizacionId) {
         java.util.Map<String, java.util.Set<String>> transiciones = java.util.Map.of(
-            "BORRADOR",  java.util.Set.of("ENVIADA", "VENCIDA"),
-            "ENVIADA",   java.util.Set.of("ACEPTADA", "RECHAZADA", "BORRADOR", "VENCIDA"),
-            "ACEPTADA",  java.util.Set.of("VENCIDA")
+                "BORRADOR",  java.util.Set.of("ENVIADA", "VENCIDA"),
+                "ENVIADA",   java.util.Set.of("ACEPTADA", "RECHAZADA", "BORRADOR", "VENCIDA"),
+                "ACEPTADA",  java.util.Set.of("VENCIDA")
         );
 
         java.util.Set<String> permitidos = transiciones.getOrDefault(actual, java.util.Set.of());
 
         if (permitidos.isEmpty()) {
             throw new CotizacionException(
-                "La cotización " + cotizacionId + " está en estado " + actual + " y no admite cambios de estado");
+                    "La cotización " + cotizacionId + " está en estado " + actual + " y no admite cambios de estado");
         }
 
         if (!permitidos.contains(nuevo)) {
             throw new CotizacionException(
-                "Transición no permitida: " + actual + " → " + nuevo +
-                ". Estados permitidos desde " + actual + ": " + permitidos);
+                    "Transición no permitida: " + actual + " → " + nuevo +
+                            ". Estados permitidos desde " + actual + ": " + permitidos);
         }
     }
 }
