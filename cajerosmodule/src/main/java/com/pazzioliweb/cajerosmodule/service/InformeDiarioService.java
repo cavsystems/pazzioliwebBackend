@@ -61,31 +61,71 @@ public class InformeDiarioService {
     //  MÉTODO PRINCIPAL
     // ════════════════════════════════════════════════════════════════════════
 
+    /**
+     * Genera el Informe Diario de Ventas para una sesión y un día específico.
+     *
+     * @param detalleCajeroId ID de la sesión de caja
+     * @param fecha           Día del informe (si es null → hoy)
+     */
     @Transactional(readOnly = true)
-    public InformeDiarioVentasDTO generarInforme(Long detalleCajeroId) {
+    public InformeDiarioVentasDTO generarInforme(Long detalleCajeroId, LocalDate fecha) {
 
         DetalleCajero sesion = detalleCajeroRepo.findById(detalleCajeroId)
                 .orElseThrow(() -> new RuntimeException("Sesión no encontrada: " + detalleCajeroId));
 
-        List<MovimientoCajero> movimientos =
+        // Fecha del informe: parámetro recibido, o la fecha de hoy
+        LocalDate fechaInforme = (fecha != null) ? fecha : LocalDate.now(ZONA_BOGOTA);
+
+        return construirInforme(sesion, fechaInforme);
+    }
+
+    /**
+     * Genera el Informe Diario buscando automáticamente la sesión correcta
+     * a partir del cajeroId y la fecha.
+     *
+     * Ideal para consultar informes de días anteriores sin conocer el detalleCajeroId.
+     *
+     * @param cajeroId ID del cajero
+     * @param fecha    Día del informe
+     */
+    @Transactional(readOnly = true)
+    public InformeDiarioVentasDTO generarInformePorCajero(Integer cajeroId, LocalDate fecha) {
+
+        DetalleCajero sesion = detalleCajeroRepo.findByCajeroIdAndFechaMovimiento(cajeroId, fecha)
+                .orElseThrow(() -> new RuntimeException(
+                        "No se encontró una sesión del cajero " + cajeroId
+                      + " con movimientos en la fecha " + fecha));
+
+        return construirInforme(sesion, fecha);
+    }
+
+    /**
+     * Lógica común para construir el informe a partir de una sesión y una fecha.
+     */
+    private InformeDiarioVentasDTO construirInforme(DetalleCajero sesion, LocalDate fechaInforme) {
+
+        Long detalleCajeroId = sesion.getDetalleCajeroId();
+
+        // Cargar todos los movimientos de la sesión y filtrar solo los del día solicitado
+        List<MovimientoCajero> todosMovimientos =
                 movimientoRepo.findByDetalleCajero_DetalleCajeroIdOrderByConsecutivoAsc(detalleCajeroId);
 
-        LocalDate fechaInforme = sesion.getFechaApertura() != null
-                ? sesion.getFechaApertura().toLocalDate()
-                : LocalDate.now(ZONA_BOGOTA);
-        Integer cajeroId = sesion.getCajero().getCajeroId();
+        List<MovimientoCajero> movimientosDia = todosMovimientos.stream()
+                .filter(m -> m.getFechaMovimiento() != null
+                          && m.getFechaMovimiento().toLocalDate().equals(fechaInforme))
+                .collect(Collectors.toList());
 
         InformeDiarioVentasDTO dto = new InformeDiarioVentasDTO();
 
-        buildEncabezado(dto, sesion, movimientos, fechaInforme);
-        buildMovimientoCuentas(dto, cajeroId, fechaInforme);
-        buildVentasPorLinea(dto, cajeroId, fechaInforme);
-        buildFormasDePago(dto, cajeroId, fechaInforme);
-        buildRecibosCaja(dto, movimientos);
-        buildEgresos(dto, movimientos);
-        buildVales(dto, movimientos);
-        buildDevoluciones(dto, cajeroId, fechaInforme, movimientos);
-        buildResumenFinal(dto, cajeroId, fechaInforme, movimientos);
+        buildEncabezado(dto, sesion, movimientosDia, fechaInforme);
+        buildMovimientoCuentas(dto, detalleCajeroId, fechaInforme);
+        buildVentasPorLinea(dto, detalleCajeroId, fechaInforme);
+        buildFormasDePago(dto, detalleCajeroId, fechaInforme);
+        buildRecibosCaja(dto, movimientosDia);
+        buildEgresos(dto, movimientosDia);
+        buildVales(dto, movimientosDia);
+        buildDevoluciones(dto, detalleCajeroId, fechaInforme, movimientosDia);
+        buildResumenFinal(dto, detalleCajeroId, fechaInforme, movimientosDia);
 
         return dto;
     }
@@ -129,9 +169,9 @@ public class InformeDiarioService {
     //  2. MOVIMIENTO DE CUENTAS
     // ════════════════════════════════════════════════════════════════════════
     private void buildMovimientoCuentas(InformeDiarioVentasDTO dto,
-                                         Integer cajeroId, LocalDate fecha) {
+                                         Long detalleCajeroId, LocalDate fecha) {
         MovimientoCuentas mc = new MovimientoCuentas();
-        Object[] row = informeDiarioRepo.getTotalesVentas(cajeroId, fecha);
+        Object[] row = informeDiarioRepo.getTotalesVentas(detalleCajeroId, fecha);
 
         if (row != null && row[0] != null) {
             BigDecimal bruta      = toBD(row[0]);
@@ -156,8 +196,8 @@ public class InformeDiarioService {
     //  3. VENTAS POR LÍNEA
     // ════════════════════════════════════════════════════════════════════════
     private void buildVentasPorLinea(InformeDiarioVentasDTO dto,
-                                      Integer cajeroId, LocalDate fecha) {
-        List<Object[]> rows = informeDiarioRepo.getVentasPorLinea(cajeroId, fecha);
+                                      Long detalleCajeroId, LocalDate fecha) {
+        List<Object[]> rows = informeDiarioRepo.getVentasPorLinea(detalleCajeroId, fecha);
         List<VentaLinea> lineas = new ArrayList<>();
         for (Object[] row : rows) {
             lineas.add(new VentaLinea(
@@ -171,8 +211,8 @@ public class InformeDiarioService {
     //  4. FORMAS DE PAGO
     // ════════════════════════════════════════════════════════════════════════
     private void buildFormasDePago(InformeDiarioVentasDTO dto,
-                                    Integer cajeroId, LocalDate fecha) {
-        List<Object[]> rows = informeDiarioRepo.getFormasPago(cajeroId, fecha);
+                                    Long detalleCajeroId, LocalDate fecha) {
+        List<Object[]> rows = informeDiarioRepo.getFormasPago(detalleCajeroId, fecha);
         List<FormaPago> formas = new ArrayList<>();
         for (Object[] row : rows) {
             formas.add(new FormaPago(
@@ -260,11 +300,11 @@ public class InformeDiarioService {
     //  8. DEVOLUCIONES
     // ════════════════════════════════════════════════════════════════════════
     private void buildDevoluciones(InformeDiarioVentasDTO dto,
-                                    Integer cajeroId, LocalDate fecha,
+                                    Long detalleCajeroId, LocalDate fecha,
                                     List<MovimientoCajero> movimientos) {
         SeccionDevoluciones seccion = new SeccionDevoluciones();
 
-        Object[] row = informeDiarioRepo.getTotalesDevoluciones(cajeroId, fecha);
+        Object[] row = informeDiarioRepo.getTotalesDevoluciones(detalleCajeroId, fecha);
         if (row != null) {
             seccion.setDevGravada(toBD(row[0]));
             seccion.setIvaDevGravada(toBD(row[1]));
@@ -276,10 +316,12 @@ public class InformeDiarioService {
                 .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.DEVOLUCION)
                 .map(MovimientoCajero::getMontoEfectivo)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        // Total CxC = devoluciones de ventas a crédito
+
+        // Total CxC devoluciones = electrónico restituido en devoluciones
+        // (devoluciones sobre ventas a crédito no devuelven efectivo)
         BigDecimal totalCxC = movimientos.stream()
-                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.CUENTA_POR_COBRAR)
-                .map(MovimientoCajero::getMonto)
+                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.DEVOLUCION)
+                .map(MovimientoCajero::getMontoElectronico)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         seccion.setDevExentas(BigDecimal.ZERO);
@@ -293,7 +335,7 @@ public class InformeDiarioService {
     //  9. RESUMEN FINAL  (Neto Caja, UPT, VPT, VPU)
     // ════════════════════════════════════════════════════════════════════════
     private void buildResumenFinal(InformeDiarioVentasDTO dto,
-                                    Integer cajeroId, LocalDate fecha,
+                                    Long detalleCajeroId, LocalDate fecha,
                                     List<MovimientoCajero> movimientos) {
         ResumenFinal resumen = new ResumenFinal();
 
@@ -309,7 +351,7 @@ public class InformeDiarioService {
                 .subtract(totalDev));
 
         int numTransacciones = dto.getNumeroTransacciones() != null ? dto.getNumeroTransacciones() : 0;
-        int totalUnidades    = informeDiarioRepo.getTotalUnidades(cajeroId, fecha);
+        int totalUnidades    = informeDiarioRepo.getTotalUnidades(detalleCajeroId, fecha);
         resumen.setTotalUnidades(totalUnidades);
 
         // UPT = (unidades / transacciones) * 100  → expresado como %

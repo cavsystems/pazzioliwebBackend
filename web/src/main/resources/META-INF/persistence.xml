@@ -90,6 +90,7 @@
         <class>com.pazzioliweb.ventasmodule.entity.Pedido</class>
         <class>com.pazzioliweb.ventasmodule.entity.DetallePedido</class>
         <class>com.pazzioliweb.ventasmodule.entity.VentaMetodoPago</class>
+        <class>com.pazzioliweb.ventasmodule.entity.CuentaPorCobrar</class>
         <!-- Cajeros -->
         <class>com.pazzioliweb.cajerosmodule.entity.Cajero</class>
         <class>com.pazzioliweb.cajerosmodule.entity.DetalleCajero</class>

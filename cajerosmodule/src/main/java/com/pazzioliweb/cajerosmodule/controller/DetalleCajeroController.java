@@ -308,6 +308,10 @@ public class DetalleCajeroController {
     /**
      * Genera el Informe Diario de Ventas completo de una sesión.
      *
+     * @param detalleCajeroId ID de la sesión de caja
+     * @param fecha           Día del informe (opcional, por defecto hoy).
+     *                        Formato: yyyy-MM-dd  Ejemplo: ?fecha=2026-04-13
+     *
      * Secciones del reporte:
      *   - Encabezado      → cajero, fecha, hora, transacción inicial/final, N° transacciones, Z
      *   - Movimiento de Cuentas → bruta, descuentos, retenciones, gravadas, exentas, IVA, total
@@ -320,11 +324,36 @@ public class DetalleCajeroController {
      *   - Resumen Final    → Neto Caja, UPT, VPT, VPU
      *
      * GET /api/detalle-cajeros/{detalleCajeroId}/informe-diario
+     * GET /api/detalle-cajeros/{detalleCajeroId}/informe-diario?fecha=2026-04-13
      */
     @GetMapping("/{detalleCajeroId}/informe-diario")
-    public ResponseEntity<?> generarInformeDiario(@PathVariable Long detalleCajeroId) {
+    public ResponseEntity<?> generarInformeDiario(
+            @PathVariable Long detalleCajeroId,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha) {
         try {
-            InformeDiarioVentasDTO informe = informeDiarioService.generarInforme(detalleCajeroId);
+            InformeDiarioVentasDTO informe = informeDiarioService.generarInforme(detalleCajeroId, fecha);
+            return ResponseEntity.ok(informe);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Genera el Informe Diario buscando automáticamente la sesión correcta
+     * a partir del cajeroId y la fecha.
+     *
+     * Ideal para consultar días anteriores sin conocer el detalleCajeroId.
+     *
+     * GET /api/detalle-cajeros/cajero/{cajeroId}/informe-diario?fecha=2026-04-13
+     * GET /api/detalle-cajeros/cajero/{cajeroId}/informe-diario  → usa fecha de hoy
+     */
+    @GetMapping("/cajero/{cajeroId}/informe-diario")
+    public ResponseEntity<?> generarInformeDiarioPorCajero(
+            @PathVariable Integer cajeroId,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha) {
+        try {
+            java.time.LocalDate fechaInforme = (fecha != null) ? fecha : java.time.LocalDate.now(java.time.ZoneId.of("America/Bogota"));
+            InformeDiarioVentasDTO informe = informeDiarioService.generarInformePorCajero(cajeroId, fechaInforme);
             return ResponseEntity.ok(informe);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

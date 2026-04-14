@@ -1,6 +1,7 @@
 package com.pazzioliweb.cajerosmodule.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -109,7 +110,8 @@ public class DetalleCajeroService {
 
     /**
      * Abre sesión de caja sin comprobante (usado en login automático).
-     * Si ya hay una sesión abierta, la retorna sin crear una nueva.
+     * Si ya hay una sesión abierta del día de hoy, la retorna.
+     * Si hay una sesión abierta de un día anterior, la cierra y abre una nueva.
      */
     @Transactional
     public DetalleCajero abrirSesionCajero(Cajero cajero, BigDecimal baseCaja) {
@@ -118,7 +120,12 @@ public class DetalleCajeroService {
 
     /**
      * Abre sesión de caja asignando un comprobante específico.
-     * Si ya hay una sesión abierta, la retorna sin crear una nueva.
+     *
+     * Lógica de sesión diaria:
+     *   - Si ya hay una sesión abierta del DÍA DE HOY → la retorna sin crear nueva.
+     *   - Si hay una sesión abierta de un DÍA ANTERIOR → la cierra automáticamente
+     *     y crea una nueva sesión para hoy.
+     *   - Si no hay sesión abierta → crea una nueva.
      *
      * @param cajero         Cajero que abre la caja
      * @param baseCaja       Monto inicial con el que arranca
@@ -129,10 +136,22 @@ public class DetalleCajeroService {
         List<DetalleCajero> sesionesAbiertas = detalleCajeroRepository
                 .findByCajero_CajeroIdAndEstado(cajero.getCajeroId(), DetalleCajero.EstadoDetalleCajero.ABIERTA);
 
+        LocalDate hoy = LocalDate.now(ZONA_BOGOTA);
+
         if (!sesionesAbiertas.isEmpty()) {
-            return sesionesAbiertas.get(0);
+            DetalleCajero sesionExistente = sesionesAbiertas.get(0);
+            LocalDate fechaApertura = sesionExistente.getFechaApertura().toLocalDate();
+
+            if (fechaApertura.equals(hoy)) {
+                // Sesión abierta del día de hoy → retornarla
+                return sesionExistente;
+            }
+
+            // Sesión de un día anterior → cerrarla automáticamente
+            cerrarSesionPorCambioDeDia(sesionExistente);
         }
 
+        // Crear nueva sesión para hoy
         DetalleCajero detalle = new DetalleCajero();
         detalle.setCajero(cajero);
         detalle.setMontoInicial(baseCaja);
@@ -219,6 +238,70 @@ public class DetalleCajeroService {
             );
             detalleCajeroRepository.save(detalle);
         }
+    }
+
+    /**
+     * Cierra una sesión de un día anterior cuando se detecta cambio de día.
+     * La fecha de cierre se establece a las 23:59:59 del día en que se abrió.
+     */
+    @Transactional
+    public void cerrarSesionPorCambioDeDia(DetalleCajero detalle) {
+        LocalDate fechaOriginal = detalle.getFechaApertura().toLocalDate();
+        LocalDateTime cierreFinDelDia = fechaOriginal.atTime(23, 59, 59);
+
+        detalle.setFechaCierre(cierreFinDelDia);
+        detalle.setEstado(DetalleCajero.EstadoDetalleCajero.CERRADA);
+        detalle.setMontoFinal(
+                detalle.getBaseCaja()
+                        .add(detalle.getTotalEfectivo())
+                        .add(detalle.getTotalMediosElectronicos())
+        );
+        detalleCajeroRepository.save(detalle);
+
+        System.out.println("🔒 Sesión cerrada por cambio de día — detalleCajeroId: "
+                + detalle.getDetalleCajeroId()
+                + " cajeroId: " + detalle.getCajero().getCajeroId()
+                + " fechaCierre: " + cierreFinDelDia);
+    }
+
+    /**
+     * Método para la tarea programada de medianoche.
+     * Cierra TODAS las sesiones abiertas y crea una nueva sesión para cada cajero.
+     *
+     * @return cantidad de sesiones cerradas y reabiertas
+     */
+    @Transactional
+    public int cerrarYReabrirSesionesMedianoche() {
+        List<DetalleCajero> sesionesAbiertas = detalleCajeroRepository
+                .findByEstado(DetalleCajero.EstadoDetalleCajero.ABIERTA);
+
+        int count = 0;
+        for (DetalleCajero detalle : sesionesAbiertas) {
+            // Cerrar la sesión del día anterior
+            cerrarSesionPorCambioDeDia(detalle);
+
+            // Abrir nueva sesión para el nuevo día (base caja = 0, sin comprobante)
+            DetalleCajero nueva = new DetalleCajero();
+            nueva.setCajero(detalle.getCajero());
+            nueva.setMontoInicial(BigDecimal.ZERO);
+            nueva.setBaseCaja(BigDecimal.ZERO);
+            nueva.setMontoFinal(BigDecimal.ZERO);
+            nueva.setFechaApertura(LocalDateTime.now(ZONA_BOGOTA));
+            nueva.setEstado(DetalleCajero.EstadoDetalleCajero.ABIERTA);
+            nueva.setConsecutivo(0);
+            nueva.setTotalRecaudo(BigDecimal.ZERO);
+            nueva.setTotalCosto(BigDecimal.ZERO);
+            nueva.setTotalEfectivo(BigDecimal.ZERO);
+            nueva.setTotalMediosElectronicos(BigDecimal.ZERO);
+            nueva.setComprobante(detalle.getComprobante());
+            detalleCajeroRepository.save(nueva);
+
+            System.out.println("🔄 Sesión reabierta a medianoche — cajeroId: "
+                    + detalle.getCajero().getCajeroId()
+                    + " nuevaDetalleCajeroId: " + nueva.getDetalleCajeroId());
+            count++;
+        }
+        return count;
     }
 
     // ============================================================

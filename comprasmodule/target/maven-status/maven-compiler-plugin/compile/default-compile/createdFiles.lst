@@ -53,8 +53,8 @@ com\pazzioliweb\comprasmodule\service\ProductoService.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$VariantePayloadDTO.class
 com\pazzioliweb\comprasmodule\dtos\HistorialCompraDTO.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO.class
+com\pazzioliweb\comprasmodule\exception\ComprasExceptionHandler.class
 com\pazzioliweb\comprasmodule\dtos\ProductoRequestDTO$PrecioDTO.class
-com\pazzioliweb\comprasmodule\exception\GlobalExceptionHandler.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$AtributoPayloadDTO.class
 com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO$ExistenciaDTO.class
 com\pazzioliweb\comprasmodule\exception\OrdenCompraException.class

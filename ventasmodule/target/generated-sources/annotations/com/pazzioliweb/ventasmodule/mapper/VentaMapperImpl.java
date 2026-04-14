@@ -18,8 +18,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-04-13T14:49:59-0500",
-    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
+    date = "2026-04-13T22:47:52-0500",
+    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.2 (Oracle Corporation)"
 )
 @Component
 public class VentaMapperImpl implements VentaMapper {
@@ -38,7 +38,6 @@ public class VentaMapperImpl implements VentaMapper {
         if ( terceroId != null ) {
             ventaDTO.setClienteId( terceroId.longValue() );
         }
-        ventaDTO.setClienteNombre( ventaClienteNombre1( venta ) );
         ventaDTO.setBodegaId( ventaBodegaCodigo( venta ) );
         ventaDTO.setBodegaNombre( ventaBodegaNombre( venta ) );
         Integer cajeroId = ventaCajeroCajeroId( venta );
@@ -59,6 +58,8 @@ public class VentaMapperImpl implements VentaMapper {
         ventaDTO.setFechaCreacion( venta.getFechaCreacion() );
         ventaDTO.setItems( toDetalleDtoList( venta.getItems() ) );
         ventaDTO.setMetodosPago( toVentaMetodoPagoDtoList( venta.getMetodosPago() ) );
+
+        ventaDTO.setClienteNombre( buildNombreCompleto(venta.getCliente()) );
 
         return ventaDTO;
     }
@@ -163,6 +164,7 @@ public class VentaMapperImpl implements VentaMapper {
         ventaMetodoPagoDTO.setMetodoPagoNombre( entityMetodoPagoDescripcion( entity ) );
         ventaMetodoPagoDTO.setMonto( entity.getMonto() );
         ventaMetodoPagoDTO.setReferencia( entity.getReferencia() );
+        ventaMetodoPagoDTO.setPlazoEnDias( entity.getPlazoEnDias() );
 
         return ventaMetodoPagoDTO;
     }
@@ -194,21 +196,6 @@ public class VentaMapperImpl implements VentaMapper {
             return null;
         }
         return terceroId;
-    }
-
-    private String ventaClienteNombre1(Venta venta) {
-        if ( venta == null ) {
-            return null;
-        }
-        Terceros cliente = venta.getCliente();
-        if ( cliente == null ) {
-            return null;
-        }
-        String nombre1 = cliente.getNombre1();
-        if ( nombre1 == null ) {
-            return null;
-        }
-        return nombre1;
     }
 
     private Integer ventaBodegaCodigo(Venta venta) {

@@ -8,11 +8,13 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.metamodel.EntityType;
 @SpringBootApplication
+@EnableScheduling
 @EnableFeignClients(basePackages = "com.pazzioliweb.comprasmodule.client")
 @EntityScan(basePackages = {
 	    "com.pazzioliweb",

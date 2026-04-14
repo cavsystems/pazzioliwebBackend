@@ -28,6 +28,9 @@ public class VentaMetodoPago {
 
     @Column
     private String referencia; // Número de referencia del pago (transferencia, cheque, etc.)
-    // Getters y setters generados por Lombok
+
+    /** Plazo en días para pago a crédito (solo cuando tipoNegociacion = Credito) */
+    @Column(name = "plazo_en_dias")
+    private Integer plazoEnDias;
 }
 

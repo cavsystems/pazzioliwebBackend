@@ -21,7 +21,8 @@ public interface CotizacionService {
     VentaDTO convertirAVenta(Long cotizacionId, List<VentaMetodoPagoDTO> metodosPago);
     Long getUltimacotizacion();
     List<CotizacionDTO> getCotizacionesByFiltros(Long terceroId, Integer vendedorId, Integer cajeroId,
-                                             LocalDate fechaInicio, LocalDate fechaFin) ;
+                                             LocalDate fechaInicio, LocalDate fechaFin);
+    void cambiarEstado(Long cotizacionId, String nuevoEstado);
 }
 
 

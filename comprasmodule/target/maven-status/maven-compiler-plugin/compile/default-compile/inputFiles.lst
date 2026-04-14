@@ -4,7 +4,7 @@ D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\c
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\OrdenCompraRepository.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\IngresoOrdenCompraServiceImpl.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\IngresoOrdenCompraService.java
-D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\GlobalExceptionHandler.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\ComprasExceptionHandler.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\CuentaPorPagarService.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\OrdenCompraService.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\DetalleOrdenCompra.java

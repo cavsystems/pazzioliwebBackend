@@ -32,6 +32,7 @@ import com.pazzioliweb.ventasmodule.mapper.VentaMapper;
 import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import com.pazzioliweb.ventasmodule.repository.VentaSpecification;
 import com.pazzioliweb.ventasmodule.service.VentaService;
+import com.pazzioliweb.ventasmodule.service.CuentaPorCobrarService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
@@ -62,6 +63,7 @@ public class VentaServiceImpl implements VentaService {
     private final CajeroRepository cajeroRepository;
     private final VendedoresRepository vendedoresRepository;
     private final DetalleCajeroService detalleCajeroService;
+    private final CuentaPorCobrarService cuentaPorCobrarService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
 
     @Autowired
@@ -76,6 +78,7 @@ public class VentaServiceImpl implements VentaService {
                             CajeroRepository cajeroRepository,
                             VendedoresRepository vendedoresRepository,
                             DetalleCajeroService detalleCajeroService,
+                            CuentaPorCobrarService cuentaPorCobrarService,
                             RedisTemplate<String, DatosSesiones> redisTemplate) {
         this.ventaRepository = ventaRepository;
         this.ventaMapper = ventaMapper;
@@ -89,6 +92,7 @@ public class VentaServiceImpl implements VentaService {
         this.cajeroRepository = cajeroRepository;
         this.vendedoresRepository = vendedoresRepository;
         this.detalleCajeroService = detalleCajeroService;
+        this.cuentaPorCobrarService = cuentaPorCobrarService;
         this.redisTemplate = redisTemplate;
     }
 
@@ -161,6 +165,7 @@ public class VentaServiceImpl implements VentaService {
                 vmp.setMetodoPago(mp);
                 vmp.setMonto(mpDTO.getMonto());
                 vmp.setReferencia(mpDTO.getReferencia());
+                vmp.setPlazoEnDias(mpDTO.getPlazoEnDias());
                 metodosPagoEntities.add(vmp);
             }
             venta.setMetodosPago(metodosPagoEntities);
@@ -183,41 +188,10 @@ public class VentaServiceImpl implements VentaService {
         Venta ven=ventaRepository.save(venta);
         final VentaDTO ventacreada= ventaMapper.toDto(ven);
 
-        // ✅ Registrar movimiento individual en cajero — desglosar efectivo vs electrónico
-        DatosSesiones sesion = obtenerSesionActiva();
-        if (sesion != null && sesion.getDetalleCajeroId() != null) {
-            try {
-                // Calcular desglose efectivo / electrónico desde los métodos de pago
-                BigDecimal montoEfectivo = BigDecimal.ZERO;
-                BigDecimal montoElectronico = BigDecimal.ZERO;
-                if (venta.getMetodosPago() != null) {
-                    for (VentaMetodoPago vmp : venta.getMetodosPago()) {
-                        // Si la sigla es "EF" o "EFEC" → efectivo; lo demás → electrónico
-                        String sigla = vmp.getMetodoPago().getSigla().toUpperCase();
-                        if (sigla.startsWith("EF")) {
-                            montoEfectivo = montoEfectivo.add(vmp.getMonto());
-                        } else {
-                            montoElectronico = montoElectronico.add(vmp.getMonto());
-                        }
-                    }
-                } else {
-                    // Sin desglose disponible: todo va como efectivo
-                    montoEfectivo = venta.getTotalVenta();
-                }
-                detalleCajeroService.registrarMovimiento(
-                        sesion.getDetalleCajeroId(),
-                        MovimientoCajero.TipoMovimiento.VENTA,
-                        venta.getNumeroVenta(),
-                        venta.getId(),
-                        venta.getTotalVenta(),
-                        venta.getGravada(),
-                        montoEfectivo,
-                        montoElectronico,
-                        "Venta " + venta.getNumeroVenta()
-                );
-            } catch (Exception e) {
-                System.out.println("Error al registrar movimiento en cajero: " + e.getMessage());
-            }
+        // ✅ Si la venta trae métodos de pago → completarla automáticamente
+        //    (esto registra el movimiento en cajero y genera CxC si hay crédito)
+        if (ventaDTO.getMetodosPago() != null && !ventaDTO.getMetodosPago().isEmpty()) {
+            completarVenta(ven.getId(), ventaDTO.getMetodosPago());
         }
 
         // Reducir stock después de guardar la venta
@@ -326,11 +300,71 @@ public class VentaServiceImpl implements VentaService {
             vmp.setMetodoPago(mp);
             vmp.setMonto(mpDTO.getMonto());
             vmp.setReferencia(mpDTO.getReferencia());
+            vmp.setPlazoEnDias(mpDTO.getPlazoEnDias());
             venta.getMetodosPago().add(vmp);
         }
 
         venta.setEstado("COMPLETADA");
-        ventaRepository.save(venta);
+        Venta ventaGuardada = ventaRepository.save(venta);
+
+        // ✅ Registrar movimiento en cajero y generar CxC si hay crédito
+        DatosSesiones sesionComp = obtenerSesionActiva();
+        if (sesionComp != null && sesionComp.getDetalleCajeroId() != null) {
+            try {
+                BigDecimal montoEfectivo = BigDecimal.ZERO;
+                BigDecimal montoElectronico = BigDecimal.ZERO;
+                BigDecimal montoCredito = BigDecimal.ZERO;
+                int plazoDiasCredito = 30;
+
+                for (VentaMetodoPago vmp : ventaGuardada.getMetodosPago()) {
+                    MetodosPago mp = vmp.getMetodoPago();
+                    if (mp.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) {
+                        montoCredito = montoCredito.add(vmp.getMonto());
+                        if (vmp.getPlazoEnDias() != null && vmp.getPlazoEnDias() > 0) {
+                            plazoDiasCredito = vmp.getPlazoEnDias();
+                        }
+                    } else {
+                        String sigla = mp.getSigla().toUpperCase();
+                        if (sigla.startsWith("EF")) {
+                            montoEfectivo = montoEfectivo.add(vmp.getMonto());
+                        } else {
+                            montoElectronico = montoElectronico.add(vmp.getMonto());
+                        }
+                    }
+                }
+
+                detalleCajeroService.registrarMovimiento(
+                        sesionComp.getDetalleCajeroId(),
+                        MovimientoCajero.TipoMovimiento.VENTA,
+                        ventaGuardada.getNumeroVenta(),
+                        ventaGuardada.getId(),
+                        ventaGuardada.getTotalVenta(),
+                        ventaGuardada.getGravada(),
+                        montoEfectivo,
+                        montoElectronico,
+                        "Venta " + ventaGuardada.getNumeroVenta()
+                );
+
+                if (montoCredito.compareTo(BigDecimal.ZERO) > 0) {
+                    detalleCajeroService.registrarMovimiento(
+                            sesionComp.getDetalleCajeroId(),
+                            MovimientoCajero.TipoMovimiento.CUENTA_POR_COBRAR,
+                            ventaGuardada.getNumeroVenta(),
+                            ventaGuardada.getId(),
+                            montoCredito,
+                            BigDecimal.ZERO,
+                            BigDecimal.ZERO,
+                            BigDecimal.ZERO,
+                            "CxC Venta " + ventaGuardada.getNumeroVenta()
+                    );
+
+                    Terceros cliente = ventaGuardada.getCliente();
+                    cuentaPorCobrarService.crearDesdeVenta(ventaGuardada, cliente, montoCredito, plazoDiasCredito);
+                }
+            } catch (Exception e) {
+                System.out.println("Error al registrar movimiento en cajero (completar): " + e.getMessage());
+            }
+        }
     }
 
     @Override

@@ -6,6 +6,7 @@ import com.pazzioliweb.ventasmodule.dtos.VentaMetodoPagoDTO;
 import com.pazzioliweb.ventasmodule.entity.DetalleVenta;
 import com.pazzioliweb.ventasmodule.entity.Venta;
 import com.pazzioliweb.ventasmodule.entity.VentaMetodoPago;
+import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import org.mapstruct.*;
 
 import java.util.List;
@@ -15,7 +16,7 @@ public interface VentaMapper {
     @Mapping(target = "id", source = "id")
     @Mapping(target = "numeroVenta", source = "numeroVenta")
     @Mapping(target = "clienteId", source = "cliente.terceroId")
-    @Mapping(target = "clienteNombre", source = "cliente.nombre1")
+    @Mapping(target = "clienteNombre", expression = "java(buildNombreCompleto(venta.getCliente()))")
     @Mapping(target = "bodegaId", source = "bodega.codigo")
     @Mapping(target = "bodegaNombre", source = "bodega.nombre")
     @Mapping(target = "cajeroId", source = "cajero.cajeroId")
@@ -93,6 +94,7 @@ public interface VentaMapper {
     @Mapping(target = "metodoPagoNombre", source = "metodoPago.descripcion")
     @Mapping(target = "monto", source = "monto")
     @Mapping(target = "referencia", source = "referencia")
+    @Mapping(target = "plazoEnDias", source = "plazoEnDias")
     VentaMetodoPagoDTO ventaMetodoPagoToDto(VentaMetodoPago entity);
 
     List<VentaMetodoPagoDTO> toVentaMetodoPagoDtoList(List<VentaMetodoPago> entities);
@@ -102,5 +104,17 @@ public interface VentaMapper {
         if (venta.getItems() != null) {
             venta.getItems().forEach(detalle -> detalle.setVenta(venta));
         }
+    }
+
+    default String buildNombreCompleto(Terceros cliente) {
+        if (cliente == null) return null;
+        StringBuilder sb = new StringBuilder();
+        if (cliente.getNombre1() != null && !cliente.getNombre1().isEmpty()) {
+            sb.append(cliente.getNombre1());
+        }
+        if (cliente.getNombre2() != null && !cliente.getNombre2().isEmpty()) {
+            sb.append(" ").append(cliente.getNombre2());
+        }
+        return sb.length() > 0 ? sb.toString().trim() : null;
     }
 }

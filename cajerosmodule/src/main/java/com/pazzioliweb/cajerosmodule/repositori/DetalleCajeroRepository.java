@@ -1,6 +1,8 @@
 package com.pazzioliweb.cajerosmodule.repositori;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -67,5 +69,21 @@ public interface DetalleCajeroRepository extends JpaRepository<DetalleCajero, Lo
     Page<DetalleCajeroDTO> listarDetallePorCajeroDTO(@Param("cajeroId") Integer cajeroId, Pageable pageable);
 
     List<DetalleCajero> findByCajero_CajeroIdAndEstado(Integer cajeroId, DetalleCajero.EstadoDetalleCajero estado);
+
+    List<DetalleCajero> findByEstado(DetalleCajero.EstadoDetalleCajero estado);
+
+    /**
+     * Busca la sesión de un cajero que tenga movimientos registrados en una fecha dada.
+     * Útil para consultar informes de días anteriores sin conocer el detalleCajeroId.
+     */
+    @Query("""
+           SELECT DISTINCT d FROM DetalleCajero d
+           JOIN MovimientoCajero m ON m.detalleCajero.detalleCajeroId = d.detalleCajeroId
+           WHERE d.cajero.cajeroId = :cajeroId
+             AND CAST(m.fechaMovimiento AS localdate) = :fecha
+           """)
+    Optional<DetalleCajero> findByCajeroIdAndFechaMovimiento(
+            @Param("cajeroId") Integer cajeroId,
+            @Param("fecha") LocalDate fecha);
 }
 
