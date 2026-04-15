@@ -1,52 +1,52 @@
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\CotizacionService.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetallePedido.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\PedidoSpecification.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Pedido.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\VentasGlobalExceptionHandler.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetallePedidoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\CuentaPorCobrarController.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\CotizacionServiceImpl.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\DevolucionService.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\CuentaPorCobrarServiceImpl.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetalleCotizacion.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\PedidoServiceImpl.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\DevolucionController.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\VentaService.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Venta.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\CotizacionController.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\CuentaPorCobrarRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\VentaException.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\PedidoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\DevolucionServiceImpl.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\VentaServiceImpl.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\VentaDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\CotizacionDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\CuentaPorCobrarDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\PedidoRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\PedidoService.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\VentaController.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetalleVenta.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Devolucion.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\PedidoException.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\mapper\CotizacionMapper.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\VentaMetodoPago.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\CuentaPorCobrar.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\VentaSpecification.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\mapper\VentaMapper.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\CotizacionException.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\mapper\PedidoMapper.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DevolucionItemRequestDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetalleDevolucion.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\DevolucionRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\VentaRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\CotizacionSpecification.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DevolucionDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DevolucionRequestDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\VentaMetodoPagoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\CotizacionRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Cotizacion.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetalleDevolucionDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\PedidoController.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\CuentaPorCobrarService.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetalleCotizacionDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetalleVentaDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\CotizacionController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\CotizacionService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\CotizacionDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\VentaMetodoPago.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\VentasGlobalExceptionHandler.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\DevolucionServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\PedidoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DevolucionDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\CotizacionServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\DevolucionController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\VentaDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\CuentaPorCobrarRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\CotizacionException.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DevolucionItemRequestDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\CuentaPorCobrarDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\mapper\CotizacionMapper.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\PedidoService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetalleCotizacion.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\CuentaPorCobrar.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\VentaController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\VentaService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Cotizacion.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\VentaException.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\mapper\PedidoMapper.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\CotizacionRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetallePedidoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\PedidoException.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Venta.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\CuentaPorCobrarController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\PedidoRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetalleCotizacionDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetalleVenta.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\CuentaPorCobrarServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\VentaMetodoPagoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetallePedido.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\PedidoSpecification.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetalleDevolucionDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Pedido.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\VentaSpecification.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\DevolucionRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\VentaRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\CotizacionSpecification.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetalleDevolucion.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\CuentaPorCobrarService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\PedidoServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\DevolucionService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\mapper\VentaMapper.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\VentaServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Devolucion.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\PedidoController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DevolucionRequestDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetalleVentaDTO.java

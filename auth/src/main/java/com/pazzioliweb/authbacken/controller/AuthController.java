@@ -64,6 +64,8 @@ public class AuthController {
         this.sessionRepository = sessionRepositorio;
     }
 
+
+
     // ──────────────────────────────────────────────────────────────────────────
     // /login/destroit  →  cierra la sesión activa y crea una nueva (force login)
     // ──────────────────────────────────────────────────────────────────────────

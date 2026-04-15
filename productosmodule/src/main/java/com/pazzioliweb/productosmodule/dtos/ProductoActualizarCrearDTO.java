@@ -64,4 +64,12 @@ public class ProductoActualizarCrearDTO {
         private Integer idTipoPrecio;
         private BigDecimal valor;
     }
+
+    public String getCodigo() {
+        return codigo;
+    }
+
+    public String getDescripcion() {
+        return descripcion;
+    }
 }

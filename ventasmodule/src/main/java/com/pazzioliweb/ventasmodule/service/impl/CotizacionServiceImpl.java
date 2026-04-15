@@ -23,6 +23,7 @@ import com.pazzioliweb.ventasmodule.exception.CotizacionException;
 import com.pazzioliweb.ventasmodule.mapper.CotizacionMapper;
 import com.pazzioliweb.ventasmodule.repository.CotizacionRepository;
 import com.pazzioliweb.ventasmodule.repository.CotizacionSpecification;
+import com.pazzioliweb.ventasmodule.repository.PedidoRepository;
 import com.pazzioliweb.ventasmodule.repository.PedidoSpecification;
 import com.pazzioliweb.ventasmodule.service.CotizacionService;
 import com.pazzioliweb.ventasmodule.service.PedidoService;
@@ -52,6 +53,8 @@ public class CotizacionServiceImpl implements CotizacionService {
     private final CajeroRepository cajeroRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
+    @Autowired
+    private PedidoRepository pedidoRepository;
     @Autowired
     BodegasRepository bodegaRepository;
     @Autowired
@@ -268,6 +271,7 @@ public class CotizacionServiceImpl implements CotizacionService {
         }
 
         // Crear PedidoDTO a partir de la cotización
+       Long ultimopedido= pedidoRepository.getUltimopedidoId();
         PedidoDTO pedidoDTO = new PedidoDTO();
         pedidoDTO.setClienteId(cotizacion.getCliente().getTerceroId().longValue());
         pedidoDTO.setBodegaId(cotizacion.getBodega().getCodigo());
@@ -275,6 +279,7 @@ public class CotizacionServiceImpl implements CotizacionService {
         pedidoDTO.setFechaEntregaEsperada(LocalDate.now().plusDays(7));
         pedidoDTO.setObservaciones("Generado desde cotización: " + cotizacion.getNumeroCotizacion());
         pedidoDTO.setSubtotal(cotizacion.getGravada());
+        pedidoDTO.setNumeroPedido(ultimopedido.toString());
         pedidoDTO.setIva(cotizacion.getIva());
         pedidoDTO.setTotal(cotizacion.getTotalCotizacion());
         pedidoDTO.setUsuarioCreacion(cotizacion.getUsuarioCreacion());
