@@ -73,16 +73,18 @@ public interface DetalleCajeroRepository extends JpaRepository<DetalleCajero, Lo
     List<DetalleCajero> findByEstado(DetalleCajero.EstadoDetalleCajero estado);
 
     /**
-     * Busca la sesión de un cajero que tenga movimientos registrados en una fecha dada.
-     * Útil para consultar informes de días anteriores sin conocer el detalleCajeroId.
+     * Busca las sesiones de un cajero que tengan movimientos registrados en una fecha dada.
+     * Puede devolver más de una sesión si hubo cierre/reapertura de medianoche.
+     * Ordenadas por fecha de apertura descendente (la más reciente primero).
      */
     @Query("""
            SELECT DISTINCT d FROM DetalleCajero d
            JOIN MovimientoCajero m ON m.detalleCajero.detalleCajeroId = d.detalleCajeroId
            WHERE d.cajero.cajeroId = :cajeroId
              AND CAST(m.fechaMovimiento AS localdate) = :fecha
+           ORDER BY d.fechaApertura DESC
            """)
-    Optional<DetalleCajero> findByCajeroIdAndFechaMovimiento(
+    List<DetalleCajero> findByCajeroIdAndFechaMovimiento(
             @Param("cajeroId") Integer cajeroId,
             @Param("fecha") LocalDate fecha);
 }

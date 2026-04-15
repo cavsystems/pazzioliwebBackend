@@ -39,6 +39,26 @@ public class InformeDiarioVentasDTO {
     private String   estadoSesion;       // ABIERTA / CERRADA
 
     // ══════════════════════════════════════════════════════
+    //  RESUMEN DE MOVIMIENTOS POR TIPO
+    // ══════════════════════════════════════════════════════
+    public static class MovimientoTipo {
+        private String tipoMovimiento;
+        private Integer cantidad = 0;
+
+        public MovimientoTipo() {}
+        public MovimientoTipo(String tipoMovimiento, Integer cantidad) {
+            this.tipoMovimiento = tipoMovimiento;
+            this.cantidad = cantidad;
+        }
+        public String  getTipoMovimiento()         { return tipoMovimiento; }
+        public void    setTipoMovimiento(String t)  { this.tipoMovimiento = t; }
+        public Integer getCantidad()                { return cantidad; }
+        public void    setCantidad(Integer c)       { this.cantidad = c; }
+    }
+
+    private List<MovimientoTipo> resumenMovimientos;
+
+    // ══════════════════════════════════════════════════════
     //  SECCIÓN 2 — MOVIMIENTO DE CUENTAS
     // ══════════════════════════════════════════════════════
     public static class MovimientoCuentas {
@@ -198,37 +218,43 @@ public class InformeDiarioVentasDTO {
     private BigDecimal totalVales = BigDecimal.ZERO;
 
     // ══════════════════════════════════════════════════════
+    //  TOTAL CxC (Cuentas por Cobrar)
+    //  Suma de ventas con método de pago tipo "Credito"
+    // ══════════════════════════════════════════════════════
+    private BigDecimal totalCxC = BigDecimal.ZERO;
+
+    // ══════════════════════════════════════════════════════
     //  SECCIÓN 8 — DEVOLUCIONES
     // ══════════════════════════════════════════════════════
     public static class SeccionDevoluciones {
         /** Monto de devoluciones sobre ventas gravadas (base sin IVA) */
-        private BigDecimal devGravada       = BigDecimal.ZERO;
+        private BigDecimal devGravada          = BigDecimal.ZERO;
         /** IVA sobre devoluciones gravadas */
-        private BigDecimal ivaDevGravada    = BigDecimal.ZERO;
+        private BigDecimal ivaDevGravada       = BigDecimal.ZERO;
         /** Monto de devoluciones sobre ventas exentas */
-        private BigDecimal devExentas       = BigDecimal.ZERO;
+        private BigDecimal devExentas          = BigDecimal.ZERO;
         /** Total devoluciones pagadas en contado (efectivo) */
-        private BigDecimal totalContado     = BigDecimal.ZERO;
-        /** Total devoluciones de ventas a crédito (CxC) */
-        private BigDecimal totalCxC         = BigDecimal.ZERO;
+        private BigDecimal totalContado        = BigDecimal.ZERO;
+        /** Total devoluciones por medios electrónicos (tarjeta, transferencia, etc.) */
+        private BigDecimal totalMedElectronico = BigDecimal.ZERO;
         /** Descuentos involucrados en devoluciones */
-        private BigDecimal totalDsc         = BigDecimal.ZERO;
+        private BigDecimal totalDsc            = BigDecimal.ZERO;
         /** TOTAL DEVOLUCIONES = devGravada + ivaDevGravada + devExentas */
-        private BigDecimal totDevoluciones  = BigDecimal.ZERO;
+        private BigDecimal totDevoluciones     = BigDecimal.ZERO;
 
-        public BigDecimal getDevGravada()        { return devGravada; }
+        public BigDecimal getDevGravada()              { return devGravada; }
         public void setDevGravada(BigDecimal v)        { this.devGravada = v; }
-        public BigDecimal getIvaDevGravada()     { return ivaDevGravada; }
+        public BigDecimal getIvaDevGravada()           { return ivaDevGravada; }
         public void setIvaDevGravada(BigDecimal v)     { this.ivaDevGravada = v; }
-        public BigDecimal getDevExentas()        { return devExentas; }
+        public BigDecimal getDevExentas()              { return devExentas; }
         public void setDevExentas(BigDecimal v)        { this.devExentas = v; }
-        public BigDecimal getTotalContado()      { return totalContado; }
+        public BigDecimal getTotalContado()            { return totalContado; }
         public void setTotalContado(BigDecimal v)      { this.totalContado = v; }
-        public BigDecimal getTotalCxC()          { return totalCxC; }
-        public void setTotalCxC(BigDecimal v)          { this.totalCxC = v; }
-        public BigDecimal getTotalDsc()          { return totalDsc; }
+        public BigDecimal getTotalMedElectronico()     { return totalMedElectronico; }
+        public void setTotalMedElectronico(BigDecimal v) { this.totalMedElectronico = v; }
+        public BigDecimal getTotalDsc()                { return totalDsc; }
         public void setTotalDsc(BigDecimal v)          { this.totalDsc = v; }
-        public BigDecimal getTotDevoluciones()   { return totDevoluciones; }
+        public BigDecimal getTotDevoluciones()         { return totDevoluciones; }
         public void setTotDevoluciones(BigDecimal v)   { this.totDevoluciones = v; }
     }
 
@@ -306,8 +332,12 @@ public class InformeDiarioVentasDTO {
     public void setFechaCierre(LocalDateTime v)         { this.fechaCierre = v; }
     public String getEstadoSesion()                     { return estadoSesion; }
     public void setEstadoSesion(String v)               { this.estadoSesion = v; }
+    public List<MovimientoTipo> getResumenMovimientos()  { return resumenMovimientos; }
+    public void setResumenMovimientos(List<MovimientoTipo> v) { this.resumenMovimientos = v; }
     public BigDecimal getTotalVales()                   { return totalVales; }
     public void setTotalVales(BigDecimal v)             { this.totalVales = v; }
+    public BigDecimal getTotalCxC()                     { return totalCxC; }
+    public void setTotalCxC(BigDecimal v)               { this.totalCxC = v; }
     public MovimientoCuentas getMovimientoCuentas()     { return movimientoCuentas; }
     public void setMovimientoCuentas(MovimientoCuentas v){ this.movimientoCuentas = v; }
     public List<VentaLinea> getVentasPorLinea()         { return ventasPorLinea; }
