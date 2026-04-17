@@ -39,7 +39,7 @@ public class PreciosController {
     @GetMapping("/listar")
     public ResponseEntity<PaginationResponse<PrecioResponseDTO>> listar(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "30") int size,
                       @RequestParam(defaultValue = "precioId") String sortField,
                       @RequestParam(defaultValue = "") String descripprecio,
 

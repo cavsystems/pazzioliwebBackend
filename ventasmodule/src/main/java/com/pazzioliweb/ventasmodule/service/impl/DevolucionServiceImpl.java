@@ -8,19 +8,17 @@ import com.pazzioliweb.productosmodule.entity.Existencias;
 import com.pazzioliweb.productosmodule.entity.ProductoVariante;
 import com.pazzioliweb.productosmodule.repositori.ExistenciasRepository;
 import com.pazzioliweb.productosmodule.repositori.ProductoVarianteRepository;
-import com.pazzioliweb.ventasmodule.dtos.DetalleDevolucionDTO;
-import com.pazzioliweb.ventasmodule.dtos.DevolucionDTO;
-import com.pazzioliweb.ventasmodule.dtos.DevolucionItemRequestDTO;
-import com.pazzioliweb.ventasmodule.dtos.DevolucionRequestDTO;
-import com.pazzioliweb.ventasmodule.entity.DetalleDevolucion;
-import com.pazzioliweb.ventasmodule.entity.DetalleVenta;
-import com.pazzioliweb.ventasmodule.entity.Devolucion;
-import com.pazzioliweb.ventasmodule.entity.Venta;
-import com.pazzioliweb.ventasmodule.entity.VentaMetodoPago;
+import com.pazzioliweb.ventasmodule.dtos.*;
+import com.pazzioliweb.ventasmodule.entity.*;
+import com.pazzioliweb.ventasmodule.exception.CotizacionException;
+import com.pazzioliweb.ventasmodule.exception.DevolucionException;
+import com.pazzioliweb.ventasmodule.exception.PedidoException;
 import com.pazzioliweb.ventasmodule.exception.VentaException;
 import com.pazzioliweb.ventasmodule.repository.DevolucionRepository;
+import com.pazzioliweb.ventasmodule.repository.PedidoRepository;
 import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import com.pazzioliweb.ventasmodule.service.DevolucionService;
+import com.pazzioliweb.ventasmodule.service.PedidoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
@@ -44,7 +42,10 @@ public class DevolucionServiceImpl implements DevolucionService {
     private final DetalleCajeroService detalleCajeroService;
     private final CajeroRepository cajeroRepository;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
-
+  @Autowired
+  private PedidoService pedidoService;
+@Autowired
+ private  PedidoRepository pedidoRepository;
     @Autowired
     public DevolucionServiceImpl(
             VentaRepository ventaRepository,
@@ -209,6 +210,67 @@ public class DevolucionServiceImpl implements DevolucionService {
                 .collect(Collectors.toList());
     }
 
+
+
+    @Override
+    @Transactional
+    public PedidoDTO convertirAPedido(Long Ventaid,Long DevolucionId) {
+        Venta venta= ventaRepository.findById(Ventaid)
+                .orElseThrow(() -> new DevolucionException("Cotización no encontrada"));
+
+
+
+        // Crear PedidoDTO a partir de la cotización
+        Long ultimopedido= pedidoRepository.getUltimopedidoId();
+        PedidoDTO pedidoDTO = new PedidoDTO();
+        pedidoDTO.setClienteId(venta.getCliente().getTerceroId().longValue());
+        pedidoDTO.setBodegaId(venta.getBodega().getCodigo());
+        pedidoDTO.setFechaEmision(LocalDate.now());
+        pedidoDTO.setFechaEntregaEsperada(LocalDate.now().plusDays(7));
+        pedidoDTO.setObservaciones("Generado desde devolución: " + DevolucionId);
+        pedidoDTO.setSubtotal(venta.getGravada());
+        pedidoDTO.setNumeroPedido(ultimopedido.toString());
+        pedidoDTO.setIva(venta.getIva());
+        pedidoDTO.setTotal(venta.getTotalVenta());
+        pedidoDTO.setUsuarioCreacion(venta.getUsuarioCreacion());
+
+
+        // Propagar cajero de la cotización al pedido
+        if (venta.getCajero() != null) {
+            pedidoDTO.setCajeroId(Long.valueOf(venta.getCajero().getCajeroId()));
+        }
+
+        // Propagar vendedor de la cotización al pedido
+        if (venta.getVendedor() != null) {
+            pedidoDTO.setVendedorId(venta.getVendedor().getVendedor_id());
+        }
+
+        // Mapear items
+        List<DetallePedidoDTO> items = venta.getItems().stream().map(dc -> {
+            DetallePedidoDTO dp = new DetallePedidoDTO();
+            dp.setCodigoProducto(dc.getCodigoProducto());
+            dp.setCodigoBarras(dc.getCodigoBarras());
+            dp.setDescripcionProducto(dc.getDescripcionProducto());
+            dp.setObservacionProducto(dc.getObservacionProducto() != null ? dc.getObservacionProducto() : "");
+            dp.setReferenciaVariantes(dc.getReferenciaVariantes());
+            dp.setCantidad(dc.getCantidad());
+            dp.setPrecioUnitario(dc.getPrecioUnitario());
+            dp.setDescuento(dc.getDescuento());
+            dp.setIvaPorcentaje(dc.getIva());
+            dp.setTotal(dc.getTotal());
+            return dp;
+        }).collect(Collectors.toList());
+        pedidoDTO.setItems(items);
+
+        // ── Bug 2 fix: retornar el pedido creado (con numeroPedido e id generados) ──
+        PedidoDTO pedidoCreado = pedidoService.crearPedido(pedidoDTO);
+
+        // ── Bug 1 fix: marcar la cotización como convertida a pedido ──────────
+
+
+        return pedidoCreado;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<DevolucionDTO> getDevolucionesByFiltros(Integer cajeroId, LocalDate fechaInicio, LocalDate fechaFin) {
@@ -225,6 +287,7 @@ public class DevolucionServiceImpl implements DevolucionService {
             resultado = devolucionRepository.findByFechas(fechaInicio, fechaFin);
         } else {
             resultado = devolucionRepository.findAll();
+
         }
 
         return resultado.stream().map(this::toDTO).collect(Collectors.toList());
@@ -360,6 +423,7 @@ public class DevolucionServiceImpl implements DevolucionService {
         dto.setId(dev.getId());
         dto.setVentaId(dev.getVenta().getId());
         dto.setNumeroVenta(dev.getVenta().getNumeroVenta());
+        dto.setNombreCliente(dev.getVenta().getCliente().getRazonSocial());
         dto.setNumeroDevolucion(dev.getNumeroDevolucion());
         dto.setMotivo(dev.getMotivo());
         dto.setObservaciones(dev.getObservaciones());

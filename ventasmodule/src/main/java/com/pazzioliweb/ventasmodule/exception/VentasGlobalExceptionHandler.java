@@ -39,5 +39,14 @@ public class VentasGlobalExceptionHandler {
         errorResponse.put("message", ex.getMessage());
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
+
+
+
+    @ExceptionHandler(DevolucionException.class)
+    public ResponseEntity<Map<String, String>> handleDevolucionException(PedidoException ex) {
+        Map<String, String> errorResponse = new HashMap<>();
+        errorResponse.put("message", ex.getMessage());
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
 }
 

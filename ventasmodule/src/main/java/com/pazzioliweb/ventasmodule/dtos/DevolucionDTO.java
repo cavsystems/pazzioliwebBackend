@@ -10,6 +10,7 @@ public class DevolucionDTO {
     private Long id;
     private Long ventaId;
     private String numeroVenta;
+    private String nombreCliente;
     private String numeroDevolucion;
     private String motivo;
     private String observaciones;

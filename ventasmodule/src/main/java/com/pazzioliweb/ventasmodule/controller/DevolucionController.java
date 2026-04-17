@@ -85,4 +85,11 @@ public class DevolucionController {
     public ResponseEntity<DevolucionDTO> getDevolucionById(@PathVariable Long id) {
         return ResponseEntity.ok(devolucionService.getDevolucionById(id));
     }
+
+
+    @PostMapping("/{ventaId}/{devolucionId}/convertir-pedido")
+    public ResponseEntity<Void> cambiarEstadoDevolucion(@PathVariable Long ventaId, @PathVariable Long devolucionId) {
+        devolucionService.convertirAPedido(ventaId, devolucionId);
+        return ResponseEntity.ok().build();
+    }
 }

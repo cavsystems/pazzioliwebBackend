@@ -2,6 +2,7 @@ package com.pazzioliweb.ventasmodule.service;
 
 import com.pazzioliweb.ventasmodule.dtos.DevolucionDTO;
 import com.pazzioliweb.ventasmodule.dtos.DevolucionRequestDTO;
+import com.pazzioliweb.ventasmodule.dtos.PedidoDTO;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -28,5 +29,9 @@ public interface DevolucionService {
 
     /** Detalle de una devolución por su ID. */
     DevolucionDTO getDevolucionById(Long devolucionId);
+
+
+
+    PedidoDTO convertirAPedido(Long Ventaid,Long DevolucionId);
 }
 
