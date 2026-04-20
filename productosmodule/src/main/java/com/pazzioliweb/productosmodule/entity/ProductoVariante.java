@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.util.List;
 
+import jakarta.persistence.Lob;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -50,6 +51,10 @@ public class ProductoVariante {
 	private List<PreciosProductoVariante> precios = new ArrayList<>();
 	
 	private Boolean predeterminada = false;
+
+	@Lob
+	@Column(columnDefinition = "LONGTEXT")
+	private String imagen;
 	
 	public Long getProductoVarianteId() {
 		return productoVarianteId;
@@ -125,6 +130,14 @@ public class ProductoVariante {
 
 	public void setPrecio(BigDecimal precio) {
 		this.precio = precio;
+	}
+
+	public String getImagen() {
+		return imagen;
+	}
+
+	public void setImagen(String imagen) {
+		this.imagen = imagen;
 	}
     
     

@@ -7,7 +7,14 @@ public class ProductoVarianteCreateDTO {
     private String codigoBarras;
     private Boolean predeterminada;
     private Boolean   estadovariante;
+    private String imagen;
     
+	public String getImagen() {
+		return imagen;
+	}
+	public void setImagen(String imagen) {
+		this.imagen = imagen;
+	}
 	public Boolean getEstadovariante() {
 		return estadovariante;
 	}

@@ -30,6 +30,7 @@ com\pazzioliweb\ventasmodule\service\impl\DevolucionServiceImpl.class
 com\pazzioliweb\ventasmodule\repository\VentaRepository.class
 com\pazzioliweb\ventasmodule\repository\CotizacionRepository.class
 com\pazzioliweb\ventasmodule\service\DevolucionService.class
+com\pazzioliweb\ventasmodule\exception\DevolucionException.class
 com\pazzioliweb\ventasmodule\service\impl\CuentaPorCobrarServiceImpl.class
 com\pazzioliweb\ventasmodule\dtos\DetalleDevolucionDTO.class
 com\pazzioliweb\ventasmodule\mapper\CotizacionMapper.class

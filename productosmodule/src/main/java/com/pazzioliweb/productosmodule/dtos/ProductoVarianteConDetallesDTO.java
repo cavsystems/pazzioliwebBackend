@@ -14,6 +14,7 @@ public class ProductoVarianteConDetallesDTO {
 	private String referenciaVariantes;
 	private String codigoBarras;
 	private Boolean activo;
+	private String imagen;
 
 	private List<DetalleDTO> detalles;
 	private List<existenciaDTO> existencia;
@@ -123,6 +124,14 @@ public class ProductoVarianteConDetallesDTO {
 
 	public void setActivo(Boolean activo) {
 		this.activo = activo;
+	}
+
+	public String getImagen() {
+		return imagen;
+	}
+
+	public void setImagen(String imagen) {
+		this.imagen = imagen;
 	}
 
 	public List<DetalleDTO> getDetalles() {

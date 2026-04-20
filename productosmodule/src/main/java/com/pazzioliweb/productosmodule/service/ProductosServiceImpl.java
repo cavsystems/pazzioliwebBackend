@@ -250,6 +250,10 @@ public class ProductosServiceImpl implements ProductosService{
                  existente.setManifiesto(dto.getManifiesto());
              }
 
+             if (dto.getImagen() != null) {
+                 existente.setImagen(dto.getImagen());
+             }
+
              // Relaciones
              if (dto.getGrupo_id() != null) {
                  existente.setGrupo(

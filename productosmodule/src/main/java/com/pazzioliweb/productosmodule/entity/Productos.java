@@ -18,6 +18,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Lob;
 
 @Entity
 @Table(name = "productos")
@@ -77,6 +78,10 @@ public class Productos {
     private LocalDateTime fechaUltimaCompra;
 	
     String manifiesto;
+    
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String imagen;
     
     @ManyToOne
     @JoinColumn(name = "tipo_producto_id", nullable = false)
@@ -201,6 +206,14 @@ public class Productos {
 
 	public void setManifiesto(String manifiesto) {
 		this.manifiesto = manifiesto;
+	}
+
+	public String getImagen() {
+		return imagen;
+	}
+
+	public void setImagen(String imagen) {
+		this.imagen = imagen;
 	}
 
 	@OneToMany(mappedBy = "producto", cascade = CascadeType.ALL, orphanRemoval = true)

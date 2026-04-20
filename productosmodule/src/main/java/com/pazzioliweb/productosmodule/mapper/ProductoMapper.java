@@ -31,6 +31,7 @@ public class ProductoMapper {
         p.setCosto(dto.getCosto());
         p.setManifiesto(dto.getManifiesto());
          p.setManejaVariantes(dto.getManejaVariantes());
+        p.setImagen(dto.getImagen());
         p.setGrupo(grupo);
         p.setLinea(linea);
         p.setImpuestos(impuesto);
@@ -50,6 +51,7 @@ public class ProductoMapper {
         dto.setDescripcion(p.getDescripcion());
         dto.setCosto(p.getCosto());
         dto.setManifiesto(p.getManifiesto());
+        dto.setImagen(p.getImagen());
 
         dto.setGrupo(p.getGrupo().getDescripcion());
         dto.setLinea(p.getLinea().getDescripcion());

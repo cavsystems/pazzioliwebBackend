@@ -2,6 +2,7 @@ com\pazzioliweb\cajerosmodule\repositori\DetalleCajeroRepository.class
 com\pazzioliweb\cajerosmodule\dtos\DetalleCajeroDTO.class
 com\pazzioliweb\cajerosmodule\entity\Cajero.class
 com\pazzioliweb\cajerosmodule\entity\DetalleCajero$EstadoDetalleCajero.class
+com\pazzioliweb\cajerosmodule\dtos\InformeDiarioVentasDTO$MovimientoTipo.class
 com\pazzioliweb\cajerosmodule\repositori\MovimientoCajeroRepository.class
 com\pazzioliweb\cajerosmodule\controller\DetalleCajeroController.class
 com\pazzioliweb\cajerosmodule\dtos\InformeDiarioVentasDTO$SeccionRecibosCaja.class

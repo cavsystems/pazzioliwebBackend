@@ -150,6 +150,7 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
             dto.setReferenciaVariantes(variant.getReferenciaVariantes());
             dto.setCodigoBarras(variant.getCodigoBarras());
             dto.setActivo(variant.getActivo());
+            dto.setImagen(variant.getImagen());
             List<Integer> idpre = new ArrayList<>(List.of(variant.getProductoVarianteId().intValue()));
             List<PreciosProductoVarianteDTO> precios=repopreciova.preciosProductoVarianteMultiple(idpre,pageablepre).getContent();
             List<ExistenciasBodegaDTO> e=serviexistencia.listadoExistenciasNombreBodegaVariante(variant.getProductoVarianteId());
@@ -193,6 +194,7 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
             dto.setReferenciaVariantes(variant.getReferenciaVariantes());
             dto.setCodigoBarras(variant.getCodigoBarras());
             dto.setActivo(variant.getActivo());
+            dto.setImagen(variant.getImagen());
             List<ExistenciasBodegaDTO> e=serviexistencia.listadoExistenciasNombreBodegaVariante(variant.getProductoVarianteId());
             List<ProductoVarianteConDetallesDTO.existenciaDTO> existenciasDtos = new ArrayList<>();
             for(ExistenciasBodegaDTO exis: e) {

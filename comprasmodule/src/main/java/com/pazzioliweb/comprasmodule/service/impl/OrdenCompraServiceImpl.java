@@ -327,7 +327,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         orden.setEstado("PENDIENTE");
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-        LocalDate fechaInicial = LocalDate.parse(request.getFechainicial(), formatter);
+
+        LocalDate fechaInicial;
+        if (request.getFechainicial() != null && !request.getFechainicial().isEmpty()) {
+            fechaInicial = LocalDate.parse(request.getFechainicial(), formatter);
+        } else {
+            fechaInicial = LocalDate.now();
+        }
         orden.setFechaEmision(fechaInicial);
 
         LocalDate fechaEntrega;
