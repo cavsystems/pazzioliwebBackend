@@ -17,7 +17,14 @@ public class ProductoUpdateDTO {
     private Integer tipo_producto_id;
     private String estado;
     private Boolean manejaVariantes;
+    private String imagen;
     
+	public String getImagen() {
+		return imagen;
+	}
+	public void setImagen(String imagen) {
+		this.imagen = imagen;
+	}
 	public String getReferencia() {
 		return referencia;
 	}

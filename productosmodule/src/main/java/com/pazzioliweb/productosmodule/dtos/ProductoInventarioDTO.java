@@ -25,4 +25,5 @@ public interface ProductoInventarioDTO {
 	LocalDateTime getFechaUltimaCompra();
 	LocalDateTime getFechaUltimaVenta();
 	Integer getProductoVarianteId();
+	String getImagen();
 }

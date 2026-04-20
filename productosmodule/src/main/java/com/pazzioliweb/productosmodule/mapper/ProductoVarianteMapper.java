@@ -26,6 +26,7 @@ public class ProductoVarianteMapper {
         pv.setCodigoBarras(dto.getCodigoBarras());
         pv.setActivo(dto.getEstadovariante());
         pv.setPredeterminada(dto.getPredeterminada());
+        pv.setImagen(dto.getImagen());
         return pv;
     }
 
@@ -42,6 +43,7 @@ public class ProductoVarianteMapper {
         dto.setCodigoBarras(pv.getCodigoBarras());
         dto.setActivo(pv.getActivo());
         dto.setPredeterminada(pv.getPredeterminada());
+        dto.setImagen(pv.getImagen());
         return dto;
     }
 
@@ -70,8 +72,12 @@ public class ProductoVarianteMapper {
     	        
     	        if (dto.getEstadovariante() != null)
       	            pv.setActivo(dto.getEstadovariante());
+
     	}
 
+    	// Imagen se actualiza siempre, independiente del estado
+    	if (dto.getImagen() != null)
+    	    pv.setImagen(dto.getImagen());
      
     }
     
@@ -83,6 +89,7 @@ public class ProductoVarianteMapper {
         dto.setReferenciaVariantes(pv.getReferenciaVariantes());
         dto.setCodigoBarras(pv.getCodigoBarras());
         dto.setActivo(pv.getActivo());
+        dto.setImagen(pv.getImagen());
 
         List<DetalleDTO> detalles = pv.getDetalles().stream()
             .map(d -> {

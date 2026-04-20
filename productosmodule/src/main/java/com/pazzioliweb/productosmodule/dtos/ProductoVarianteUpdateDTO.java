@@ -7,6 +7,13 @@ public class ProductoVarianteUpdateDTO {
     private Boolean activo;
     private Boolean predeterminada;
     private Boolean   estadovariante;
+    private String imagen;
+	public String getImagen() {
+		return imagen;
+	}
+	public void setImagen(String imagen) {
+		this.imagen = imagen;
+	}
 	public String getSku() {
 		return sku;
 	}
