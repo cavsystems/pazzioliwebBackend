@@ -322,7 +322,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
 
     private OrdenCompra crearOrdenDesdeRequest(RealizarOrdenRequestDTO request) {
         OrdenCompra orden = new OrdenCompra();
-        orden.setNumeroOrden("OC-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+    Optional<Long> idnumero=ordenCompraRepository.findMaxId();
+        orden.setNumeroOrden("OC-" + String.valueOf(idnumero.orElse(0L) + 1));
         orden.setEstado("PENDIENTE");
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");

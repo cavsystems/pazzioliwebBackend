@@ -18,6 +18,7 @@ import java.util.Optional;
 public interface OrdenCompraRepository extends JpaRepository<OrdenCompra, Long> {
 
     Optional<OrdenCompra> findByNumeroOrden(String numeroOrden);
+    Optional<OrdenCompra> findById(Long id);
     Page<OrdenCompra> findByNumeroOrdenStartingWithIgnoreCase(String numeroOrden, Pageable pageable);
     @Query("SELECT o FROM OrdenCompra o WHERE " +
             "(:estado IS NULL OR o.estado = :estado) AND " +

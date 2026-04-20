@@ -15,8 +15,28 @@ public class LegalizacionDTO {
     private String estado;
     private String usuarioCreacion;
     private List<DetalleOrdenCompraDTO> items;
+    private String fechainicial;
+    private String fechafinal;
+
     private String proveedorNombre;
 
+
+    public String getFechainicial(){
+        return fechainicial;
+    }
+
+    public void setFechainicial(String fechainicial){
+        this.fechainicial = fechainicial;
+
+    }
+
+    public String getFechafinal(){
+        return fechafinal;
+    }
+
+    public void setFechafinal(String fechafinal){
+        this.fechafinal = fechafinal;
+    }
     public BigDecimal getTotal() {
         return total;
     }

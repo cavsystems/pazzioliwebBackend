@@ -6,6 +6,7 @@ import com.pazzioliweb.comprasmodule.entity.Legalizacion;
 import com.pazzioliweb.comprasmodule.entity.OrdenCompra;
 import com.pazzioliweb.comprasmodule.mapper.OrdenCompraMapper;
 import com.pazzioliweb.comprasmodule.repository.LegalizacionRepository;
+import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.*;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
@@ -32,6 +33,9 @@ public class LegalizacionServiceImpl implements LegalizacionService {
     private final LegalizacionRepository legalizacionRepository;
     @Autowired
     private OrdenCompraMapper detallemaper;
+
+    @Autowired
+    private OrdenCompraRepository ordenCompraRepository;
   @Autowired
   private TercerosRepository terrepo;
     public LegalizacionServiceImpl(ProductoService productoService, ProductoClient productoClient, CuentaPorPagarService cuentaPorPagarService, OrdenCompraService ordenCompraService, IngresoOrdenCompraService ingresoOrdenCompraService, LegalizacionRepository legalizacionRepository) {
@@ -119,6 +123,7 @@ return ordenCreada;
     @Transactional
     public List<LegalizacionDTO> obtenerTodasLasLegalizaciones() {
         List<Legalizacion> legalizaciones = legalizacionRepository.findAll();
+
         return legalizaciones.stream().map(this::mapToDTO).collect(Collectors.toList());
     }
 
@@ -135,6 +140,12 @@ return ordenCreada;
     private LegalizacionDTO mapToDTO(Legalizacion legalizacion) {
         LegalizacionDTO dto = new LegalizacionDTO();
         Optional<Terceros> tercero= terrepo.findByTerceroId((legalizacion.getProveedorId().intValue()));
+          Optional<OrdenCompra> ord=ordenCompraRepository.findById(legalizacion.getOrdenCompra().getId());
+        DateTimeFormatter formato = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+        String fechainicial = ord.get().getFechaCreacion().format(formato);
+        String fechafinal = ord.get().getFechaEntregaEsperada().format(formato);
+        dto.setFechainicial(fechainicial);
+        dto.setFechafinal(fechafinal);
 
         dto.setId(legalizacion.getId());
         dto.setOrdenCompraId(legalizacion.getOrdenCompra().getId());
