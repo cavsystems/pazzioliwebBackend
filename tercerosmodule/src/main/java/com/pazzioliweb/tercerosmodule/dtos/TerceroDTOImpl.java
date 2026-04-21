@@ -31,6 +31,35 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
     private Integer plazo;
     private Integer cupo;
 
+    public String getTelefono() {
+        return telefono;
+    }
+
+    public void setTelefono(String telefono) {
+        this.telefono = telefono;
+    }
+
+    private String telefono;
+
+    public String getCorreo() {
+        return correo;
+    }
+
+    public void setCorreo(String correo) {
+        this.correo = correo;
+    }
+
+    private String correo;
+
+    public String getCelular() {
+        return celular;
+    }
+
+    public void setCelular(String celular) {
+        this.celular = celular;
+    }
+
+    private String celular;
     // Relaciones
     private TipoIdentificacionDTOImpl  tipoIdentificacion;
     private ClasificacionTerceroDTOImpl  clasificacionTercero;

@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.pazzioliweb.empresasback.entity.Empresas;
+import com.pazzioliweb.empresasback.repositori.EmpresaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -46,7 +48,7 @@ public class TercerosService {
 
     private final TercerosRepository terceroRepository;
     private final EntityManager entityManager;
-
+ private EmpresaRepository empresaRepository;
     @Autowired
     public TercerosService(TercerosRepository terceroRepository, EntityManager entityManager) {
         this.terceroRepository = terceroRepository;
@@ -197,6 +199,8 @@ public class TercerosService {
         tercero.setCupo(dto.getCupo());
 
         // Relaciones usando solo IDs
+
+
         if (dto.getTipoIdentificacion() != null && dto.getTipoIdentificacion().getCodigo() != null) {
             tercero.setTipoIdentificacion(entityManager.getReference(Tipoidentificacion.class, dto.getTipoIdentificacion().getCodigo()));
         }
@@ -272,7 +276,12 @@ public class TercerosService {
             tercero.setCodigoPostal(dto.getCodigoPostal());
         }
 
+
+        List<Empresas> empresas = empresaRepository.findAll();
+      if(dto.)
         // Guardar en BD
+
+
         Terceros guardado = terceroRepository.save(tercero);
 
         // ⚡ Conversión dentro de la transacción
