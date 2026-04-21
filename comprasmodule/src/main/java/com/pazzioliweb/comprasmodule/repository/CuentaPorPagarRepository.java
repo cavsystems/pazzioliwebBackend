@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, Long> {
     List<CuentaPorPagar> findByNumeroFactura(String numeroFactura);
+    List<CuentaPorPagar> findByProveedor_TerceroIdAndEstadoIn(Integer proveedorId, List<String> estados);
 }

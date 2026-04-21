@@ -17,10 +17,12 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 @Entity
 @Table(name = "facturas")
 @Data
+@EqualsAndHashCode(exclude = {"tipoTotales", "metodosPago"})
 public class Facturas {
 
     @Id
@@ -131,7 +133,8 @@ public class Facturas {
         PENDIENTE,
         ENVIADA,
         AUTORIZADA,
-        RECHAZADA
+        RECHAZADA,
+        SIMULADA
     }
     
     @OneToMany(mappedBy = "factura", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

@@ -1,5 +1,6 @@
 package com.pazzioliweb.ventasmodule.service.impl;
 
+import com.pazzioliweb.commonbacken.events.VentaCompletadaEvent;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
@@ -32,8 +33,10 @@ import com.pazzioliweb.ventasmodule.mapper.VentaMapper;
 import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import com.pazzioliweb.ventasmodule.repository.VentaSpecification;
 import com.pazzioliweb.ventasmodule.service.VentaService;
+import com.pazzioliweb.ventasmodule.repository.CuentaPorCobrarRepository;
 import com.pazzioliweb.ventasmodule.service.CuentaPorCobrarService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -64,7 +67,9 @@ public class VentaServiceImpl implements VentaService {
     private final VendedoresRepository vendedoresRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final CuentaPorCobrarService cuentaPorCobrarService;
+    private final CuentaPorCobrarRepository cuentaPorCobrarRepository;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Autowired
     public VentaServiceImpl(VentaRepository ventaRepository, VentaMapper ventaMapper,
@@ -79,7 +84,9 @@ public class VentaServiceImpl implements VentaService {
                             VendedoresRepository vendedoresRepository,
                             DetalleCajeroService detalleCajeroService,
                             CuentaPorCobrarService cuentaPorCobrarService,
-                            RedisTemplate<String, DatosSesiones> redisTemplate) {
+                            CuentaPorCobrarRepository cuentaPorCobrarRepository,
+                            RedisTemplate<String, DatosSesiones> redisTemplate,
+                            ApplicationEventPublisher eventPublisher) {
         this.ventaRepository = ventaRepository;
         this.ventaMapper = ventaMapper;
         this.productoVarianteRepository = productoVarianteRepository;
@@ -93,7 +100,9 @@ public class VentaServiceImpl implements VentaService {
         this.vendedoresRepository = vendedoresRepository;
         this.detalleCajeroService = detalleCajeroService;
         this.cuentaPorCobrarService = cuentaPorCobrarService;
+        this.cuentaPorCobrarRepository = cuentaPorCobrarRepository;
         this.redisTemplate = redisTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -284,6 +293,42 @@ public class VentaServiceImpl implements VentaService {
             throw new VentaException("El total pagado (" + totalPagado + ") no cubre el total de la venta (" + venta.getTotalVenta() + ")");
         }
 
+        // ✅ Validar permisos y cupo si hay método de pago a Crédito
+        boolean tieneCredito = metodosPagoDTO.stream().anyMatch(mp -> {
+            MetodosPago metodo = metodosPagoRepository.findById(mp.getMetodoPagoId().intValue()).orElse(null);
+            return metodo != null && metodo.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito;
+        });
+
+        if (tieneCredito) {
+            // 1. Verificar que el cliente tenga cupo habilitado (cupo >= 1 = permitido, cupo = 0 = no permitido)
+            Terceros cliente = venta.getCliente();
+            if (cliente.getCupo() == null || cliente.getCupo() <= 0) {
+                throw new VentaException("El cliente " + cliente.getNombre1() + " no tiene habilitado crédito (cupo en 0)");
+            }
+
+            // 2. Calcular monto de crédito solicitado
+            BigDecimal montoCredito = metodosPagoDTO.stream()
+                    .filter(mp -> {
+                        MetodosPago metodo = metodosPagoRepository.findById(mp.getMetodoPagoId().intValue()).orElse(null);
+                        return metodo != null && metodo.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito;
+                    })
+                    .map(VentaMetodoPagoDTO::getMonto)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            // 3. Verificar cupo disponible = cupo - saldo pendiente CxC
+            BigDecimal saldoPendiente = cuentaPorCobrarRepository.sumSaldoPendienteByClienteId(cliente.getTerceroId());
+            BigDecimal cupoTotal = BigDecimal.valueOf(cliente.getCupo());
+            BigDecimal cupoDisponible = cupoTotal.subtract(saldoPendiente);
+
+            if (montoCredito.compareTo(cupoDisponible) > 0) {
+                throw new VentaException("Cupo de crédito insuficiente para " + cliente.getNombre1()
+                        + ". Cupo total: " + cupoTotal
+                        + ", Saldo pendiente: " + saldoPendiente
+                        + ", Disponible: " + cupoDisponible
+                        + ", Solicitado: " + montoCredito);
+            }
+        }
+
         // Limpiar métodos de pago anteriores si los hay
         if (venta.getMetodosPago() != null) {
             venta.getMetodosPago().clear();
@@ -364,6 +409,14 @@ public class VentaServiceImpl implements VentaService {
             } catch (Exception e) {
                 System.out.println("Error al registrar movimiento en cajero (completar): " + e.getMessage());
             }
+        }
+
+        // ✅ Publicar evento para que facturación electrónica genere la factura automáticamente
+        try {
+            Integer cajeroId = ventaGuardada.getCajero() != null ? ventaGuardada.getCajero().getCajeroId() : null;
+            eventPublisher.publishEvent(new VentaCompletadaEvent(this, ventaGuardada.getId(), cajeroId));
+        } catch (Exception e) {
+            System.out.println("Error al publicar evento VentaCompletada (facturación): " + e.getMessage());
         }
     }
 

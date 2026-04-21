@@ -57,5 +57,29 @@ public class FacturacionElectronicaController {
                 .header("Content-Disposition", "inline; filename=factura-" + facturaId + ".pdf")
                 .body(pdfBytes);
     }
+
+    /**
+     * Reenvía una factura RECHAZADA o PENDIENTE a la DIAN.
+     * POST /api/facturacion-electronica/{facturaId}/reenviar
+     */
+    @PostMapping("/{facturaId}/reenviar")
+    public ResponseEntity<FacturaElectronicaResponseDTO> reenviarFactura(@PathVariable Integer facturaId) {
+        FacturaElectronicaResponseDTO response = facturacionService.reenviarFacturaDian(facturaId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Descarga el XML firmado de la factura.
+     * GET /api/facturacion-electronica/{facturaId}/xml
+     */
+    @GetMapping("/{facturaId}/xml")
+    public ResponseEntity<byte[]> descargarXml(@PathVariable Integer facturaId) {
+        FacturaElectronicaResponseDTO factura = facturacionService.consultarEstadoDian(facturaId);
+        // Obtener XML desde BD
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/xml")
+                .header("Content-Disposition", "attachment; filename=factura-" + facturaId + ".xml")
+                .body(new byte[0]); // Se completará cuando se tenga el XML
+    }
 }
 

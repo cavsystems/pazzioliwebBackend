@@ -148,6 +148,11 @@ public class OrdenCompraController {
         return ResponseEntity.ok(cuentaPorPagarService.listarPendientes());
     }
 
+    @GetMapping("/cuentas-por-pagar/proveedor/{proveedorId}")
+    public ResponseEntity<List<CuentaPorPagarDTO>> obtenerCuentasPorPagarPorProveedor(@PathVariable Integer proveedorId) {
+        return ResponseEntity.ok(cuentaPorPagarService.listarPorProveedor(proveedorId));
+    }
+
     @PostMapping("/cuentas-por-pagar/{id}/pagar")
     public ResponseEntity<Void> pagarCuentaPorPagar(@PathVariable Long id) {
         cuentaPorPagarService.pagar(id);
