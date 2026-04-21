@@ -54,6 +54,14 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CuentaPorPagarDTO> listarPorProveedor(Integer proveedorId) {
+        return cuentaPorPagarRepository
+                .findByProveedor_TerceroIdAndEstadoIn(proveedorId, List.of("PENDIENTE", "PARCIAL"))
+                .stream().map(this::toDTO).collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public void pagar(Long id) {
         CuentaPorPagar cuenta = cuentaPorPagarRepository.findById(id)

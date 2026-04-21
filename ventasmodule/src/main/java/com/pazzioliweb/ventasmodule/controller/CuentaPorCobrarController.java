@@ -1,12 +1,16 @@
 package com.pazzioliweb.ventasmodule.controller;
 
 import com.pazzioliweb.ventasmodule.dtos.CuentaPorCobrarDTO;
+import com.pazzioliweb.ventasmodule.repository.CuentaPorCobrarRepository;
 import com.pazzioliweb.ventasmodule.service.CuentaPorCobrarService;
+import com.pazzioliweb.tercerosmodule.entity.Terceros;
+import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -17,16 +21,35 @@ public class CuentaPorCobrarController {
     @Autowired
     private CuentaPorCobrarService cxcService;
 
+    @Autowired
+    private CuentaPorCobrarRepository cxcRepository;
+
+    @Autowired
+    private TercerosRepository tercerosRepository;
+
     /** Lista todas las CxC pendientes y parciales */
     @GetMapping("/pendientes")
     public ResponseEntity<List<CuentaPorCobrarDTO>> listarPendientes() {
         return ResponseEntity.ok(cxcService.listarPendientes());
     }
 
-    /** Lista CxC de un cliente específico */
+    /** Lista CxC de un cliente específico con cupo disponible */
     @GetMapping("/cliente/{clienteId}")
-    public ResponseEntity<List<CuentaPorCobrarDTO>> listarPorCliente(@PathVariable Integer clienteId) {
-        return ResponseEntity.ok(cxcService.listarPorCliente(clienteId));
+    public ResponseEntity<Map<String, Object>> listarPorCliente(@PathVariable Integer clienteId) {
+        List<CuentaPorCobrarDTO> cuentas = cxcService.listarPorCliente(clienteId);
+        BigDecimal saldoPendiente = cxcRepository.sumSaldoPendienteByClienteId(clienteId);
+        
+        Terceros tercero = tercerosRepository.findById(clienteId).orElse(null);
+        BigDecimal cupoTotal = tercero != null ? BigDecimal.valueOf(tercero.getCupo()) : BigDecimal.ZERO;
+        BigDecimal cupoDisponible = cupoTotal.subtract(saldoPendiente);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("cuentas", cuentas);
+        response.put("cupoTotal", cupoTotal);
+        response.put("saldoPendiente", saldoPendiente);
+        response.put("cupoDisponible", cupoDisponible.max(BigDecimal.ZERO));
+        
+        return ResponseEntity.ok(response);
     }
 
     /** Registra un abono parcial o total. Body: { "monto": 50000 } */

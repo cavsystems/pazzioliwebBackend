@@ -99,5 +99,10 @@
         <class>com.pazzioliweb.movimientosinventariomodule.entity.Kardex</class>
         <class>com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventario</class>
         <class>com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventarioDetalle</class>
+        <!-- Tesoreria -->
+        <class>com.pazzioliweb.tesoreriamodule.entity.ComprobanteEgreso</class>
+        <class>com.pazzioliweb.tesoreriamodule.entity.DetalleComprobanteEgreso</class>
+        <class>com.pazzioliweb.tesoreriamodule.entity.ReciboCaja</class>
+        <class>com.pazzioliweb.tesoreriamodule.entity.DetalleReciboCaja</class>
     </persistence-unit>
 </persistence>

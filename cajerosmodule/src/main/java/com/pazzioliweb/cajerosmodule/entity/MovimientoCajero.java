@@ -118,7 +118,8 @@ public class MovimientoCajero {
         // === Auxiliares ===
         ANULACION(true, -1),
         INGRESO_EFECTIVO(true, 1),
-        ABONO(true, 1);
+        ABONO(true, 1),
+        RECIBO_CAJA(true, 1);
 
         private final boolean afectaCaja;
         private final int signo;
