@@ -154,7 +154,7 @@ FROM (
 		            g.descripcion AS grupo,
 		            p.fecha_ultima_compra AS fechaUltimaCompra,
 		            p.fecha_ultima_venta AS fechaUltimaVenta,
-		            p.imagen AS imagen
+		            pv.imagen AS imagen
 		        FROM producto_variantes pv
 		        JOIN productos p ON p.producto_id = pv.producto_id
 		        JOIN impuestos pi ON pi.codigo=p.impuesto_id

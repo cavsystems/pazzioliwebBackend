@@ -8,8 +8,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.pazzioliweb.empresasback.entity.Empresa;
 import com.pazzioliweb.empresasback.entity.Empresas;
+import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
 import com.pazzioliweb.empresasback.repositori.EmpresaRepository;
+import com.pazzioliweb.tercerosmodule.repositori.ContactoTerceroRepository;
+import com.pazzioliweb.tercerosmodule.repositori.TipocontactoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -48,7 +52,16 @@ public class TercerosService {
 
     private final TercerosRepository terceroRepository;
     private final EntityManager entityManager;
- private EmpresaRepository empresaRepository;
+    @Autowired
+ private EmpresaRepositori empresaRepository;
+    @Autowired
+ private EmpresaRepositori empresaRepositori;
+
+
+    @Autowired
+ private TipocontactoRepository tipocontactoRepository;
+    @Autowired
+ private ContactoTerceroRepository contactoTerceroRepository;
     @Autowired
     public TercerosService(TercerosRepository terceroRepository, EntityManager entityManager) {
         this.terceroRepository = terceroRepository;
@@ -277,12 +290,75 @@ public class TercerosService {
         }
 
 
-        List<Empresas> empresas = empresaRepository.findAll();
-      if(dto.)
+        List<Empresa> empresas = empresaRepositori.findAll();
+
         // Guardar en BD
 
-
         Terceros guardado = terceroRepository.save(tercero);
+        Optional<TipoContacto>  tipocon=  tipocontactoRepository.findByNombreIgnoreCase("celular");
+        Optional<TipoContacto>  tipoconco=  tipocontactoRepository.findByNombreIgnoreCase("correo");
+        Optional<TipoContacto>  tipoconcot=  tipocontactoRepository.findByNombreIgnoreCase("telefono");
+        if(dto.getCelular().equals("")){
+
+            if(tipocon.isPresent()){
+              ContactoTercero contactoTercero = new ContactoTercero();
+              contactoTercero.setValorContacto(empresas.get(0).getCelularempresa());
+              contactoTercero.setTercero(tercero);
+              contactoTercero.setTipoContacto(tipocon.get());
+                contactoTercero.setEsPrincipal(true);
+                contactoTerceroRepository.save(contactoTercero);
+
+            }
+
+
+
+
+
+
+        }else {
+            ContactoTercero contactoTercero = new ContactoTercero();
+            contactoTercero.setValorContacto(dto.getCelular());
+            contactoTercero.setTercero(tercero);
+            contactoTercero.setTipoContacto(tipocon.get());
+            contactoTercero.setEsPrincipal(true);
+            contactoTerceroRepository.save(contactoTercero);
+        }
+        if(dto.getCorreo().equals("")){
+
+            if(tipoconco.isPresent()){
+                ContactoTercero contactoTercero = new ContactoTercero();
+                contactoTercero.setValorContacto(empresas.get(0).getCorreoempresa());
+                contactoTercero.setTercero(tercero);
+                contactoTercero.setTipoContacto(tipoconco.get());
+                contactoTercero.setEsPrincipal(true);
+                contactoTerceroRepository.save(contactoTercero);
+            }
+        }else{
+            ContactoTercero contactoTercero = new ContactoTercero();
+            contactoTercero.setValorContacto(dto.getCorreo());
+            contactoTercero.setTercero(tercero);
+            contactoTercero.setTipoContacto(tipoconco.get());
+            contactoTercero.setEsPrincipal(true);
+            contactoTerceroRepository.save(contactoTercero);
+        }
+        if(dto.getTelefono().equals("")){
+
+            if(tipoconcot.isPresent()){
+                ContactoTercero contactoTercero = new ContactoTercero();
+                contactoTercero.setValorContacto(empresas.get(0).getTelfonofijo());
+                contactoTercero.setTercero(tercero);
+                contactoTercero.setTipoContacto(tipoconcot.get());
+                contactoTercero.setEsPrincipal(true);
+                contactoTerceroRepository.save(contactoTercero);
+            }
+        }else {
+            ContactoTercero contactoTercero = new ContactoTercero();
+            contactoTercero.setValorContacto(dto.getTelefono());
+            contactoTercero.setTercero(tercero);
+            contactoTercero.setTipoContacto(tipoconcot.get());
+            contactoTercero.setEsPrincipal(true);
+            contactoTerceroRepository.save(contactoTercero);
+        }
 
         // ⚡ Conversión dentro de la transacción
         return TerceroDTOImpl.fromEntity(guardado);

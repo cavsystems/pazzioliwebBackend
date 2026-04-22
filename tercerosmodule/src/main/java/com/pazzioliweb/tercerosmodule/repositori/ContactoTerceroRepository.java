@@ -26,5 +26,7 @@ public interface ContactoTerceroRepository extends JpaRepository<ContactoTercero
 	 @Transactional
 	    @Modifying
 	    void deleteByContactoId(int codigo);
-	
+
+
+
 }

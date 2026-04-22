@@ -503,9 +503,14 @@ public class ProductosServiceImpl implements ProductosService{
             existencia.setFechaUltimoMovimiento(LocalDateTime.now());
         }
 
+        if(existencia.getExistencia() == null){
+            existencia.setExistencia(BigDecimal.valueOf(cantidad));
+        }else {
+            existencia.setExistencia(existencia.getExistencia().add(BigDecimal.valueOf(cantidad)));
+        }
         // Add the cantidad (can be negative)
-        existencia.setExistencia(existencia.getExistencia().add(BigDecimal.valueOf(cantidad)));
-        existencia.setFechaUltimoMovimiento(LocalDateTime.now());
+
+      
 
         existenciasRepository.save(existencia);
     }
