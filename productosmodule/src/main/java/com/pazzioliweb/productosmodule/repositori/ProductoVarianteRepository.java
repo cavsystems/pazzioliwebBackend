@@ -123,7 +123,7 @@ public interface ProductoVarianteRepository extends JpaRepository<ProductoVarian
 	Page<ProductoVariante> findByProductoProductoId(Integer productoId, Pageable pageable);
 
 	@EntityGraph(attributePaths = {"detalles", "detalles.caracteristica", "detalles.caracteristica.tipo"})
-	Page<ProductoVariante> findByCodigoBarrasIn(List<String> codigos, Pageable pageable);
+	Page<ProductoVariante> findBySkuIn(List<String> codigos, Pageable pageable);
 
 
 	@Query(
@@ -154,7 +154,8 @@ FROM (
 		            g.descripcion AS grupo,
 		            p.fecha_ultima_compra AS fechaUltimaCompra,
 		            p.fecha_ultima_venta AS fechaUltimaVenta,
-		            pv.imagen AS imagen
+		            pv.imagen AS imagen,
+		            pv.codigo_barras AS codigobarrasvariante
 		        FROM producto_variantes pv
 		        JOIN productos p ON p.producto_id = pv.producto_id
 		        JOIN impuestos pi ON pi.codigo=p.impuesto_id
@@ -172,7 +173,7 @@ FROM (
 		            GROUP BY e.producto_variantes_id
 		        ) ex ON ex.varianteId = pv.producto_variantes_id) t 
 		        WHERE LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%')) AND
- t.activo=:activo 
+ t.activo=:activo  ||   LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%')) || LOWER(t.codigobarrasvariante) LIKE LOWER(CONCAT('%', :productodes, '%'))
 		        """,
 			countQuery = "SELECT COUNT(*) FROM producto_variantes",
 			nativeQuery = true

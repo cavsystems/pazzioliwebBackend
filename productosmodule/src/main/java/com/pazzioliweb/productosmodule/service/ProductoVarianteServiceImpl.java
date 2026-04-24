@@ -185,8 +185,7 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
 
     @Override
     public Page<ProductoVarianteConDetallesDTO> listarConDetallesPorCodigos(List<String> codigos, Pageable pageable) {
-        Page<ProductoVariante> variantes = varianteRepository.findByCodigoBarrasIn(codigos, pageable);
-
+        Page<ProductoVariante> variantes = varianteRepository.findBySkuIn(codigos, pageable);
         return variantes.map(variant -> {
             ProductoVarianteConDetallesDTO dto = new ProductoVarianteConDetallesDTO();
             dto.setProductoVarianteId(variant.getProductoVarianteId());
