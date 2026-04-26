@@ -39,6 +39,15 @@ public class InformeDiarioVentasDTO {
     private String   estadoSesion;       // ABIERTA / CERRADA
 
     // ══════════════════════════════════════════════════════
+    //  CUADRE DE CAJA (solo cuando la sesión está CERRADA)
+    // ══════════════════════════════════════════════════════
+    private BigDecimal efectivoEsperado;
+    private BigDecimal efectivoDeclarado;
+    private BigDecimal diferenciaEfectivo;
+    private BigDecimal mediosElectronicosDeclarado;
+    private BigDecimal diferenciaMediosElectronicos;
+
+    // ══════════════════════════════════════════════════════
     //  RESUMEN DE MOVIMIENTOS POR TIPO
     // ══════════════════════════════════════════════════════
     public static class MovimientoTipo {
@@ -153,6 +162,7 @@ public class InformeDiarioVentasDTO {
 
     public static class SeccionRecibosCaja {
         private List<ReciboCaja> recibos;
+        private List<FormaPago> formasPago;
         // Totales por forma de pago dentro de los recibos
         private BigDecimal totalEfectivo   = BigDecimal.ZERO;
         private BigDecimal totalTCredito   = BigDecimal.ZERO;
@@ -164,6 +174,8 @@ public class InformeDiarioVentasDTO {
 
         public List<ReciboCaja> getRecibos()               { return recibos; }
         public void setRecibos(List<ReciboCaja> r)         { this.recibos = r; }
+        public List<FormaPago> getFormasPago()             { return formasPago; }
+        public void setFormasPago(List<FormaPago> f)       { this.formasPago = f; }
         public BigDecimal getTotalEfectivo()               { return totalEfectivo; }
         public void setTotalEfectivo(BigDecimal v)         { this.totalEfectivo = v; }
         public BigDecimal getTotalTCredito()               { return totalTCredito; }
@@ -204,10 +216,13 @@ public class InformeDiarioVentasDTO {
 
     public static class SeccionEgresos {
         private List<ComprobanteEgreso> egresos;
+        private List<FormaPago> formasPago;
         private BigDecimal totalEgresos = BigDecimal.ZERO;
 
         public List<ComprobanteEgreso> getEgresos()      { return egresos; }
         public void setEgresos(List<ComprobanteEgreso> e){ this.egresos = e; }
+        public List<FormaPago> getFormasPago()           { return formasPago; }
+        public void setFormasPago(List<FormaPago> f)     { this.formasPago = f; }
         public BigDecimal getTotalEgresos()              { return totalEgresos; }
         public void setTotalEgresos(BigDecimal v)        { this.totalEgresos = v; }
     }
@@ -332,6 +347,16 @@ public class InformeDiarioVentasDTO {
     public void setFechaCierre(LocalDateTime v)         { this.fechaCierre = v; }
     public String getEstadoSesion()                     { return estadoSesion; }
     public void setEstadoSesion(String v)               { this.estadoSesion = v; }
+    public BigDecimal getEfectivoEsperado()             { return efectivoEsperado; }
+    public void setEfectivoEsperado(BigDecimal v)       { this.efectivoEsperado = v; }
+    public BigDecimal getEfectivoDeclarado()            { return efectivoDeclarado; }
+    public void setEfectivoDeclarado(BigDecimal v)      { this.efectivoDeclarado = v; }
+    public BigDecimal getDiferenciaEfectivo()           { return diferenciaEfectivo; }
+    public void setDiferenciaEfectivo(BigDecimal v)     { this.diferenciaEfectivo = v; }
+    public BigDecimal getMediosElectronicosDeclarado()  { return mediosElectronicosDeclarado; }
+    public void setMediosElectronicosDeclarado(BigDecimal v) { this.mediosElectronicosDeclarado = v; }
+    public BigDecimal getDiferenciaMediosElectronicos() { return diferenciaMediosElectronicos; }
+    public void setDiferenciaMediosElectronicos(BigDecimal v) { this.diferenciaMediosElectronicos = v; }
     public List<MovimientoTipo> getResumenMovimientos()  { return resumenMovimientos; }
     public void setResumenMovimientos(List<MovimientoTipo> v) { this.resumenMovimientos = v; }
     public BigDecimal getTotalVales()                   { return totalVales; }

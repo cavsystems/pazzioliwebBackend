@@ -1,0 +1,33 @@
+package com.pazzioliweb.tesoreriamodule.entity;
+
+import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
+import java.math.BigDecimal;
+
+@Data
+@Entity
+@Table(name = "comprobante_egreso_medio_pago")
+@EqualsAndHashCode(exclude = {"comprobanteEgreso"})
+@ToString(exclude = {"comprobanteEgreso"})
+public class ComprobanteEgresoMedioPago {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comprobante_egreso_id", nullable = false)
+    private ComprobanteEgreso comprobanteEgreso;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "metodo_pago_id", nullable = false)
+    private MetodosPago metodoPago;
+
+    @Column(name = "monto", precision = 18, scale = 2, nullable = false)
+    private BigDecimal monto = BigDecimal.ZERO;
+}
+

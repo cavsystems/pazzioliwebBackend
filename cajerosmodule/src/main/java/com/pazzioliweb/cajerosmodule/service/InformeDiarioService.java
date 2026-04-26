@@ -142,8 +142,8 @@ public class InformeDiarioService {
         buildMovimientoCuentasConsolidado(dto, sesionIds, fechaInforme);
         buildVentasPorLineaConsolidado(dto, sesionIds, fechaInforme);
         buildFormasDePagoConsolidado(dto, sesionIds, fechaInforme);
-        buildRecibosCaja(dto, todosMovimientosDia);
-        buildEgresos(dto, todosMovimientosDia);
+        buildRecibosCaja(dto, todosMovimientosDia, sesionIds, fechaInforme);
+        buildEgresos(dto, todosMovimientosDia, sesionIds, fechaInforme);
         buildVales(dto, todosMovimientosDia);
         buildTotalCxCConsolidado(dto, sesionIds, fechaInforme);
         buildDevolucionesConsolidado(dto, sesionIds, fechaInforme, todosMovimientosDia);
@@ -174,8 +174,8 @@ public class InformeDiarioService {
         buildMovimientoCuentas(dto, detalleCajeroId, fechaInforme);
         buildVentasPorLinea(dto, detalleCajeroId, fechaInforme);
         buildFormasDePago(dto, detalleCajeroId, fechaInforme);
-        buildRecibosCaja(dto, movimientosDia);
-        buildEgresos(dto, movimientosDia);
+        buildRecibosCaja(dto, movimientosDia, List.of(detalleCajeroId), fechaInforme);
+        buildEgresos(dto, movimientosDia, List.of(detalleCajeroId), fechaInforme);
         buildVales(dto, movimientosDia);
         buildTotalCxC(dto, detalleCajeroId, fechaInforme);
         buildDevoluciones(dto, detalleCajeroId, fechaInforme, movimientosDia);
@@ -228,6 +228,16 @@ public class InformeDiarioService {
                 .map(e -> new InformeDiarioVentasDTO.MovimientoTipo(e.getKey(), e.getValue().intValue()))
                 .collect(Collectors.toList());
         dto.setResumenMovimientos(resumen);
+
+        // Cuadre de caja: incluir datos declarados solo si la sesión está cerrada
+        if (sesion.getEstado() == DetalleCajero.EstadoDetalleCajero.CERRADA) {
+            BigDecimal efectivoEsperado = sesion.getBaseCaja().add(sesion.getTotalEfectivo());
+            dto.setEfectivoEsperado(efectivoEsperado);
+            dto.setEfectivoDeclarado(sesion.getEfectivoDeclarado());
+            dto.setDiferenciaEfectivo(sesion.getDiferenciaEfectivo());
+            dto.setMediosElectronicosDeclarado(sesion.getMediosElectronicosDeclarado());
+            dto.setDiferenciaMediosElectronicos(sesion.getDiferenciaMediosElectronicos());
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -288,14 +298,16 @@ public class InformeDiarioService {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  5. RECIBOS DE CAJA  (ABONO)
+    //  5. RECIBOS DE CAJA  (RECIBO_CAJA)
     // ════════════════════════════════════════════════════════════════════════
     private void buildRecibosCaja(InformeDiarioVentasDTO dto,
-                                   List<MovimientoCajero> movimientos) {
+                                   List<MovimientoCajero> movimientos,
+                                   List<Long> sesionIds,
+                                   LocalDate fecha) {
         SeccionRecibosCaja seccion = new SeccionRecibosCaja();
 
         List<ReciboCaja> recibos = movimientos.stream()
-                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.ABONO)
+                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.RECIBO_CAJA)
                 .map(m -> new ReciboCaja(
                         m.getTerceroNombre() != null ? m.getTerceroNombre() : "",
                         m.getMonto(),
@@ -303,22 +315,31 @@ public class InformeDiarioService {
                 .collect(Collectors.toList());
         seccion.setRecibos(recibos);
 
-        BigDecimal totalEfectivo = movimientos.stream()
-                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.ABONO)
-                .map(MovimientoCajero::getMontoEfectivo)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal totalElectronico = movimientos.stream()
-                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.ABONO)
-                .map(MovimientoCajero::getMontoElectronico)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalRecibos = movimientos.stream()
-                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.ABONO)
+                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.RECIBO_CAJA)
                 .map(MovimientoCajero::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        seccion.setTotalRecibosCaja(totalRecibos);
 
+        // Desglose real por método de pago desde la tabla recibo_caja_medio_pago
+        List<Object[]> formasPagoRows = informeDiarioRepo.getFormasPagoRecibosCaja(sesionIds, fecha);
+        List<FormaPago> formasPago = new ArrayList<>();
+        BigDecimal totalEfectivo = BigDecimal.ZERO;
+        BigDecimal totalElectronico = BigDecimal.ZERO;
+        for (Object[] row : formasPagoRows) {
+            String nombre = row[0] != null ? row[0].toString() : "OTRO";
+            BigDecimal total = toBD(row[1]);
+            formasPago.add(new FormaPago(nombre, total));
+            if (nombre.toLowerCase().startsWith("ef")) {
+                totalEfectivo = totalEfectivo.add(total);
+            } else {
+                totalElectronico = totalElectronico.add(total);
+            }
+        }
+        seccion.setFormasPago(formasPago);
         seccion.setTotalEfectivo(totalEfectivo);
         seccion.setTotalTCredito(totalElectronico);
-        seccion.setTotalRecibosCaja(totalRecibos);
+
         dto.setRecibosCaja(seccion);
     }
 
@@ -326,7 +347,9 @@ public class InformeDiarioService {
     //  6. COMPROBANTES DE EGRESO
     // ════════════════════════════════════════════════════════════════════════
     private void buildEgresos(InformeDiarioVentasDTO dto,
-                               List<MovimientoCajero> movimientos) {
+                               List<MovimientoCajero> movimientos,
+                               List<Long> sesionIds,
+                               LocalDate fecha) {
         SeccionEgresos seccion = new SeccionEgresos();
 
         List<ComprobanteEgreso> egresos = movimientos.stream()
@@ -343,6 +366,17 @@ public class InformeDiarioService {
 
         seccion.setEgresos(egresos);
         seccion.setTotalEgresos(totalEgresos);
+
+        // Desglose real por método de pago desde la tabla comprobante_egreso_medio_pago
+        List<Object[]> formasPagoRows = informeDiarioRepo.getFormasPagoEgresos(sesionIds, fecha);
+        List<FormaPago> formasPago = new ArrayList<>();
+        for (Object[] row : formasPagoRows) {
+            String nombre = row[0] != null ? row[0].toString() : "OTRO";
+            BigDecimal total = toBD(row[1]);
+            formasPago.add(new FormaPago(nombre, total));
+        }
+        seccion.setFormasPago(formasPago);
+
         dto.setEgresos(seccion);
     }
 

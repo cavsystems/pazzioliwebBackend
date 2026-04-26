@@ -205,5 +205,67 @@ public class InformeDiarioRepository {
         if (result instanceof java.math.BigDecimal) return (java.math.BigDecimal) result;
         return java.math.BigDecimal.valueOf(((Number) result).doubleValue());
     }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  FORMAS DE PAGO — RECIBOS DE CAJA
+    //  Consulta la tabla recibo_caja_medio_pago para obtener el desglose
+    //  real por método de pago de los recibos registrados en la sesión.
+    //  Retorna: [[descripcionMetodo, total], ...]
+    // ══════════════════════════════════════════════════════════════════
+    @SuppressWarnings("unchecked")
+    public List<Object[]> getFormasPagoRecibosCaja(List<Long> detalleCajeroIds, LocalDate fecha) {
+        String sql = """
+                SELECT mp.descripcion, COALESCE(SUM(rcmp.monto), 0)
+                FROM recibo_caja_medio_pago rcmp
+                JOIN recibos_caja     rc ON rcmp.recibo_caja_id   = rc.id
+                JOIN metodos_pago     mp ON rcmp.metodo_pago_id   = mp.metodo_pago_id
+                JOIN movimiento_cajero mc ON mc.referencia_documento_id = rc.id
+                WHERE mc.detalle_cajero_id   IN (:detalleCajeroIds)
+                  AND mc.tipo_movimiento     = 'RECIBO_CAJA'
+                  AND DATE(mc.fecha_movimiento) = :fecha
+                  AND rc.estado              = 'ACTIVO'
+                GROUP BY mp.descripcion
+                ORDER BY mp.descripcion
+                """;
+        try {
+            return em.createNativeQuery(sql)
+                    .setParameter("detalleCajeroIds", detalleCajeroIds)
+                    .setParameter("fecha", fecha)
+                    .getResultList();
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  FORMAS DE PAGO — COMPROBANTES DE EGRESO
+    //  Consulta la tabla comprobante_egreso_medio_pago para obtener
+    //  el desglose real por método de pago de los egresos.
+    //  Retorna: [[descripcionMetodo, total], ...]
+    // ══════════════════════════════════════════════════════════════════
+    @SuppressWarnings("unchecked")
+    public List<Object[]> getFormasPagoEgresos(List<Long> detalleCajeroIds, LocalDate fecha) {
+        String sql = """
+                SELECT mp.descripcion, COALESCE(SUM(cemp.monto), 0)
+                FROM comprobante_egreso_medio_pago cemp
+                JOIN comprobantes_egreso ce ON cemp.comprobante_egreso_id = ce.id
+                JOIN metodos_pago        mp ON cemp.metodo_pago_id       = mp.metodo_pago_id
+                JOIN movimiento_cajero   mc ON mc.referencia_documento_id = ce.id
+                WHERE mc.detalle_cajero_id   IN (:detalleCajeroIds)
+                  AND mc.tipo_movimiento     = 'EGRESO'
+                  AND DATE(mc.fecha_movimiento) = :fecha
+                  AND ce.estado              = 'ACTIVO'
+                GROUP BY mp.descripcion
+                ORDER BY mp.descripcion
+                """;
+        try {
+            return em.createNativeQuery(sql)
+                    .setParameter("detalleCajeroIds", detalleCajeroIds)
+                    .setParameter("fecha", fecha)
+                    .getResultList();
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
 }
 

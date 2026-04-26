@@ -14,19 +14,30 @@ public class ComprobanteEgresoResponseDTO {
     private String terceroNombre;
     private String terceroNit;
     private LocalDate fecha;
+    private LocalDate fechaEgreso;
     private BigDecimal subtotal;
     private BigDecimal retefuente;
     private BigDecimal reteica;
     private BigDecimal reteiva;
     private BigDecimal descuento;
     private BigDecimal total;
-    private Integer metodoPagoId;
-    private String metodoPagoDescripcion;
+    private List<MedioPagoResponseDTO> mediosPago;
+    private String metodoPago;
     private String concepto;
     private String centroCosto;
     private String estado;
+    private Boolean conceptoAbierto;
+    private BigDecimal montoConceptoAbierto;
     private LocalDateTime fechaCreacion;
     private List<DetalleEgresoResponseDTO> detalles;
+
+    @Data
+    public static class MedioPagoResponseDTO {
+        private Long id;
+        private Integer metodoPagoId;
+        private String metodoPagoDescripcion;
+        private BigDecimal monto;
+    }
 
     @Data
     public static class DetalleEgresoResponseDTO {
@@ -38,4 +49,3 @@ public class ComprobanteEgresoResponseDTO {
         private String estado;
     }
 }
-

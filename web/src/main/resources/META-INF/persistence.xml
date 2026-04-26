@@ -104,5 +104,8 @@
         <class>com.pazzioliweb.tesoreriamodule.entity.DetalleComprobanteEgreso</class>
         <class>com.pazzioliweb.tesoreriamodule.entity.ReciboCaja</class>
         <class>com.pazzioliweb.tesoreriamodule.entity.DetalleReciboCaja</class>
+        <class>com.pazzioliweb.tesoreriamodule.entity.ReciboCajaMedioPago</class>
+        <class>com.pazzioliweb.tesoreriamodule.entity.ComprobanteEgresoMedioPago</class>
+        <class>com.pazzioliweb.tesoreriamodule.entity.ComprobanteEgresoMedioPago</class>
     </persistence-unit>
 </persistence>

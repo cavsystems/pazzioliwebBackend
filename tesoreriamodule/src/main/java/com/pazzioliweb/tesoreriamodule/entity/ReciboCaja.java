@@ -1,7 +1,6 @@
 package com.pazzioliweb.tesoreriamodule.entity;
 
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
-import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -16,8 +15,8 @@ import java.util.List;
 @Data
 @Entity
 @Table(name = "recibos_caja")
-@EqualsAndHashCode(exclude = {"detalles"})
-@ToString(exclude = {"detalles"})
+@EqualsAndHashCode(exclude = {"detalles", "mediosPago"})
+@ToString(exclude = {"detalles", "mediosPago"})
 public class ReciboCaja {
 
     @Id
@@ -28,7 +27,7 @@ public class ReciboCaja {
     private Integer consecutivo;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tercero_id", nullable = false)
+    @JoinColumn(name = "tercero_id")
     private Terceros tercero;
 
     @Column(name = "tercero_nombre")
@@ -36,6 +35,12 @@ public class ReciboCaja {
 
     @Column(name = "tercero_nit")
     private String terceroNit;
+
+    @Column(name = "concepto_abierto", nullable = false)
+    private Boolean conceptoAbierto = false;
+
+    @Column(name = "monto_concepto_abierto", precision = 18, scale = 2)
+    private BigDecimal montoConceptoAbierto;
 
     @Column(nullable = false)
     private LocalDate fecha;
@@ -56,12 +61,18 @@ public class ReciboCaja {
     private BigDecimal descuento = BigDecimal.ZERO;
 
     @Column(precision = 15, scale = 2)
+    private BigDecimal averias = BigDecimal.ZERO;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal fletes = BigDecimal.ZERO;
+
+    @Column(precision = 15, scale = 2)
     private BigDecimal total = BigDecimal.ZERO;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "metodo_pago_id")
-    private MetodosPago metodoPago;
+    @Column(name = "fecha_recibo")
+    private LocalDate fechaRecibo;
 
+    @Column(columnDefinition = "TEXT")
     private String concepto;
 
     @Column(name = "centro_costo")
@@ -81,5 +92,7 @@ public class ReciboCaja {
 
     @OneToMany(mappedBy = "reciboCaja", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleReciboCaja> detalles = new ArrayList<>();
-}
 
+    @OneToMany(mappedBy = "reciboCaja", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ReciboCajaMedioPago> mediosPago = new ArrayList<>();
+}

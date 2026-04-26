@@ -11,6 +11,7 @@ import com.pazzioliweb.tesoreriamodule.dtos.CrearReciboCajaDTO;
 import com.pazzioliweb.tesoreriamodule.dtos.ReciboCajaResponseDTO;
 import com.pazzioliweb.tesoreriamodule.entity.DetalleReciboCaja;
 import com.pazzioliweb.tesoreriamodule.entity.ReciboCaja;
+import com.pazzioliweb.tesoreriamodule.entity.ReciboCajaMedioPago;
 import com.pazzioliweb.tesoreriamodule.repository.ReciboCajaRepository;
 import com.pazzioliweb.ventasmodule.entity.CuentaPorCobrar;
 import com.pazzioliweb.ventasmodule.repository.CuentaPorCobrarRepository;
@@ -55,33 +56,82 @@ public class ReciboCajaService {
 
     @Transactional
     public ReciboCajaResponseDTO crear(CrearReciboCajaDTO dto) {
-        Terceros tercero = tercerosRepository.findById(dto.getTerceroId())
-                .orElseThrow(() -> new RuntimeException("Tercero no encontrado: " + dto.getTerceroId()));
+        // Validaciones
+        if (dto.getMediosPago() == null || dto.getMediosPago().isEmpty()) {
+            throw new RuntimeException("Debe especificar al menos un medio de pago");
+        }
+        for (CrearReciboCajaDTO.MedioPagoDTO mp : dto.getMediosPago()) {
+            if (mp.getMonto() == null || mp.getMonto().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new RuntimeException("Cada medio de pago debe tener un monto mayor a 0");
+            }
+        }
+        if (dto.getFechaRecibo() == null || dto.getFechaRecibo().isBlank()) {
+            throw new RuntimeException("La fecha del recibo es obligatoria");
+        }
+
+        boolean esConceptoAbierto = Boolean.TRUE.equals(dto.getConceptoAbierto());
+
+        if (esConceptoAbierto) {
+            if (dto.getConcepto() == null || dto.getConcepto().isBlank()) {
+                throw new RuntimeException("El concepto es obligatorio para concepto abierto");
+            }
+            if (dto.getMontoConceptoAbierto() == null || dto.getMontoConceptoAbierto().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new RuntimeException("El monto del concepto abierto debe ser mayor a 0");
+            }
+        } else {
+            if (dto.getTerceroId() == null) {
+                throw new RuntimeException("El tercero es obligatorio");
+            }
+            if (dto.getCuentas() == null || dto.getCuentas().isEmpty()) {
+                throw new RuntimeException("Debe especificar al menos una cuenta por cobrar");
+            }
+        }
 
         ReciboCaja recibo = new ReciboCaja();
         recibo.setConsecutivo(obtenerSiguienteConsecutivo());
-        recibo.setTercero(tercero);
-        recibo.setTerceroNombre(tercero.getNombre1() + " " +
-                (tercero.getApellido1() != null ? tercero.getApellido1() : ""));
-        recibo.setTerceroNit(tercero.getIdentificacion());
+        recibo.setConceptoAbierto(esConceptoAbierto);
         recibo.setFecha(LocalDate.now());
+        recibo.setFechaRecibo(LocalDate.parse(dto.getFechaRecibo()));
         recibo.setRetefuente(dto.getRetefuente() != null ? dto.getRetefuente() : BigDecimal.ZERO);
         recibo.setReteica(dto.getReteica() != null ? dto.getReteica() : BigDecimal.ZERO);
         recibo.setReteiva(dto.getReteiva() != null ? dto.getReteiva() : BigDecimal.ZERO);
         recibo.setDescuento(dto.getDescuento() != null ? dto.getDescuento() : BigDecimal.ZERO);
+        recibo.setAverias(dto.getAverias() != null ? dto.getAverias() : BigDecimal.ZERO);
+        recibo.setFletes(dto.getFletes() != null ? dto.getFletes() : BigDecimal.ZERO);
         recibo.setConcepto(dto.getConcepto());
         recibo.setCentroCosto(dto.getCentroCosto());
         recibo.setCajeroId(dto.getCajeroId());
         recibo.setUsuarioId(dto.getUsuarioId());
 
-        if (dto.getMetodoPagoId() != null) {
-            MetodosPago mp = metodosPagoRepository.findById(dto.getMetodoPagoId()).orElse(null);
-            recibo.setMetodoPago(mp);
+        // Tercero (solo si NO es concepto abierto)
+        if (!esConceptoAbierto) {
+            Terceros tercero = tercerosRepository.findById(dto.getTerceroId())
+                    .orElseThrow(() -> new RuntimeException("Tercero no encontrado: " + dto.getTerceroId()));
+            recibo.setTercero(tercero);
+            recibo.setTerceroNombre(tercero.getNombre1() + " " +
+                    (tercero.getApellido1() != null ? tercero.getApellido1() : ""));
+            recibo.setTerceroNit(tercero.getIdentificacion());
         }
 
-        // Procesar cuentas por cobrar
-        BigDecimal subtotal = BigDecimal.ZERO;
-        if (dto.getCuentas() != null) {
+        // Procesar medios de pago
+        for (CrearReciboCajaDTO.MedioPagoDTO mpDto : dto.getMediosPago()) {
+            MetodosPago mp = metodosPagoRepository.findById(mpDto.getMetodoPagoId())
+                    .orElseThrow(() -> new RuntimeException("Método de pago no encontrado: " + mpDto.getMetodoPagoId()));
+            ReciboCajaMedioPago medioPago = new ReciboCajaMedioPago();
+            medioPago.setReciboCaja(recibo);
+            medioPago.setMetodoPago(mp);
+            medioPago.setMonto(mpDto.getMonto());
+            recibo.getMediosPago().add(medioPago);
+        }
+
+        // Calcular subtotal
+        BigDecimal subtotal;
+        if (esConceptoAbierto) {
+            subtotal = dto.getMontoConceptoAbierto();
+            recibo.setMontoConceptoAbierto(subtotal);
+        } else {
+            // Procesar cuentas por cobrar
+            subtotal = BigDecimal.ZERO;
             for (CrearReciboCajaDTO.DetalleCobroDTO detDto : dto.getCuentas()) {
                 CuentaPorCobrar cxc = cxcRepository.findById(detDto.getCuentaPorCobrarId())
                         .orElseThrow(() -> new RuntimeException("CxC no encontrada: " + detDto.getCuentaPorCobrarId()));
@@ -110,8 +160,16 @@ public class ReciboCajaService {
         BigDecimal totalRetenciones = recibo.getRetefuente()
                 .add(recibo.getReteica())
                 .add(recibo.getReteiva())
-                .add(recibo.getDescuento());
-        recibo.setTotal(subtotal.subtract(totalRetenciones));
+                .add(recibo.getDescuento())
+                .add(recibo.getAverias())
+                .add(recibo.getFletes());
+        BigDecimal totalCobrar = subtotal.subtract(totalRetenciones);
+
+        if (totalCobrar.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("El total a cobrar debe ser mayor a 0");
+        }
+
+        recibo.setTotal(totalCobrar);
 
         recibo = reciboRepository.save(recibo);
 
@@ -123,23 +181,65 @@ public class ReciboCajaService {
 
     private void registrarMovimientoCajero(ReciboCaja recibo) {
         try {
-            DatosSesiones sesion = obtenerSesionActiva();
-            if (sesion != null && sesion.getDetalleCajeroId() != null) {
+            Long detalleCajeroId = obtenerDetalleCajeroId(recibo.getCajeroId());
+            if (detalleCajeroId != null) {
+                // Calcular desglose efectivo vs electrónico según medios de pago
+                BigDecimal montoEfectivo = BigDecimal.ZERO;
+                BigDecimal montoElectronico = BigDecimal.ZERO;
+                if (recibo.getMediosPago() != null) {
+                    for (ReciboCajaMedioPago mp : recibo.getMediosPago()) {
+                        String sigla = mp.getMetodoPago().getSigla() != null
+                                ? mp.getMetodoPago().getSigla().toUpperCase() : "";
+                        if (sigla.startsWith("EF")) {
+                            montoEfectivo = montoEfectivo.add(mp.getMonto());
+                        } else {
+                            montoElectronico = montoElectronico.add(mp.getMonto());
+                        }
+                    }
+                }
+
                 detalleCajeroService.registrarMovimiento(
-                        sesion.getDetalleCajeroId(),
+                        detalleCajeroId,
                         MovimientoCajero.TipoMovimiento.RECIBO_CAJA,
                         "RC-" + recibo.getConsecutivo(),
                         recibo.getId(),
                         recibo.getTotal(),
                         BigDecimal.ZERO,
-                        recibo.getTotal(),
-                        BigDecimal.ZERO,
-                        "Recibo Caja #" + recibo.getConsecutivo() + " - " + recibo.getTerceroNombre()
+                        montoEfectivo,
+                        montoElectronico,
+                        "Recibo Caja #" + recibo.getConsecutivo() + " - " +
+                                (recibo.getTerceroNombre() != null ? recibo.getTerceroNombre() : recibo.getConcepto())
                 );
             }
         } catch (Exception e) {
             System.out.println("Error registrando movimiento cajero recibo: " + e.getMessage());
         }
+    }
+
+    /**
+     * Busca el detalleCajeroId de la sesión abierta para el cajero dado.
+     * Primero intenta por Redis (sesión autenticada), luego busca en BD.
+     */
+    private Long obtenerDetalleCajeroId(Integer cajeroId) {
+        // 1. Intentar obtener desde la sesión Redis
+        try {
+            DatosSesiones sesion = obtenerSesionActiva();
+            if (sesion != null && sesion.getDetalleCajeroId() != null) {
+                return sesion.getDetalleCajeroId();
+            }
+        } catch (Exception e) {
+            // Ignorar, se intentará por BD
+        }
+
+        // 2. Buscar sesión abierta del cajero directamente en BD
+        if (cajeroId != null) {
+            var sesionesAbiertas = detalleCajeroService.buscarSesionesAbiertas(cajeroId);
+            if (!sesionesAbiertas.isEmpty()) {
+                return sesionesAbiertas.get(0).getDetalleCajeroId();
+            }
+        }
+
+        return null;
     }
 
     private DatosSesiones obtenerSesionActiva() {
@@ -157,7 +257,7 @@ public class ReciboCajaService {
 
     @Transactional(readOnly = true)
     public List<ReciboCajaResponseDTO> listarTodos() {
-        return reciboRepository.findAll().stream().map(this::toResponse).collect(Collectors.toList());
+        return reciboRepository.findAllByOrderByFechaCreacionDesc().stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -171,22 +271,42 @@ public class ReciboCajaService {
         ReciboCajaResponseDTO dto = new ReciboCajaResponseDTO();
         dto.setId(r.getId());
         dto.setConsecutivo(r.getConsecutivo());
-        dto.setTerceroId(r.getTercero().getTerceroId());
+        dto.setTerceroId(r.getTercero() != null ? r.getTercero().getTerceroId() : null);
         dto.setTerceroNombre(r.getTerceroNombre());
         dto.setTerceroNit(r.getTerceroNit());
         dto.setFecha(r.getFecha());
+        dto.setFechaRecibo(r.getFechaRecibo());
         dto.setSubtotal(r.getSubtotal());
         dto.setRetefuente(r.getRetefuente());
         dto.setReteica(r.getReteica());
         dto.setReteiva(r.getReteiva());
         dto.setDescuento(r.getDescuento());
+        dto.setAverias(r.getAverias());
+        dto.setFletes(r.getFletes());
         dto.setTotal(r.getTotal());
-        dto.setMetodoPagoId(r.getMetodoPago() != null ? r.getMetodoPago().getMetodo_pago_id() : null);
-        dto.setMetodoPagoDescripcion(r.getMetodoPago() != null ? r.getMetodoPago().getDescripcion() : null);
         dto.setConcepto(r.getConcepto());
         dto.setCentroCosto(r.getCentroCosto());
         dto.setEstado(r.getEstado());
+        dto.setConceptoAbierto(r.getConceptoAbierto());
+        dto.setMontoConceptoAbierto(r.getMontoConceptoAbierto());
         dto.setFechaCreacion(r.getFechaCreacion());
+
+        // Mapear medios de pago
+        if (r.getMediosPago() != null) {
+            dto.setMediosPago(r.getMediosPago().stream().map(mp -> {
+                ReciboCajaResponseDTO.MedioPagoResponseDTO mpDto = new ReciboCajaResponseDTO.MedioPagoResponseDTO();
+                mpDto.setId(mp.getId());
+                mpDto.setMetodoPagoId(mp.getMetodoPago().getMetodo_pago_id());
+                mpDto.setMetodoPagoDescripcion(mp.getMetodoPago().getDescripcion());
+                mpDto.setMonto(mp.getMonto());
+                return mpDto;
+            }).collect(Collectors.toList()));
+
+            // Campo concatenado para la tabla del historial
+            dto.setMetodoPago(r.getMediosPago().stream()
+                    .map(mp -> mp.getMetodoPago().getDescripcion())
+                    .collect(Collectors.joining(", ")));
+        }
 
         if (r.getDetalles() != null) {
             dto.setDetalles(r.getDetalles().stream().map(d -> {
@@ -204,5 +324,4 @@ public class ReciboCajaService {
         return dto;
     }
 }
-
 

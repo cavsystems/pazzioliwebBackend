@@ -42,6 +42,12 @@ public class ReciboCajaController {
         return ResponseEntity.ok(service.listarTodos());
     }
 
+    /** Lista todos los recibos de caja (alias para el frontend) */
+    @GetMapping("/listar")
+    public ResponseEntity<List<ReciboCajaResponseDTO>> listarAlias() {
+        return ResponseEntity.ok(service.listarTodos());
+    }
+
     /** Busca un recibo por ID */
     @GetMapping("/{id}")
     public ResponseEntity<?> buscarPorId(@PathVariable Long id) {

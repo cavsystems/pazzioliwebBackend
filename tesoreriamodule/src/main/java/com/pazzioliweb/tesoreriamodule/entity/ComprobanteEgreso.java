@@ -1,7 +1,6 @@
 package com.pazzioliweb.tesoreriamodule.entity;
 
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
-import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -16,8 +15,8 @@ import java.util.List;
 @Data
 @Entity
 @Table(name = "comprobantes_egreso")
-@EqualsAndHashCode(exclude = {"detalles"})
-@ToString(exclude = {"detalles"})
+@EqualsAndHashCode(exclude = {"detalles", "mediosPago"})
+@ToString(exclude = {"detalles", "mediosPago"})
 public class ComprobanteEgreso {
 
     @Id
@@ -28,7 +27,7 @@ public class ComprobanteEgreso {
     private Integer consecutivo;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tercero_id", nullable = false)
+    @JoinColumn(name = "tercero_id")
     private Terceros tercero;
 
     @Column(name = "tercero_nombre")
@@ -37,8 +36,17 @@ public class ComprobanteEgreso {
     @Column(name = "tercero_nit")
     private String terceroNit;
 
+    @Column(name = "concepto_abierto", nullable = false)
+    private Boolean conceptoAbierto = false;
+
+    @Column(name = "monto_concepto_abierto", precision = 18, scale = 2)
+    private BigDecimal montoConceptoAbierto;
+
     @Column(nullable = false)
     private LocalDate fecha;
+
+    @Column(name = "fecha_egreso")
+    private LocalDate fechaEgreso;
 
     @Column(precision = 15, scale = 2)
     private BigDecimal subtotal = BigDecimal.ZERO;
@@ -58,10 +66,7 @@ public class ComprobanteEgreso {
     @Column(precision = 15, scale = 2)
     private BigDecimal total = BigDecimal.ZERO;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "metodo_pago_id")
-    private MetodosPago metodoPago;
-
+    @Column(columnDefinition = "TEXT")
     private String concepto;
 
     @Column(name = "centro_costo")
@@ -81,5 +86,7 @@ public class ComprobanteEgreso {
 
     @OneToMany(mappedBy = "comprobanteEgreso", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleComprobanteEgreso> detalles = new ArrayList<>();
-}
 
+    @OneToMany(mappedBy = "comprobanteEgreso", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ComprobanteEgresoMedioPago> mediosPago = new ArrayList<>();
+}

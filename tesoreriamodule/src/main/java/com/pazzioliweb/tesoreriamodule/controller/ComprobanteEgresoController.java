@@ -42,6 +42,12 @@ public class ComprobanteEgresoController {
         return ResponseEntity.ok(service.listarTodos());
     }
 
+    /** Lista todos los comprobantes de egreso (alias para el frontend) */
+    @GetMapping("/listar")
+    public ResponseEntity<List<ComprobanteEgresoResponseDTO>> listarAlias() {
+        return ResponseEntity.ok(service.listarTodos());
+    }
+
     /** Busca un comprobante por ID */
     @GetMapping("/{id}")
     public ResponseEntity<?> buscarPorId(@PathVariable Long id) {
