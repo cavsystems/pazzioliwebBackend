@@ -286,7 +286,7 @@ public class FacturacionElectronicaService {
         factura.setTotalFactura(venta.getTotalVenta() != null ? venta.getTotalVenta().doubleValue() : 0.00);
         factura.setSaldo(0.00); // Contado = saldo 0
 
-        // Cajero (caja_id referencia cajeros)
+        // caja_id en facturas referencia cajeros.cajero_id
         if (venta.getCajero() != null) {
             factura.setCajaId(venta.getCajero().getCajeroId());
         } else if (request.getCajaId() != null) {

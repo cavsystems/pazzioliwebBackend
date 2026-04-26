@@ -36,7 +36,7 @@ public class VentaCompletadaListener {
             GenerarFacturaRequestDTO request = new GenerarFacturaRequestDTO();
             request.setVentaId(event.getVentaId());
             request.setComprobanteId(1); // Comprobante tipo Factura de Venta
-            request.setCajaId(event.getCajeroId());
+            request.setCajaId(event.getCajeroId()); // caja_id ahora referencia cajeros.cajero_id
 
             FacturaElectronicaResponseDTO response = facturacionService.generarDesdeVenta(request);
 

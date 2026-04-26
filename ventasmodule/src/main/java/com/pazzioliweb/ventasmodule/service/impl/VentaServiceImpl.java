@@ -354,61 +354,59 @@ public class VentaServiceImpl implements VentaService {
 
         // ✅ Registrar movimiento en cajero y generar CxC si hay crédito
         DatosSesiones sesionComp = obtenerSesionActiva();
-        if (sesionComp != null && sesionComp.getDetalleCajeroId() != null) {
-            try {
-                BigDecimal montoEfectivo = BigDecimal.ZERO;
-                BigDecimal montoElectronico = BigDecimal.ZERO;
-                BigDecimal montoCredito = BigDecimal.ZERO;
-                int plazoDiasCredito = 30;
+        if (sesionComp == null || sesionComp.getDetalleCajeroId() == null) {
+            throw new VentaException("No se puede completar la venta: no hay sesión de cajero activa. Inicie sesión nuevamente.");
+        }
 
-                for (VentaMetodoPago vmp : ventaGuardada.getMetodosPago()) {
-                    MetodosPago mp = vmp.getMetodoPago();
-                    if (mp.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) {
-                        montoCredito = montoCredito.add(vmp.getMonto());
-                        if (vmp.getPlazoEnDias() != null && vmp.getPlazoEnDias() > 0) {
-                            plazoDiasCredito = vmp.getPlazoEnDias();
-                        }
-                    } else {
-                        String sigla = mp.getSigla().toUpperCase();
-                        if (sigla.startsWith("EF")) {
-                            montoEfectivo = montoEfectivo.add(vmp.getMonto());
-                        } else {
-                            montoElectronico = montoElectronico.add(vmp.getMonto());
-                        }
-                    }
+        BigDecimal montoEfectivo = BigDecimal.ZERO;
+        BigDecimal montoElectronico = BigDecimal.ZERO;
+        BigDecimal montoCredito = BigDecimal.ZERO;
+        int plazoDiasCredito = 30;
+
+        for (VentaMetodoPago vmp : ventaGuardada.getMetodosPago()) {
+            MetodosPago mp = vmp.getMetodoPago();
+            if (mp.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) {
+                montoCredito = montoCredito.add(vmp.getMonto());
+                if (vmp.getPlazoEnDias() != null && vmp.getPlazoEnDias() > 0) {
+                    plazoDiasCredito = vmp.getPlazoEnDias();
                 }
-
-                detalleCajeroService.registrarMovimiento(
-                        sesionComp.getDetalleCajeroId(),
-                        MovimientoCajero.TipoMovimiento.VENTA,
-                        ventaGuardada.getNumeroVenta(),
-                        ventaGuardada.getId(),
-                        ventaGuardada.getTotalVenta(),
-                        ventaGuardada.getGravada(),
-                        montoEfectivo,
-                        montoElectronico,
-                        "Venta " + ventaGuardada.getNumeroVenta()
-                );
-
-                if (montoCredito.compareTo(BigDecimal.ZERO) > 0) {
-                    detalleCajeroService.registrarMovimiento(
-                            sesionComp.getDetalleCajeroId(),
-                            MovimientoCajero.TipoMovimiento.CUENTA_POR_COBRAR,
-                            ventaGuardada.getNumeroVenta(),
-                            ventaGuardada.getId(),
-                            montoCredito,
-                            BigDecimal.ZERO,
-                            BigDecimal.ZERO,
-                            BigDecimal.ZERO,
-                            "CxC Venta " + ventaGuardada.getNumeroVenta()
-                    );
-
-                    Terceros cliente = ventaGuardada.getCliente();
-                    cuentaPorCobrarService.crearDesdeVenta(ventaGuardada, cliente, montoCredito, plazoDiasCredito);
+            } else {
+                String sigla = mp.getSigla().toUpperCase();
+                if (sigla.startsWith("EF")) {
+                    montoEfectivo = montoEfectivo.add(vmp.getMonto());
+                } else {
+                    montoElectronico = montoElectronico.add(vmp.getMonto());
                 }
-            } catch (Exception e) {
-                System.out.println("Error al registrar movimiento en cajero (completar): " + e.getMessage());
             }
+        }
+
+        detalleCajeroService.registrarMovimiento(
+                sesionComp.getDetalleCajeroId(),
+                MovimientoCajero.TipoMovimiento.VENTA,
+                ventaGuardada.getNumeroVenta(),
+                ventaGuardada.getId(),
+                ventaGuardada.getTotalVenta(),
+                ventaGuardada.getGravada(),
+                montoEfectivo,
+                montoElectronico,
+                "Venta " + ventaGuardada.getNumeroVenta()
+        );
+
+        if (montoCredito.compareTo(BigDecimal.ZERO) > 0) {
+            detalleCajeroService.registrarMovimiento(
+                    sesionComp.getDetalleCajeroId(),
+                    MovimientoCajero.TipoMovimiento.CUENTA_POR_COBRAR,
+                    ventaGuardada.getNumeroVenta(),
+                    ventaGuardada.getId(),
+                    montoCredito,
+                    BigDecimal.ZERO,
+                    BigDecimal.ZERO,
+                    BigDecimal.ZERO,
+                    "CxC Venta " + ventaGuardada.getNumeroVenta()
+            );
+
+            Terceros cliente = ventaGuardada.getCliente();
+            cuentaPorCobrarService.crearDesdeVenta(ventaGuardada, cliente, montoCredito, plazoDiasCredito);
         }
 
         // ✅ Publicar evento para que facturación electrónica genere la factura automáticamente
