@@ -144,6 +144,13 @@ public class Usuario {
 	@Column()
     private LocalDate fechamodificado;
 
+    @Lob
+    @Column(name = "avatar", columnDefinition = "LONGBLOB")
+    private byte[] avatar;
+
+    @Column(name = "avatar_tipo", length = 100)
+    private String avatarTipo;
+
 
     // Se ejecuta automáticamente antes de insertar en BD
     @PrePersist

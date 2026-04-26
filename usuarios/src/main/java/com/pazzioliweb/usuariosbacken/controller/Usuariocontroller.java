@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.pazzioliweb.commonbacken.util.PasswordUtils;
@@ -489,6 +490,42 @@ public class Usuariocontroller {
 			response.put("mensaje", "Este usuario no puede ser eliminado, tiene movimientos asociados");
 			return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
 		}
+	}
+
+	// ════════════════════════════════════════════════
+	// AVATAR DE USUARIO
+	// ════════════════════════════════════════════════
+
+	@PostMapping("/avatar/{idusuario}")
+	@Transactional
+	public ResponseEntity<Map<String, Object>> subirAvatar(
+			@PathVariable Integer idusuario,
+			@RequestParam("avatar") MultipartFile avatar) {
+		Map<String, Object> response = new HashMap<>();
+		try {
+			Usuario u = usurepo.findByCodigo(idusuario)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+			u.setAvatar(avatar.getBytes());
+			u.setAvatarTipo(avatar.getContentType());
+			usurepo.save(u);
+			response.put("mensaje", "Avatar actualizado correctamente");
+			return ResponseEntity.ok(response);
+		} catch (IOException e) {
+			response.put("mensaje", "Error al procesar la imagen");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+		}
+	}
+
+	@GetMapping("/avatar/{idusuario}")
+	public ResponseEntity<byte[]> obtenerAvatar(@PathVariable Integer idusuario) {
+		Usuario u = usurepo.findByCodigo(idusuario)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+		if (u.getAvatar() == null) {
+			return ResponseEntity.noContent().build();
+		}
+		return ResponseEntity.ok()
+				.contentType(MediaType.parseMediaType(u.getAvatarTipo()))
+				.body(u.getAvatar());
 	}
 }
 
