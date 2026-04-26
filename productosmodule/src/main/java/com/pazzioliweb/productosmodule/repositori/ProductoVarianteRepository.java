@@ -154,7 +154,7 @@ FROM (
 		            g.descripcion AS grupo,
 		            p.fecha_ultima_compra AS fechaUltimaCompra,
 		            p.fecha_ultima_venta AS fechaUltimaVenta,
-		            pv.imagen AS imagen,
+		            COALESCE(pv.imagen, p.imagen) AS imagen,
 		            pv.codigo_barras AS codigobarrasvariante
 		        FROM producto_variantes pv
 		        JOIN productos p ON p.producto_id = pv.producto_id
@@ -216,7 +216,7 @@ FROM (
         COALESCE(i.tarifa, 0) AS tarifa,
         p.fecha_ultima_compra AS fechaUltimaCompra,
         p.fecha_ultima_venta AS fechaUltimaVenta,
-        p.imagen AS imagen
+        COALESCE(pv.imagen, p.imagen) AS imagen
     FROM producto_variantes pv
     JOIN productos p ON p.producto_id = pv.producto_id
     LEFT JOIN impuestos i ON i.codigo = p.impuesto_id
@@ -294,7 +294,7 @@ AND t.bodegaid = :bodega
 		            g.descripcion AS grupo,
 		            p.fecha_ultima_compra AS fechaUltimaCompra,
 		            p.fecha_ultima_venta AS fechaUltimaVenta,
-		            p.imagen AS imagen
+		            COALESCE(pv.imagen, p.imagen) AS imagen
 		        FROM producto_variantes pv
 		        JOIN productos p ON p.producto_id = pv.producto_id
 		        JOIN impuestos pi ON pi.codigo=p.impuesto_id
