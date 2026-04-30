@@ -3,6 +3,8 @@ package com.pazzioliweb.productosmodule.service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -65,14 +67,33 @@ public class ProductoVarianteDetalleServiceImpl implements ProductoVarianteDetal
                 throw new EntityNotFoundException("Una o más características no existen");
             }
 
-            List<ProductoVarianteDetalle> entidades = caracteristicas.stream()
+          /*  List<ProductoVarianteDetalle> entidades = caracteristicas.stream()
+                    .map(c -> mapper.fromCreateDto(variante, c))
+
+                    .toList();*/
+/*
+verifico primero que la relacoin variante - caracteristica no exista
+ */
+            List<ProductoVarianteDetalle> existentes =
+                    detalleRepository.findByProductoVarianteAndCaracteristicaIn(variante, caracteristicas);
+
+            Set<Long> existentesIds = existentes.stream()
+                    .map(e -> e.getCaracteristica().getCaracteristicaId())
+                    .collect(Collectors.toSet());
+/*
+filtro las caracteristicas que no existen
+ */
+            List<ProductoVarianteDetalle> nuevas = caracteristicas.stream()
+                    .filter(c -> !existentesIds.contains(c.getCaracteristicaId()))
                     .map(c -> mapper.fromCreateDto(variante, c))
                     .toList();
 
-            entidades = detalleRepository.saveAll(entidades);
+
+
+            nuevas = detalleRepository.saveAll(nuevas);
 
             // Convertir CADA entidad, no la lista completa
-            entidades.forEach(e ->
+         nuevas.forEach(e ->
                     respuestas.add(mapper.toResponseDto(e))
             );
         }

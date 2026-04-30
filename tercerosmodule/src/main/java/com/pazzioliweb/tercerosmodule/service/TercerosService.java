@@ -12,6 +12,7 @@ import com.pazzioliweb.empresasback.entity.Empresa;
 import com.pazzioliweb.empresasback.entity.Empresas;
 import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
 import com.pazzioliweb.empresasback.repositori.EmpresaRepository;
+import com.pazzioliweb.tercerosmodule.dtos.*;
 import com.pazzioliweb.tercerosmodule.repositori.ContactoTerceroRepository;
 import com.pazzioliweb.tercerosmodule.repositori.TipocontactoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,14 +30,6 @@ import com.pazzioliweb.commonbacken.entity.Retenciones;
 import com.pazzioliweb.commonbacken.entity.Tipoidentificacion;
 import com.pazzioliweb.empresasback.entity.Regimen;
 import com.pazzioliweb.productosmodule.entity.Precios;
-import com.pazzioliweb.tercerosmodule.dtos.ContactoTerceroDTOImpl;
-import com.pazzioliweb.tercerosmodule.dtos.SedeTerceroDTO;
-import com.pazzioliweb.tercerosmodule.dtos.SedeTerceroDTOImpl;
-import com.pazzioliweb.tercerosmodule.dtos.TerceroDTO;
-import com.pazzioliweb.tercerosmodule.dtos.TerceroDTOImpl;
-import com.pazzioliweb.tercerosmodule.dtos.TerceroDtoresponse;
-import com.pazzioliweb.tercerosmodule.dtos.TerceroResumenDTO;
-import com.pazzioliweb.tercerosmodule.dtos.TerceroimplemenDTO;
 import com.pazzioliweb.tercerosmodule.entity.ClasificacionTercero;
 import com.pazzioliweb.tercerosmodule.entity.ContactoTercero;
 import com.pazzioliweb.tercerosmodule.entity.SedeTercero;
@@ -483,6 +476,33 @@ public class TercerosService {
 
         // Guardar cambios
         Terceros actualizado = terceroRepository.save(tercero);
+
+        List<ContactoTerceroDTO> conc = dto.getContactos()
+                .stream()
+                .filter(item -> {
+                   if(item.getEsPrincipal()) {
+                       ContactoTercero conter;
+                       switch (item.getTipoContacto().getNombre().toUpperCase()){
+                           case "CELULAR":
+                           conter=entityManager.getReference(ContactoTercero.class,item.getContactoId());
+                               conter.setValorContacto(dto.getCelular());
+                               break;
+                           case "CORREO":
+                               conter=entityManager.getReference(ContactoTercero.class,item.getContactoId());
+                               conter.setValorContacto(dto.getCorreo());
+                               break;
+                           case "TELEFONO":
+                               conter=entityManager.getReference(ContactoTercero.class,item.getContactoId());
+                               conter.setValorContacto(dto.getTelefono());
+                               break;
+
+                       }
+
+                   }
+                   return item.getEsPrincipal();
+                }) // o item.getIsPrincipal()
+                .collect(Collectors.toList());
+
 
         return TerceroDTOImpl.fromEntity(actualizado);
     }

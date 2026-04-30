@@ -20,6 +20,10 @@ public class DetalleOrdenCompra {
     @Column(name = "codigo_producto", nullable = false)
     private String codigoProducto;
 
+
+
+    @Column(name = "sku", nullable = false)
+    private String sku;
     @Column(name = "codigo_barras", nullable = false)
     private String codigoBarras;
 
@@ -37,6 +41,8 @@ public class DetalleOrdenCompra {
 
     @Column(name = "precio_unitario", nullable = false)
     private BigDecimal precioUnitario;
+
+
 
     @Column(nullable = false)
     private BigDecimal descuento = BigDecimal.ZERO;

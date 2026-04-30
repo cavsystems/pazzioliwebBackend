@@ -7,15 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.pazzioliweb.tercerosmodule.dtos.TerceroDTO;
 import com.pazzioliweb.tercerosmodule.dtos.TerceroDTOImpl;
@@ -159,6 +151,13 @@ public class TercerosController {
     @PostMapping("/crear")
     public ResponseEntity<TerceroDTOImpl> crear(@RequestBody TerceroDTOImpl terceroDTO) {
         return ResponseEntity.ok(terceroService.guardar(terceroDTO));
+    }
+
+
+    @PutMapping("/actualizar/{TerceroId}")
+    public ResponseEntity<TerceroDTOImpl> Actulizartercero(@PathVariable Integer TerceroId , @RequestBody TerceroDTOImpl terceroDTO) {
+        return ResponseEntity.ok(terceroService.actualizar(TerceroId,terceroDTO));
+
     }
 
     @DeleteMapping("/{id}")

@@ -212,6 +212,7 @@ public class ProductoMasterService {
                 if (master.getDetalles() != null) {
                     for (ProductoVarianteDetalleCreateDTO d : master.getDetalles()) {
                         d.setProductoVarianteId(varianteId);
+
                     }
                    
                     detalleService.crear(master.getDetalles());

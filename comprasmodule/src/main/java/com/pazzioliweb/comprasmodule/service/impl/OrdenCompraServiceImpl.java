@@ -382,6 +382,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                     BigDecimal subtotalConDescuento = subtotal.subtract(detalle.getDescuento());
                     BigDecimal ivaAmount = subtotalConDescuento.multiply(detalle.getIva()).divide(BigDecimal.valueOf(100));
                     detalle.setTotal(subtotalConDescuento.add(ivaAmount));
+                    detalle.setSku(variante.getSku());
                     detalle.setRecibido(false);
                     detalle.setCantidadRecibida(0);
                     detalles.add(detalle);
@@ -393,6 +394,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 detalle.setCodigoBarras(product.getCodigobarras());
                 detalle.setDescripcionProducto(product.getDescripcion());
                 detalle.setObservacionProducto("");
+             //  detalle.setSku(product.set);
                 detalle.setReferenciaVariantes(product.getReferencia());
                 detalle.setCantidad(0);
                 detalle.setPrecioUnitario(product.getCosto());

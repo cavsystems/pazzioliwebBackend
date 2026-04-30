@@ -2,6 +2,7 @@ package com.pazzioliweb.movimientosinventariomodule.service;
 
 import java.time.LocalDate;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -15,7 +16,8 @@ public interface MovimientoInventarioService {
 	MovimientoInventarioResponseDto crearMovimiento(
             MovimientoInventarioCreateDto createDto,
             Comprobantes comprobante,
-            Usuario usuario);
+            Usuario usuario,
+            HttpServletRequest request);
 
     MovimientoInventarioResponseDto actualizarMovimiento(
             Long movimientoId, 

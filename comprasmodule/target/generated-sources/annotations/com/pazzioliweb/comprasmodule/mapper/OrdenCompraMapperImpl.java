@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-04-26T14:59:05-0500",
-    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.2 (Oracle Corporation)"
+    date = "2026-04-27T17:48:15-0500",
+    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
 )
 @Component
 public class OrdenCompraMapperImpl implements OrdenCompraMapper {
@@ -96,6 +96,7 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
         detalleOrdenCompraDTO.setPrecioUnitario( detalle.getPrecioUnitario() );
         detalleOrdenCompraDTO.setDescuento( detalle.getDescuento() );
         detalleOrdenCompraDTO.setIvaPorcentaje( detalle.getIva() );
+        detalleOrdenCompraDTO.setSku( detalle.getSku() );
         detalleOrdenCompraDTO.setTotal( detalle.getTotal() );
         detalleOrdenCompraDTO.setRecibido( detalle.isRecibido() );
         detalleOrdenCompraDTO.setCantidadRecibida( detalle.getCantidadRecibida() );
@@ -114,6 +115,7 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
 
         detalleOrdenCompra.setId( detalleDTO.getId() );
         detalleOrdenCompra.setCodigoProducto( detalleDTO.getCodigoProducto() );
+        detalleOrdenCompra.setSku( detalleDTO.getSku() );
         detalleOrdenCompra.setCodigoBarras( detalleDTO.getCodigoBarras() );
         detalleOrdenCompra.setDescripcionProducto( detalleDTO.getDescripcionProducto() );
         detalleOrdenCompra.setReferenciaVariantes( detalleDTO.getReferenciaVariantes() );

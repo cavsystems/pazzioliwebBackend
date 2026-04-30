@@ -54,6 +54,7 @@ public interface OrdenCompraMapper {
     @Mapping(target = "precioUnitario", source = "precioUnitario")
     @Mapping(target = "descuento", source = "descuento")
     @Mapping(target = "ivaPorcentaje", source = "iva")
+    @Mapping(target = "sku", source = "sku")
     @Mapping(target = "subtotal", ignore = true)
     @Mapping(target = "total", source = "total")
     @Mapping(target = "recibido", source = "recibido")
@@ -63,6 +64,7 @@ public interface OrdenCompraMapper {
 
     @Mapping(target = "id", source = "id")
     @Mapping(target = "codigoProducto", source = "codigoProducto")
+    @Mapping(target = "sku", source = "sku")
     @Mapping(target = "codigoBarras", source = "codigoBarras")
     @Mapping(target = "descripcionProducto", source = "descripcionProducto")
     @Mapping(target = "referenciaVariantes", source = "referenciaVariantes")

@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -245,6 +246,33 @@ return  null;
         }
     }
 
+    //__________________________________________________________________________________
+    //verificar seccion activa
+    //________________________________________________________________________________
+    @GetMapping("verificar")
+    public ResponseEntity<Boolean> Verificar(HttpServletRequest request){
+        if (request.getCookies() != null) {
+            String token=null;
+            for (Cookie cookie : request.getCookies()) {
+                if ("token".equals(cookie.getName())) {
+                    token = cookie.getValue();
+                    break;
+
+                }
+
+            }
+
+            if(token == null){
+                return  ResponseEntity.ok(false);
+            }else {
+              return   ResponseEntity.ok(jwtUtil.validarToken(token));
+
+            }
+        }else {
+            return  ResponseEntity.ok(false);
+        }
+
+    }
     // ──────────────────────────────────────────────────────────────────────────
     // /logout  →  cierra sesión de caja (si es cajero) y elimina sesión Redis
     // ──────────────────────────────────────────────────────────────────────────

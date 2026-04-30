@@ -1,17 +1,17 @@
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\ReciboCajaResponseDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ComprobanteEgreso.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ReciboCajaMedioPago.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\repository\ComprobanteEgresoRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\repository\ReciboCajaMedioPagoRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ReciboCaja.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\ComprobanteEgresoResponseDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\CrearComprobanteEgresoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\DetalleComprobanteEgreso.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\DetalleReciboCaja.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\service\ReciboCajaService.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ComprobanteEgresoMedioPago.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\service\ComprobanteEgresoService.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\CrearReciboCajaDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\controller\ReciboCajaController.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\repository\ReciboCajaRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\controller\ComprobanteEgresoController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\ComprobanteEgresoResponseDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ReciboCajaMedioPago.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ComprobanteEgresoMedioPago.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\service\ComprobanteEgresoService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\controller\ComprobanteEgresoController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\DetalleComprobanteEgreso.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\controller\ReciboCajaController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\ReciboCajaResponseDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\repository\ReciboCajaRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ComprobanteEgreso.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\DetalleReciboCaja.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ReciboCaja.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\CrearReciboCajaDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\repository\ComprobanteEgresoRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\repository\ReciboCajaMedioPagoRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\service\ReciboCajaService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\CrearComprobanteEgresoDTO.java

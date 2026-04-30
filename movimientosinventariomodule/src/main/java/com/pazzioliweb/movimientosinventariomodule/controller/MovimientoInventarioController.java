@@ -3,6 +3,7 @@ package com.pazzioliweb.movimientosinventariomodule.controller;
 import java.time.LocalDate;
 import java.util.Map;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -41,9 +42,9 @@ public class MovimientoInventarioController {
      * cantidad, costoUnitario).
      */
     @PostMapping
-    public ResponseEntity<?> crearMovimiento(@Valid @RequestBody MovimientoInventarioCreateDto createDto) {
+    public ResponseEntity<?> crearMovimiento(@Valid @RequestBody MovimientoInventarioCreateDto createDto, HttpServletRequest request) {
         try {
-            MovimientoInventarioResponseDto response = movimientoService.crearMovimiento(createDto, null, null);
+            MovimientoInventarioResponseDto response = movimientoService.crearMovimiento(createDto, null, null, request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (jakarta.persistence.EntityNotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

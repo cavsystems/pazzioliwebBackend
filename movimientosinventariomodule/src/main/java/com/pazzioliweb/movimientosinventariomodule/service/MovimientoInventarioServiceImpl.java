@@ -1,13 +1,23 @@
 package com.pazzioliweb.movimientosinventariomodule.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
+import com.pazzioliweb.commonbacken.util.Jwcommon;
+import io.jsonwebtoken.Claims;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,13 +71,19 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
 
     @Autowired
     private UsuarioRepository usuarioRepository;
-
+    @Autowired
+    private RedisTemplate<String, DatosSesiones> redisTemplate;
+    @Autowired
+    private Jwcommon jwcommon;
+    @PersistenceContext
+    private EntityManager entityManager;
     @Override
     @Transactional
     public MovimientoInventarioResponseDto crearMovimiento(
             MovimientoInventarioCreateDto createDto,
             Comprobantes comprobante,
-            Usuario usuario) {
+            Usuario usuario,
+            HttpServletRequest request) {
 
         // Resolver comprobante desde ID si no viene pasado
         if (comprobante == null && createDto.getComprobanteId() != null) {
@@ -77,7 +93,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
 
         // Resolver usuario desde ID si no viene pasado
         if (usuario == null && createDto.getUsuarioId() != null) {
-            usuario = usuarioRepository.findById(createDto.getUsuarioId().intValue())
+            usuario = usuarioRepository.findByCodigo(createDto.getUsuarioId().intValue())
                     .orElse(null);
         }
 
@@ -96,6 +112,33 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         if (movimiento.getEstado() == null) {
             movimiento.setEstado(EstadoMovimiento.ACTIVO);
         }
+        try {
+            String token=null;
+            if (request.getCookies() != null) {
+
+                for (Cookie cookie : request.getCookies()) {
+                    if ("token".equals(cookie.getName())) {
+                        System.out.println("Cookie token: " + cookie.getValue());
+                        token = cookie.getValue();
+                        Claims claims = jwcommon.extraerClaims( token);
+                        DatosSesiones datos = redisTemplate.opsForValue().get( claims.get("idsecion",String.class));
+                        usuario = entityManager.getReference(Usuario.class, datos.getIdusuario());
+                        movimiento.setUsuario(usuario);
+
+                        break;
+
+                    }
+
+                }
+
+
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
+
         movimientoRepository.save(movimiento);
 
         TipoMovimiento tipo = movimiento.getTipo();

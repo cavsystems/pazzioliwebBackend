@@ -11,6 +11,7 @@ public class DetalleOrdenCompraDTO {
     private String codigoBarras;
     private String descripcionProducto;
     private String referenciaVariantes;
+
     private Integer cantidad;
     private BigDecimal precioUnitario;
     private BigDecimal descuento;
@@ -20,4 +21,5 @@ public class DetalleOrdenCompraDTO {
     private boolean recibido;
     private Integer cantidadRecibida;
     private String manifiesto;
+    private String sku;
 }

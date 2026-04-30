@@ -17,9 +17,30 @@ public class Usuario {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int codigo;
-   
 
 
+	public byte[] getAvatar() {
+		return avatar;
+	}
+
+	public void setAvatar(byte[] avatar) {
+		this.avatar = avatar;
+	}
+
+	@Lob
+	@Column(name = "avatar", columnDefinition = "LONGBLOB")
+	private byte[] avatar;
+
+	public String getAvatarTipo() {
+		return avatarTipo;
+	}
+
+	public void setAvatarTipo(String avatarTipo) {
+		this.avatarTipo = avatarTipo;
+	}
+
+	@Column(name = "avatar_tipo", length = 100)
+	private String avatarTipo;
 
 
 	@Column(nullable = false, length = 50)
@@ -144,13 +165,7 @@ public class Usuario {
 	@Column()
     private LocalDate fechamodificado;
 
-    @Lob
-    @Column(name = "avatar", columnDefinition = "LONGBLOB")
-    private byte[] avatar;
-
-    @Column(name = "avatar_tipo", length = 100)
-    private String avatarTipo;
-
+    
 
     // Se ejecuta automáticamente antes de insertar en BD
     @PrePersist
