@@ -1,5 +1,6 @@
 package com.pazzioliweb.empresaauth.service;
 
+import com.pazzioliweb.empresaback.dtos.EmpresaTenantProjection;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
@@ -51,9 +52,9 @@ public class EmpresaService {
 	  private JdbcTemplate jdbc;
 	  @Autowired
 	  private TenantService tenantService;
-	  @Autowired 
+	  @Autowired
 	  private TipopersonaRepository tipopersonarepositori;
-	  @Autowired 
+	  @Autowired
 	  private TipoidentificacionRepository  tipoidentificacionrepositori;
 	  @Autowired
 	  private ActividadeconomicaRepositori actividadeconomicarepositorio;
@@ -71,7 +72,7 @@ public class EmpresaService {
 	  private Nombredb nombredb;
 	  @Autowired
 	  private BodegasRepository repotoribodega;
-	 
+
 	  @Autowired
 	  private Insertarregistrosjoin insertjoi;
 	  private Datosempresa datosempresa=new Datosempresa();
@@ -79,7 +80,7 @@ public class EmpresaService {
 	  private  TenantRegister register;
 	  @Autowired
 	  private EmpresaRepositori emprerepo;
-	
+
 	@PersistenceContext
     private EntityManager em;
 
@@ -89,7 +90,14 @@ public class EmpresaService {
 	             .setParameter("cc", cc)
 	             .getResultList();
 	}
-	
+
+	public List<EmpresaTenantProjection> listartodoslossquemas() {
+		return em.createNativeQuery("CALL sp_listar_empresas_todos_tenants()", "EmpresaResponseMapping")
+
+				.getResultList();
+	}
+
+
 	
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void crearempresa(Empresaresponse empre,String db, MultipartFile archivo) throws Exception{

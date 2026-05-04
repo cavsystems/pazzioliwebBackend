@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.pazzioliweb.empresaback.dtos.EmpresaTenantProjection;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -166,7 +167,10 @@ public class Empresacontroller {
 		   return ResponseEntity.status(HttpStatus.CREATED).body(response);
 		 	 }
 	 
-	 
+
+
+
+
 	 	 @RequestMapping("/traerinformacionem")
 	 	 public ResponseEntity<Map<String, Object>> traerempresainfo() {
 	 		 List<Empresa>  empresas=repoempresa.findAll();
@@ -175,7 +179,13 @@ public class Empresacontroller {
 	 		 return ResponseEntity.ok().body(response);
 	 		 
 	 	 }
-	 	 
+
+
+		  @RequestMapping("/todas")
+		  public List<EmpresaTenantProjection> traerempresas(){
+			  return serv.listartodoslossquemas();
+		  }
+
 	 @RequestMapping("/traerempresa")
 	 public ResponseEntity<Map<String, Object>> traerempresa() {
 		 
