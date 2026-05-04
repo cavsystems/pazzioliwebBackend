@@ -25,13 +25,16 @@ public class MetodosPagoService {
 	}
 	
 	public Page<MetodoPagoDTO> listar(int page, int size, String sortField, String sortDirection){
-		Sort sort = sortDirection.equalsIgnoreCase("asc")
-                ? Sort.by(sortField).descending()
-                : Sort.by(sortField).ascending();
+		// Si llega "id" (default genérico) lo mapeamos a la PK real para evitar fallos.
+		String campo = (sortField == null || sortField.isBlank() || "id".equals(sortField))
+				? "metodo_pago_id" : sortField;
+		Sort sort = sortDirection != null && sortDirection.equalsIgnoreCase("asc")
+                ? Sort.by(campo).ascending()
+                : Sort.by(campo).descending();
     	Pageable pageable = PageRequest.of(page, size, sort);
-    	
+
     	Page<MetodoPagoDTO> listadoMetodosPago = metodopagoRepository.listadoMetodosPagoDTO(pageable);
-    	
+
     	return listadoMetodosPago;
 	}
 	

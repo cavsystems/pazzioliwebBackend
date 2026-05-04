@@ -171,11 +171,32 @@ FROM (
 		                SUM(e.existencia) AS totalExistencia
 		            FROM existencias e
 		            GROUP BY e.producto_variantes_id
-		        ) ex ON ex.varianteId = pv.producto_variantes_id) t 
-		        WHERE LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%')) AND
- t.activo=:activo  ||   LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%')) || LOWER(t.codigobarrasvariante) LIKE LOWER(CONCAT('%', :productodes, '%'))
+		        ) ex ON ex.varianteId = pv.producto_variantes_id) t
+		        WHERE t.activo = :activo
+		          AND t.estado = 'ACTIVO'
+		          AND (
+		              LOWER(t.descripcion)            LIKE LOWER(CONCAT('%', :productodes, '%'))
+		           OR LOWER(t.codigobarras)           LIKE LOWER(CONCAT('%', :productodes, '%'))
+		           OR LOWER(t.codigobarrasvariante)   LIKE LOWER(CONCAT('%', :productodes, '%'))
+		           OR LOWER(t.referencia)             LIKE LOWER(CONCAT('%', :productodes, '%'))
+		           OR LOWER(t.codigoContable)         LIKE LOWER(CONCAT('%', :productodes, '%'))
+		          )
 		        """,
-			countQuery = "SELECT COUNT(*) FROM producto_variantes",
+			countQuery = """
+			    SELECT COUNT(*)
+			      FROM producto_variantes pv
+			      JOIN productos p ON p.producto_id = pv.producto_id
+			     WHERE pv.activo = :activo
+			       AND p.estado = 'ACTIVO'
+			       AND (
+			           LOWER(IF(pv.predeterminada=0, CONCAT(p.descripcion,' - ',pv.referencia_variantes), p.descripcion))
+			                                 LIKE LOWER(CONCAT('%', :productodes, '%'))
+			        OR LOWER(p.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			        OR LOWER(pv.codigo_barras)LIKE LOWER(CONCAT('%', :productodes, '%'))
+			        OR LOWER(p.referencia)    LIKE LOWER(CONCAT('%', :productodes, '%'))
+			        OR LOWER(p.codigo_contable) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			       )
+			    """,
 			nativeQuery = true
 	)
 	Page<ProductoInventarioDTO> listarInventario( @Param("activo") int activo,@Param("productodes") String desproduct,Pageable pageable);
@@ -192,6 +213,7 @@ FROM (
         pv.producto_variantes_id AS productoVarianteId,
         pv.activo AS activo,
         p.codigo_barras AS codigobarras,
+        pv.codigo_barras AS codigobarrasvariante,
         p.producto_id AS productoId,
         ex.bodegaid AS bodegaid,
         p.referencia,
@@ -208,7 +230,7 @@ FROM (
           p.descripcion
         ) AS descripcion,
         COALESCE(ex.totalExistencia, 0) AS cantidadGlobal,
-        0 AS totalGlobalInventario,
+        SUM(COALESCE(ex.totalExistencia * p.costo, 0)) OVER () AS totalGlobalInventario,
         p.costo AS costo,
         u.sigla AS unidadMedida,
         l.descripcion AS linea,
@@ -233,10 +255,11 @@ FROM (
     ) ex ON ex.varianteId = pv.producto_variantes_id
 ) t
 WHERE (
-    LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%'))
-    OR LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%'))
-    OR LOWER(t.codigoContable) LIKE LOWER(CONCAT('%', :productodes, '%'))
-    OR LOWER(t.referencia) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    LOWER(t.descripcion)         LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.codigobarras)         LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.codigobarrasvariante) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.codigoContable)       LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.referencia)           LIKE LOWER(CONCAT('%', :productodes, '%'))
 )
 AND t.estado = 'ACTIVO'
 AND t.activo = :activo
@@ -253,7 +276,8 @@ AND t.bodegaid = :bodega
 			          ) ex ON ex.varianteId = pv.producto_variantes_id
 			          WHERE (
 			              LOWER(IF(pv.predeterminada = 0, CONCAT(p.descripcion, '-', pv.referencia_variantes), p.descripcion)) LIKE LOWER(CONCAT('%', :productodes, '%'))
-			              OR LOWER(p.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(p.codigo_barras)  LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(pv.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
 			              OR LOWER(p.codigo_contable) LIKE LOWER(CONCAT('%', :productodes, '%'))
 			              OR LOWER(p.referencia) LIKE LOWER(CONCAT('%', :productodes, '%'))
 			          )

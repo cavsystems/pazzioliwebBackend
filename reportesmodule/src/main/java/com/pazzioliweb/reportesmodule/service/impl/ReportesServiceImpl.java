@@ -595,6 +595,58 @@ public class ReportesServiceImpl implements ReportesService {
     // TICKET PROMEDIO
     // ════════════════════════════════════════════════════════════
 
+    // ════════════════════════════════════════════════════════════
+    // CARTERA AGING
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<CarteraAgingDTO> getCarteraAging() {
+        List<Object[]> rows = repo.carteraAging();
+        BigDecimal granTotal = rows.stream()
+                .map(r -> toBigDecimal(r[3]))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<CarteraAgingDTO> result = new ArrayList<>();
+        for (Object[] r : rows) {
+            BigDecimal saldo = toBigDecimal(r[3]);
+            double pct = granTotal.compareTo(BigDecimal.ZERO) > 0
+                    ? saldo.multiply(BigDecimal.valueOf(100))
+                        .divide(granTotal, 2, RoundingMode.HALF_UP).doubleValue()
+                    : 0.0;
+            result.add(new CarteraAgingDTO(
+                    str(r[0]),
+                    toInt(r[1]),
+                    toLong(r[2]),
+                    saldo,
+                    pct
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PRODUCTOS SIN MOVIMIENTO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<ProductoSinMovimientoDTO> getProductosSinMovimiento(LocalDate inicio, LocalDate fin, int topN) {
+        List<ProductoSinMovimientoDTO> result = new ArrayList<>();
+        for (Object[] r : repo.productosSinMovimiento(inicio, fin, topN)) {
+            result.add(new ProductoSinMovimientoDTO(
+                    toInt(r[0]),
+                    str(r[1]),
+                    str(r[2]),
+                    str(r[3]),
+                    toBigDecimal(r[4]),
+                    toBigDecimal(r[5]),
+                    toBigDecimal(r[6]),
+                    toLocalDateTime(r[7]),
+                    toLocalDateTime(r[8]),
+                    r[9] != null ? toLong(r[9]) : null
+            ));
+        }
+        return result;
+    }
+
     @Override
     public List<TicketPromedioDTO> getTicketPromedio(LocalDate inicio, LocalDate fin, String agrupacion) {
         List<Object[]> rows = "vendedor".equalsIgnoreCase(agrupacion)

@@ -312,5 +312,27 @@ public class ReportesController {
         LocalDate[] r = defaults(inicio, fin);
         return ResponseEntity.ok(reportesService.getTicketPromedio(r[0], r[1], agrupacion));
     }
+
+    // ════════════════════════════════════════════════
+    // 23. CARTERA POR ANTIGÜEDAD (aging buckets)
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/cartera-aging")
+    public ResponseEntity<List<CarteraAgingDTO>> carteraAging() {
+        return ResponseEntity.ok(reportesService.getCarteraAging());
+    }
+
+    // ════════════════════════════════════════════════
+    // 24. PRODUCTOS SIN MOVIMIENTO (inventario inmovilizado)
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/productos-sin-movimiento")
+    public ResponseEntity<List<ProductoSinMovimientoDTO>> productosSinMovimiento(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
+            @RequestParam(defaultValue = "30") int topN) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getProductosSinMovimiento(r[0], r[1], topN));
+    }
 }
 
