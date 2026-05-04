@@ -3,6 +3,10 @@ package com.pazzioliweb.tesoreriamodule.service;
 import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
+import com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto;
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
+import com.pazzioliweb.comprobantesmodule.repositori.ConceptoAbiertoRepository;
+import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -33,6 +37,8 @@ public class ReciboCajaService {
     private final CuentaPorCobrarRepository cxcRepository;
     private final TercerosRepository tercerosRepository;
     private final MetodosPagoRepository metodosPagoRepository;
+    private final ConceptoAbiertoRepository conceptoAbiertoRepository;
+    private final CuentaContableRepository cuentaContableRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
 
@@ -40,12 +46,16 @@ public class ReciboCajaService {
                               CuentaPorCobrarRepository cxcRepository,
                               TercerosRepository tercerosRepository,
                               MetodosPagoRepository metodosPagoRepository,
+                              ConceptoAbiertoRepository conceptoAbiertoRepository,
+                              CuentaContableRepository cuentaContableRepository,
                               DetalleCajeroService detalleCajeroService,
                               RedisTemplate<String, DatosSesiones> redisTemplate) {
         this.reciboRepository = reciboRepository;
         this.cxcRepository = cxcRepository;
         this.tercerosRepository = tercerosRepository;
         this.metodosPagoRepository = metodosPagoRepository;
+        this.conceptoAbiertoRepository = conceptoAbiertoRepository;
+        this.cuentaContableRepository = cuentaContableRepository;
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
     }
@@ -72,11 +82,19 @@ public class ReciboCajaService {
         boolean esConceptoAbierto = Boolean.TRUE.equals(dto.getConceptoAbierto());
 
         if (esConceptoAbierto) {
-            if (dto.getConcepto() == null || dto.getConcepto().isBlank()) {
-                throw new RuntimeException("El concepto es obligatorio para concepto abierto");
+            if (dto.getConceptoAbiertoId() == null) {
+                throw new RuntimeException("Debe seleccionar un concepto abierto registrado");
             }
             if (dto.getMontoConceptoAbierto() == null || dto.getMontoConceptoAbierto().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new RuntimeException("El monto del concepto abierto debe ser mayor a 0");
+            }
+            // Trazabilidad obligatoria: o tercero, o nombre+documento del beneficiario
+            boolean tieneTercero = dto.getTerceroId() != null;
+            boolean tieneBeneficiario =
+                    dto.getBeneficiarioNombre() != null && !dto.getBeneficiarioNombre().isBlank()
+                    && dto.getBeneficiarioDocumento() != null && !dto.getBeneficiarioDocumento().isBlank();
+            if (!tieneTercero && !tieneBeneficiario) {
+                throw new RuntimeException("Para concepto abierto debe registrar el tercero o el nombre y documento del pagador");
             }
         } else {
             if (dto.getTerceroId() == null) {
@@ -102,6 +120,33 @@ public class ReciboCajaService {
         recibo.setCentroCosto(dto.getCentroCosto());
         recibo.setCajeroId(dto.getCajeroId());
         recibo.setUsuarioId(dto.getUsuarioId());
+        recibo.setBeneficiarioNombre(dto.getBeneficiarioNombre());
+        recibo.setBeneficiarioDocumento(dto.getBeneficiarioDocumento());
+
+        // Cuenta contable (opcional)
+        if (dto.getCuentaContableId() != null) {
+            CuentaContable cc = cuentaContableRepository.findById(dto.getCuentaContableId())
+                    .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada: " + dto.getCuentaContableId()));
+            recibo.setCuentaContable(cc);
+        }
+
+        // Concepto abierto registrado (FK)
+        if (esConceptoAbierto) {
+            ConceptoAbierto ca = conceptoAbiertoRepository.findById(dto.getConceptoAbiertoId())
+                    .orElseThrow(() -> new RuntimeException("Concepto abierto no encontrado: " + dto.getConceptoAbiertoId()));
+            String tipoCa = ca.getTipo() == null ? "" : ca.getTipo().toUpperCase();
+            if (!"RECIBO".equals(tipoCa) && !"AMBOS".equals(tipoCa)) {
+                throw new RuntimeException("El concepto seleccionado no aplica para recibos de caja");
+            }
+            recibo.setConceptoAbiertoRef(ca);
+            // Persistimos también la descripción libre por compatibilidad con la columna concepto.
+            recibo.setConcepto(dto.getConcepto() != null && !dto.getConcepto().isBlank()
+                    ? dto.getConcepto() : ca.getDescripcion());
+            // Si el concepto trae cuenta contable y no se envió una explícita, usarla por defecto.
+            if (recibo.getCuentaContable() == null && ca.getCuentaContable() != null) {
+                recibo.setCuentaContable(ca.getCuentaContable());
+            }
+        }
 
         // Tercero (solo si NO es concepto abierto)
         if (!esConceptoAbierto) {
@@ -111,6 +156,15 @@ public class ReciboCajaService {
             recibo.setTerceroNombre(tercero.getNombre1() + " " +
                     (tercero.getApellido1() != null ? tercero.getApellido1() : ""));
             recibo.setTerceroNit(tercero.getIdentificacion());
+        } else if (dto.getTerceroId() != null) {
+            // Concepto abierto con tercero asociado: lo enlazamos para trazabilidad.
+            Terceros t = tercerosRepository.findById(dto.getTerceroId()).orElse(null);
+            if (t != null) {
+                recibo.setTercero(t);
+                recibo.setTerceroNombre(t.getNombre1() + " " +
+                        (t.getApellido1() != null ? t.getApellido1() : ""));
+                recibo.setTerceroNit(t.getIdentificacion());
+            }
         }
 
         // Procesar medios de pago
@@ -255,6 +309,79 @@ public class ReciboCajaService {
         return null;
     }
 
+    @Transactional
+    public ReciboCajaResponseDTO anular(Long id, String motivo, Integer usuarioId) {
+        ReciboCaja recibo = reciboRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Recibo de caja no encontrado: " + id));
+        if ("ANULADO".equalsIgnoreCase(recibo.getEstado())) {
+            throw new RuntimeException("El recibo ya está anulado");
+        }
+        if (motivo == null || motivo.isBlank()) {
+            throw new RuntimeException("El motivo de anulación es obligatorio");
+        }
+
+        // Revertir saldos en CxC
+        if (recibo.getDetalles() != null) {
+            for (DetalleReciboCaja det : recibo.getDetalles()) {
+                CuentaPorCobrar cxc = det.getCuentaPorCobrar();
+                if (cxc != null) {
+                    BigDecimal saldoActual = cxc.getSaldo() != null ? cxc.getSaldo() : BigDecimal.ZERO;
+                    BigDecimal saldoNuevo = saldoActual.add(det.getMontoAbonado());
+                    BigDecimal valorNeto = cxc.getValorNeto() != null ? cxc.getValorNeto() : saldoNuevo;
+                    if (saldoNuevo.compareTo(valorNeto) >= 0) {
+                        cxc.setSaldo(valorNeto);
+                        cxc.setEstado("PENDIENTE");
+                    } else {
+                        cxc.setSaldo(saldoNuevo);
+                        cxc.setEstado("PARCIAL");
+                    }
+                    cxcRepository.save(cxc);
+                }
+            }
+        }
+
+        recibo.setEstado("ANULADO");
+        recibo.setMotivoAnulacion(motivo);
+        recibo.setFechaAnulacion(java.time.LocalDateTime.now());
+        recibo.setAnuladoPorUsuarioId(usuarioId);
+        recibo = reciboRepository.save(recibo);
+
+        // Movimiento de cajero inverso
+        registrarAnulacionCajero(recibo);
+
+        return toResponse(recibo);
+    }
+
+    private void registrarAnulacionCajero(ReciboCaja recibo) {
+        try {
+            Long detalleCajeroId = obtenerDetalleCajeroId(recibo.getCajeroId());
+            if (detalleCajeroId == null) return;
+            BigDecimal montoEfectivo = BigDecimal.ZERO;
+            BigDecimal montoElectronico = BigDecimal.ZERO;
+            if (recibo.getMediosPago() != null) {
+                for (ReciboCajaMedioPago mp : recibo.getMediosPago()) {
+                    String sigla = mp.getMetodoPago().getSigla() != null
+                            ? mp.getMetodoPago().getSigla().toUpperCase() : "";
+                    if (sigla.startsWith("EF")) montoEfectivo = montoEfectivo.add(mp.getMonto());
+                    else montoElectronico = montoElectronico.add(mp.getMonto());
+                }
+            }
+            detalleCajeroService.registrarMovimiento(
+                    detalleCajeroId,
+                    MovimientoCajero.TipoMovimiento.ANULACION,
+                    "RC-" + recibo.getConsecutivo() + "-A",
+                    recibo.getId(),
+                    recibo.getTotal().negate(),
+                    BigDecimal.ZERO,
+                    montoEfectivo.negate(),
+                    montoElectronico.negate(),
+                    "Anulación Recibo Caja #" + recibo.getConsecutivo()
+            );
+        } catch (Exception e) {
+            System.out.println("Error registrando anulación cajero recibo: " + e.getMessage());
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<ReciboCajaResponseDTO> listarTodos() {
         return reciboRepository.findAllByOrderByFechaCreacionDesc().stream().map(this::toResponse).collect(Collectors.toList());
@@ -289,7 +416,21 @@ public class ReciboCajaService {
         dto.setEstado(r.getEstado());
         dto.setConceptoAbierto(r.getConceptoAbierto());
         dto.setMontoConceptoAbierto(r.getMontoConceptoAbierto());
+        dto.setBeneficiarioNombre(r.getBeneficiarioNombre());
+        dto.setBeneficiarioDocumento(r.getBeneficiarioDocumento());
+        if (r.getConceptoAbiertoRef() != null) {
+            dto.setConceptoAbiertoId(r.getConceptoAbiertoRef().getId());
+            dto.setConceptoAbiertoDescripcion(r.getConceptoAbiertoRef().getDescripcion());
+        }
+        if (r.getCuentaContable() != null) {
+            dto.setCuentaContableId(r.getCuentaContable().getId());
+            dto.setCuentaContableCodigo(r.getCuentaContable().getCodigo());
+            dto.setCuentaContableNombre(r.getCuentaContable().getNombre());
+        }
         dto.setFechaCreacion(r.getFechaCreacion());
+        dto.setFechaAnulacion(r.getFechaAnulacion());
+        dto.setMotivoAnulacion(r.getMotivoAnulacion());
+        dto.setAnuladoPorUsuarioId(r.getAnuladoPorUsuarioId());
 
         // Mapear medios de pago
         if (r.getMediosPago() != null) {

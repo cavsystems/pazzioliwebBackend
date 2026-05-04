@@ -57,5 +57,18 @@ public class ComprobanteEgresoController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    /** Anula un comprobante de egreso: revierte saldos de CxP y registra ANULACION en cajero. */
+    @PutMapping("/{id}/anular")
+    public ResponseEntity<?> anular(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        try {
+            String motivo = body.get("motivo") == null ? null : body.get("motivo").toString();
+            Integer usuarioId = body.get("usuarioId") == null ? null
+                    : Integer.valueOf(body.get("usuarioId").toString());
+            return ResponseEntity.ok(service.anular(id, motivo, usuarioId));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }
 

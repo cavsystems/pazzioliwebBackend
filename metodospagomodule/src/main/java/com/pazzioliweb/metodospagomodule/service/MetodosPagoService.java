@@ -1,6 +1,8 @@
 package com.pazzioliweb.metodospagomodule.service;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -43,5 +45,16 @@ public class MetodosPagoService {
 
     public void eliminar(Integer id) {
     	metodopagoRepository.deleteById(id);
+    }
+
+    private static final Set<String> TIPOS_VALIDOS = Set.of("RECIBO", "EGRESO", "VENTA");
+
+    public List<MetodosPago> listarActivosPorTipo(String tipo) {
+        if (tipo == null) throw new RuntimeException("Tipo es obligatorio");
+        String t = tipo.toUpperCase();
+        if (!TIPOS_VALIDOS.contains(t)) {
+            throw new RuntimeException("Tipo inválido. Use RECIBO, EGRESO o VENTA");
+        }
+        return metodopagoRepository.listarPorTipo(t);
     }
 }

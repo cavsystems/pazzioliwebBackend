@@ -6,4 +6,5 @@ public interface MetodoPagoDTO {
 	String getSigla();
 	String getEstado();
 	String getTipoNegociacion();
+	String getTipos();
 }

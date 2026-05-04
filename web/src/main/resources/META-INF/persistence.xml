@@ -58,7 +58,8 @@
         <!-- Comprobantes -->
         <class>com.pazzioliweb.comprobantesmodule.entity.CategoriasComprobantes</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.Comprobantes</class>
-        
+        <class>com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.CuentaContable</class>
         <!-- Cajas -->
         <class>com.pazzioliweb.cajasmodule.entity.Cajas</class>
         

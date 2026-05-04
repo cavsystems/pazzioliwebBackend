@@ -34,6 +34,7 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
         cuenta.setFechaVencimiento(cuentaPorPagarDTO.getFechaVencimiento());
         cuenta.setNumeroFactura(cuentaPorPagarDTO.getNumeroFactura());
         cuenta.setValorNeto(cuentaPorPagarDTO.getValorNeto());
+        cuenta.setSaldo(cuentaPorPagarDTO.getValorNeto());
         cuenta.setEstado(cuentaPorPagarDTO.getEstado() != null ? cuentaPorPagarDTO.getEstado() : "PENDIENTE");
 
         if (cuentaPorPagarDTO.getProveedorId() != null) {
@@ -97,6 +98,7 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
         dto.setFechaVencimiento(cuenta.getFechaVencimiento());
         dto.setNumeroFactura(cuenta.getNumeroFactura());
         dto.setValorNeto(cuenta.getValorNeto());
+        dto.setSaldo(cuenta.getSaldo());
         dto.setEstado(cuenta.getEstado());
         dto.setFechaCreacion(cuenta.getFechaCreacion());
         dto.setNumeroFacturaProveedor(cuenta.getNumeroFacturaProveedor());

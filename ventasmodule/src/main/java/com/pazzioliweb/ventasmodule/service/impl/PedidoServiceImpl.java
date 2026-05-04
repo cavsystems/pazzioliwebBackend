@@ -105,6 +105,20 @@ public class PedidoServiceImpl implements PedidoService {
             pedido.setVendedor(vendedor);
         }
 
+        // ── Asignar bodega si viene en el DTO ────────────────────────────────
+        if (pedidoDTO.getBodegaId() != null) {
+            Bodegas bodega = new Bodegas();
+            bodega.setCodigo(pedidoDTO.getBodegaId());
+            pedido.setBodega(bodega);
+        }
+
+        // ── Asignar cliente si viene en el DTO ───────────────────────────────
+        if (pedidoDTO.getClienteId() != null) {
+            Terceros tercero = new Terceros();
+            tercero.setTerceroId(pedidoDTO.getClienteId().intValue());
+            pedido.setCliente(tercero);
+        }
+
         // Calcular totales
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal ivaTotal = BigDecimal.ZERO;
@@ -116,20 +130,6 @@ public class PedidoServiceImpl implements PedidoService {
             ivaTotal = ivaTotal.add(detalle.getIva());
             descuentosTotal = descuentosTotal.add(detalle.getDescuento());
         }
-        Bodegas bodega=new Bodegas();
-        Terceros tercero=new Terceros();
-        Cajero cajero=new Cajero();
-        Vendedores vendedor=new Vendedores();
-                bodega.setCodigo(pedidoDTO.getBodegaId());
-        tercero.setTerceroId(pedidoDTO.getClienteId().intValue());
-        cajero.setCajeroId(pedidoDTO.getCajeroId().intValue());
-        vendedor.setVendedor_id(pedidoDTO.getVendedorId().intValue());
-
-                pedido.setBodega(bodega);
-                pedido.setCliente(tercero);
-                pedido.setCajero(cajero);
-                pedido.setVendedor(vendedor);
-        pedido.setBodega(bodega);
         pedido.setGravada(subtotal.subtract(ivaTotal));
         pedido.setIva(ivaTotal);
         pedido.setDescuentos(descuentosTotal);

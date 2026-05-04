@@ -1,5 +1,7 @@
 package com.pazzioliweb.tesoreriamodule.entity;
 
+import com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto;
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -41,6 +43,20 @@ public class ReciboCaja {
 
     @Column(name = "monto_concepto_abierto", precision = 18, scale = 2)
     private BigDecimal montoConceptoAbierto;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "concepto_abierto_id")
+    private ConceptoAbierto conceptoAbiertoRef;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cuenta_contable_id")
+    private CuentaContable cuentaContable;
+
+    @Column(name = "beneficiario_nombre", length = 200)
+    private String beneficiarioNombre;
+
+    @Column(name = "beneficiario_documento", length = 50)
+    private String beneficiarioDocumento;
 
     @Column(nullable = false)
     private LocalDate fecha;
@@ -89,6 +105,15 @@ public class ReciboCaja {
 
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion = LocalDateTime.now();
+
+    @Column(name = "motivo_anulacion", columnDefinition = "TEXT")
+    private String motivoAnulacion;
+
+    @Column(name = "fecha_anulacion")
+    private LocalDateTime fechaAnulacion;
+
+    @Column(name = "anulado_por_usuario_id")
+    private Integer anuladoPorUsuarioId;
 
     @OneToMany(mappedBy = "reciboCaja", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleReciboCaja> detalles = new ArrayList<>();

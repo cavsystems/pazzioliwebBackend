@@ -57,5 +57,23 @@ public interface ReportesService {
 
     /** Ventas por día de la semana */
     List<VentasPorPeriodoDTO> getVentasPorDiaSemana(LocalDate inicio, LocalDate fin);
+
+    // ── Reportes nuevos ───────────────────────────────────────────
+
+    /** Comparativo periodo actual vs periodo anterior. */
+    ComparativoPeriodosDTO getComparativoPeriodos(LocalDate actualInicio, LocalDate actualFin,
+                                                  LocalDate anteriorInicio, LocalDate anteriorFin);
+
+    /** Lista unificada de documentos anulados (ventas + recibos + egresos). */
+    List<AnulacionDTO> getAnulaciones(LocalDate inicio, LocalDate fin);
+
+    /** Uso de conceptos abiertos en el periodo (cuántos / monto). */
+    List<ConceptoAbiertoUsoDTO> getConceptosAbiertosUso(LocalDate inicio, LocalDate fin, String tipo);
+
+    /** Devoluciones detalladas. */
+    List<DevolucionDetalladaDTO> getDevolucionesDetalladas(LocalDate inicio, LocalDate fin);
+
+    /** Ticket promedio por cajero o vendedor. */
+    List<TicketPromedioDTO> getTicketPromedio(LocalDate inicio, LocalDate fin, String agrupacion);
 }
 
