@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.pazzioliweb.usuariosbacken.dtos.UsuarioDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -76,7 +77,7 @@ public class BodegasController {
     	} 
     }
     public record MensajeResponsederol(String mensaje, boolean estado) {}
-    
+	public record MensajeResponseUsuario(String mensaje, boolean estado, UsuarioDTO usuario) {}
     
 	 @Transactional
 		@PostMapping(value = "/crear/usuario")
@@ -138,12 +139,14 @@ public class BodegasController {
 	  		return ResponseEntity.status(500).body(response);
 	  	}
 		Usuario usuarioupdata= usuop.get();
-	usuarioupdata.setUsuario(nombrerol.getUsuario());
-		usuarioupdata.setNombre(nombrerol.getNombre());
+	
+usuarioupdata.setUsuario(nombrerol.getUsuario());
+		
+usuarioupdata.setNombre(nombrerol.getNombre());
 	
 		usuarioupdata.setEstado(nombrerol.getEstado());
 		 usuarioupdata.setCodigorol(rol.get());
-		  response.put("mensaje", new MensajeResponsederol("usuarioactulizado",true) );
+		  response.put("mensaje", new MensajeResponseUsuario("usuarioactulizado",true,UsuarioDTO.fromEntity(usuarioupdata)) );
 		  Usuario usuariob=usurepo.save(usuarioupdata);
 		  int idusu=usuariob.getCodigo();
 		  System.out.println("id usuario actual"+idusu);
