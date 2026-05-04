@@ -47,6 +47,17 @@ public class MetodosPagoController {
         return ResponseEntity.ok(response);
     }
 	
+	@GetMapping("/tipo/{tipo}")
+    public ResponseEntity<?> listarPorTipo(@PathVariable String tipo) {
+        try {
+            return ResponseEntity.ok(metodopagoService.listarActivosPorTipo(tipo));
+        } catch (RuntimeException e) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(err);
+        }
+    }
+
 	@GetMapping("/{id}")
     public ResponseEntity<MetodosPago> obtener(@PathVariable Integer id) {
         return metodopagoService.buscarPorId(id)

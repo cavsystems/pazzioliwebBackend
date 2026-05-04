@@ -22,6 +22,13 @@ public class CrearReciboCajaDTO {
     private List<DetalleCobroDTO> cuentas;
     private Boolean conceptoAbierto = false;
     private BigDecimal montoConceptoAbierto;
+    /** FK al catálogo conceptos_abiertos (obligatorio cuando conceptoAbierto=true). */
+    private Long conceptoAbiertoId;
+    /** FK al catálogo cuentas_contables. */
+    private Integer cuentaContableId;
+    /** Beneficiario obligatorio cuando conceptoAbierto=true sin tercero registrado. */
+    private String beneficiarioNombre;
+    private String beneficiarioDocumento;
 
     @Data
     public static class MedioPagoDTO {

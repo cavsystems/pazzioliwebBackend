@@ -5,6 +5,10 @@ import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
 import com.pazzioliweb.comprasmodule.entity.CuentaPorPagar;
 import com.pazzioliweb.comprasmodule.repository.CuentaPorPagarRepository;
+import com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto;
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
+import com.pazzioliweb.comprobantesmodule.repositori.ConceptoAbiertoRepository;
+import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -33,6 +37,8 @@ public class ComprobanteEgresoService {
     private final CuentaPorPagarRepository cxpRepository;
     private final TercerosRepository tercerosRepository;
     private final MetodosPagoRepository metodosPagoRepository;
+    private final ConceptoAbiertoRepository conceptoAbiertoRepository;
+    private final CuentaContableRepository cuentaContableRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
 
@@ -40,12 +46,16 @@ public class ComprobanteEgresoService {
                                      CuentaPorPagarRepository cxpRepository,
                                      TercerosRepository tercerosRepository,
                                      MetodosPagoRepository metodosPagoRepository,
+                                     ConceptoAbiertoRepository conceptoAbiertoRepository,
+                                     CuentaContableRepository cuentaContableRepository,
                                      DetalleCajeroService detalleCajeroService,
                                      RedisTemplate<String, DatosSesiones> redisTemplate) {
         this.egresoRepository = egresoRepository;
         this.cxpRepository = cxpRepository;
         this.tercerosRepository = tercerosRepository;
         this.metodosPagoRepository = metodosPagoRepository;
+        this.conceptoAbiertoRepository = conceptoAbiertoRepository;
+        this.cuentaContableRepository = cuentaContableRepository;
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
     }
@@ -69,11 +79,18 @@ public class ComprobanteEgresoService {
         }
 
         if (esConceptoAbierto) {
-            if (dto.getConcepto() == null || dto.getConcepto().isBlank()) {
-                throw new RuntimeException("El concepto es obligatorio para concepto abierto");
+            if (dto.getConceptoAbiertoId() == null) {
+                throw new RuntimeException("Debe seleccionar un concepto abierto registrado");
             }
             if (dto.getMontoConceptoAbierto() == null || dto.getMontoConceptoAbierto().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new RuntimeException("El monto del concepto abierto debe ser mayor a 0");
+            }
+            boolean tieneTercero = dto.getTerceroId() != null;
+            boolean tieneBeneficiario =
+                    dto.getBeneficiarioNombre() != null && !dto.getBeneficiarioNombre().isBlank()
+                    && dto.getBeneficiarioDocumento() != null && !dto.getBeneficiarioDocumento().isBlank();
+            if (!tieneTercero && !tieneBeneficiario) {
+                throw new RuntimeException("Para concepto abierto debe registrar el tercero o el nombre y documento del beneficiario");
             }
         } else {
             if (dto.getTerceroId() == null) {
@@ -98,6 +115,29 @@ public class ComprobanteEgresoService {
         egreso.setCentroCosto(dto.getCentroCosto());
         egreso.setCajeroId(dto.getCajeroId());
         egreso.setUsuarioId(dto.getUsuarioId());
+        egreso.setBeneficiarioNombre(dto.getBeneficiarioNombre());
+        egreso.setBeneficiarioDocumento(dto.getBeneficiarioDocumento());
+
+        if (dto.getCuentaContableId() != null) {
+            CuentaContable cc = cuentaContableRepository.findById(dto.getCuentaContableId())
+                    .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada: " + dto.getCuentaContableId()));
+            egreso.setCuentaContable(cc);
+        }
+
+        if (esConceptoAbierto) {
+            ConceptoAbierto ca = conceptoAbiertoRepository.findById(dto.getConceptoAbiertoId())
+                    .orElseThrow(() -> new RuntimeException("Concepto abierto no encontrado: " + dto.getConceptoAbiertoId()));
+            String tipoCa = ca.getTipo() == null ? "" : ca.getTipo().toUpperCase();
+            if (!"EGRESO".equals(tipoCa) && !"AMBOS".equals(tipoCa)) {
+                throw new RuntimeException("El concepto seleccionado no aplica para comprobantes de egreso");
+            }
+            egreso.setConceptoAbiertoRef(ca);
+            egreso.setConcepto(dto.getConcepto() != null && !dto.getConcepto().isBlank()
+                    ? dto.getConcepto() : ca.getDescripcion());
+            if (egreso.getCuentaContable() == null && ca.getCuentaContable() != null) {
+                egreso.setCuentaContable(ca.getCuentaContable());
+            }
+        }
 
         // Tercero (solo si NO es concepto abierto)
         if (!esConceptoAbierto) {
@@ -107,6 +147,14 @@ public class ComprobanteEgresoService {
             egreso.setTerceroNombre(tercero.getNombre1() + " " +
                     (tercero.getApellido1() != null ? tercero.getApellido1() : ""));
             egreso.setTerceroNit(tercero.getIdentificacion());
+        } else if (dto.getTerceroId() != null) {
+            Terceros t = tercerosRepository.findById(dto.getTerceroId()).orElse(null);
+            if (t != null) {
+                egreso.setTercero(t);
+                egreso.setTerceroNombre(t.getNombre1() + " " +
+                        (t.getApellido1() != null ? t.getApellido1() : ""));
+                egreso.setTerceroNit(t.getIdentificacion());
+            }
         }
 
         // Procesar medios de pago
@@ -140,8 +188,11 @@ public class ComprobanteEgresoService {
 
                 subtotal = subtotal.add(detDto.getMontoAbonado());
 
-                // Actualizar estado de la CxP
-                BigDecimal nuevoSaldo = cxp.getValorNeto().subtract(detDto.getMontoAbonado());
+                // Actualizar saldo y estado de la CxP (resta sobre el saldo actual,
+                // no contra valorNeto, para soportar múltiples pagos parciales).
+                BigDecimal saldoActual = cxp.getSaldo() != null ? cxp.getSaldo() : cxp.getValorNeto();
+                BigDecimal nuevoSaldo = saldoActual.subtract(detDto.getMontoAbonado());
+                cxp.setSaldo(nuevoSaldo.max(BigDecimal.ZERO));
                 if (nuevoSaldo.compareTo(BigDecimal.ZERO) <= 0) {
                     cxp.setEstado("PAGADA");
                 } else {
@@ -242,6 +293,77 @@ public class ComprobanteEgresoService {
         return null;
     }
 
+    @Transactional
+    public ComprobanteEgresoResponseDTO anular(Long id, String motivo, Integer usuarioId) {
+        ComprobanteEgreso egreso = egresoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comprobante de egreso no encontrado: " + id));
+        if ("ANULADO".equalsIgnoreCase(egreso.getEstado())) {
+            throw new RuntimeException("El comprobante ya está anulado");
+        }
+        if (motivo == null || motivo.isBlank()) {
+            throw new RuntimeException("El motivo de anulación es obligatorio");
+        }
+
+        if (egreso.getDetalles() != null) {
+            for (DetalleComprobanteEgreso det : egreso.getDetalles()) {
+                CuentaPorPagar cxp = det.getCuentaPorPagar();
+                if (cxp != null) {
+                    BigDecimal saldoActual = cxp.getSaldo() != null ? cxp.getSaldo() : BigDecimal.ZERO;
+                    BigDecimal saldoNuevo = saldoActual.add(det.getMontoAbonado());
+                    BigDecimal valorNeto = cxp.getValorNeto() != null ? cxp.getValorNeto() : saldoNuevo;
+                    if (saldoNuevo.compareTo(valorNeto) >= 0) {
+                        cxp.setSaldo(valorNeto);
+                        cxp.setEstado("PENDIENTE");
+                    } else {
+                        cxp.setSaldo(saldoNuevo);
+                        cxp.setEstado("PARCIAL");
+                    }
+                    cxpRepository.save(cxp);
+                }
+            }
+        }
+
+        egreso.setEstado("ANULADO");
+        egreso.setMotivoAnulacion(motivo);
+        egreso.setFechaAnulacion(java.time.LocalDateTime.now());
+        egreso.setAnuladoPorUsuarioId(usuarioId);
+        egreso = egresoRepository.save(egreso);
+
+        registrarAnulacionCajero(egreso);
+        return toResponse(egreso);
+    }
+
+    private void registrarAnulacionCajero(ComprobanteEgreso egreso) {
+        try {
+            Long detalleCajeroId = obtenerDetalleCajeroId(egreso.getCajeroId());
+            if (detalleCajeroId == null) return;
+            BigDecimal montoEfectivo = BigDecimal.ZERO;
+            BigDecimal montoElectronico = BigDecimal.ZERO;
+            if (egreso.getMediosPago() != null) {
+                for (ComprobanteEgresoMedioPago mp : egreso.getMediosPago()) {
+                    String sigla = mp.getMetodoPago().getSigla() != null
+                            ? mp.getMetodoPago().getSigla().toUpperCase() : "";
+                    if (sigla.startsWith("EF")) montoEfectivo = montoEfectivo.add(mp.getMonto());
+                    else montoElectronico = montoElectronico.add(mp.getMonto());
+                }
+            }
+            // Anular un EGRESO = ingreso de vuelta a caja → signo positivo
+            detalleCajeroService.registrarMovimiento(
+                    detalleCajeroId,
+                    MovimientoCajero.TipoMovimiento.ANULACION,
+                    "CE-" + egreso.getConsecutivo() + "-A",
+                    egreso.getId(),
+                    egreso.getTotal(),
+                    BigDecimal.ZERO,
+                    montoEfectivo,
+                    montoElectronico,
+                    "Anulación Comprobante Egreso #" + egreso.getConsecutivo()
+            );
+        } catch (Exception ex) {
+            System.out.println("Error registrando anulación cajero egreso: " + ex.getMessage());
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<ComprobanteEgresoResponseDTO> listarTodos() {
         return egresoRepository.findAllByOrderByFechaCreacionDesc().stream()
@@ -275,7 +397,21 @@ public class ComprobanteEgresoService {
         dto.setEstado(e.getEstado());
         dto.setConceptoAbierto(e.getConceptoAbierto());
         dto.setMontoConceptoAbierto(e.getMontoConceptoAbierto());
+        dto.setBeneficiarioNombre(e.getBeneficiarioNombre());
+        dto.setBeneficiarioDocumento(e.getBeneficiarioDocumento());
+        if (e.getConceptoAbiertoRef() != null) {
+            dto.setConceptoAbiertoId(e.getConceptoAbiertoRef().getId());
+            dto.setConceptoAbiertoDescripcion(e.getConceptoAbiertoRef().getDescripcion());
+        }
+        if (e.getCuentaContable() != null) {
+            dto.setCuentaContableId(e.getCuentaContable().getId());
+            dto.setCuentaContableCodigo(e.getCuentaContable().getCodigo());
+            dto.setCuentaContableNombre(e.getCuentaContable().getNombre());
+        }
         dto.setFechaCreacion(e.getFechaCreacion());
+        dto.setFechaAnulacion(e.getFechaAnulacion());
+        dto.setMotivoAnulacion(e.getMotivoAnulacion());
+        dto.setAnuladoPorUsuarioId(e.getAnuladoPorUsuarioId());
 
         // Mapear medios de pago
         if (e.getMediosPago() != null) {
@@ -300,6 +436,7 @@ public class ComprobanteEgresoService {
                 det.setCuentaPorPagarId(d.getCuentaPorPagar().getId());
                 det.setNumeroFactura(d.getCuentaPorPagar().getNumeroFactura());
                 det.setValorNeto(d.getCuentaPorPagar().getValorNeto());
+                det.setSaldo(d.getCuentaPorPagar().getSaldo());
                 det.setMontoAbonado(d.getMontoAbonado());
                 det.setEstado(d.getCuentaPorPagar().getEstado());
                 return det;

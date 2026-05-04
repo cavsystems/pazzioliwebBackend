@@ -20,6 +20,10 @@ public class CrearComprobanteEgresoDTO {
     private List<DetallePagoDTO> cuentas;
     private Boolean conceptoAbierto = false;
     private BigDecimal montoConceptoAbierto;
+    private Long conceptoAbiertoId;
+    private Integer cuentaContableId;
+    private String beneficiarioNombre;
+    private String beneficiarioDocumento;
 
     @Data
     public static class MedioPagoDTO {

@@ -241,5 +241,76 @@ public class ReportesController {
         if (fin == null) fin = LocalDate.now();
         return new LocalDate[]{inicio, fin};
     }
+
+    // ════════════════════════════════════════════════
+    // 18. COMPARATIVO PERIODO ACTUAL vs ANTERIOR
+    //     Si no se envían fechas anteriores, se calculan automáticamente
+    //     como el periodo inmediatamente previo del mismo tamaño.
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/comparativo-periodos")
+    public ResponseEntity<ComparativoPeriodosDTO> comparativoPeriodos(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate prevInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate prevFin) {
+        LocalDate[] r = defaults(inicio, fin);
+        if (prevInicio == null || prevFin == null) {
+            long dias = java.time.temporal.ChronoUnit.DAYS.between(r[0], r[1]);
+            prevFin = r[0].minusDays(1);
+            prevInicio = prevFin.minusDays(dias);
+        }
+        return ResponseEntity.ok(reportesService.getComparativoPeriodos(r[0], r[1], prevInicio, prevFin));
+    }
+
+    // ════════════════════════════════════════════════
+    // 19. ANULACIONES (vista unificada ventas + recibos + egresos)
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/anulaciones")
+    public ResponseEntity<List<AnulacionDTO>> anulaciones(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getAnulaciones(r[0], r[1]));
+    }
+
+    // ════════════════════════════════════════════════
+    // 20. CONCEPTOS ABIERTOS — uso en el periodo
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/conceptos-abiertos")
+    public ResponseEntity<List<ConceptoAbiertoUsoDTO>> conceptosAbiertosUso(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
+            @RequestParam(required = false) String tipo) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getConceptosAbiertosUso(r[0], r[1], tipo));
+    }
+
+    // ════════════════════════════════════════════════
+    // 21. DEVOLUCIONES DETALLADAS
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/devoluciones-detalladas")
+    public ResponseEntity<List<DevolucionDetalladaDTO>> devolucionesDetalladas(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getDevolucionesDetalladas(r[0], r[1]));
+    }
+
+    // ════════════════════════════════════════════════
+    // 22. TICKET PROMEDIO POR CAJERO O VENDEDOR
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/ticket-promedio")
+    public ResponseEntity<List<TicketPromedioDTO>> ticketPromedio(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
+            @RequestParam(defaultValue = "cajero") String agrupacion) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getTicketPromedio(r[0], r[1], agrupacion));
+    }
 }
 

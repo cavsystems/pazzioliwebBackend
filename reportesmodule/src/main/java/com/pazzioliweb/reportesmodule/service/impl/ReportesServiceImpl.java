@@ -8,7 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -176,8 +178,8 @@ public class ReportesServiceImpl implements ReportesService {
                     str(r[1]),
                     toLong(r[2]),
                     toBigDecimal(r[3]),
-                    BigDecimal.ZERO, // se podría enriquecer después
-                    BigDecimal.ZERO
+                    toBigDecimal(r[4]),    // totalEfectivo
+                    toBigDecimal(r[5])     // totalElectronico
             ));
         }
         return result;
@@ -227,7 +229,7 @@ public class ReportesServiceImpl implements ReportesService {
                     str(r[2]),
                     toLong(r[3]),
                     toBigDecimal(r[4]),
-                    BigDecimal.ZERO // saldo cartera se podría enriquecer
+                    toBigDecimal(r[5])     // saldo cartera real
             ));
         }
         return result;
@@ -448,6 +450,178 @@ public class ReportesServiceImpl implements ReportesService {
 
     private String str(Object obj) {
         return obj != null ? obj.toString() : null;
+    }
+
+    private LocalDateTime toLocalDateTime(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof LocalDateTime ldt) return ldt;
+        if (obj instanceof Timestamp ts) return ts.toLocalDateTime();
+        if (obj instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
+        return LocalDateTime.parse(obj.toString().replace(" ", "T"));
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // COMPARATIVO PERIODOS
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public ComparativoPeriodosDTO getComparativoPeriodos(LocalDate actualInicio, LocalDate actualFin,
+                                                         LocalDate anteriorInicio, LocalDate anteriorFin) {
+        ComparativoPeriodosDTO dto = new ComparativoPeriodosDTO();
+        dto.setEtiquetaActual(actualInicio + " a " + actualFin);
+        dto.setEtiquetaAnterior(anteriorInicio + " a " + anteriorFin);
+
+        BigDecimal vActual = repo.totalVentasPeriodo(actualInicio, actualFin);
+        BigDecimal vAnt    = repo.totalVentasPeriodo(anteriorInicio, anteriorFin);
+        Long cActual       = repo.cantidadVentasPeriodo(actualInicio, actualFin);
+        Long cAnt          = repo.cantidadVentasPeriodo(anteriorInicio, anteriorFin);
+        BigDecimal costoActual = repo.totalCostoPeriodo(actualInicio, actualFin);
+        BigDecimal costoAnt    = repo.totalCostoPeriodo(anteriorInicio, anteriorFin);
+
+        BigDecimal devActual = BigDecimal.ZERO;
+        BigDecimal devAnt    = BigDecimal.ZERO;
+        List<Object[]> da = repo.totalDevolucionesPeriodo(actualInicio, actualFin);
+        if (da != null && !da.isEmpty()) devActual = toBigDecimal(da.get(0)[0]);
+        List<Object[]> dn = repo.totalDevolucionesPeriodo(anteriorInicio, anteriorFin);
+        if (dn != null && !dn.isEmpty()) devAnt = toBigDecimal(dn.get(0)[0]);
+
+        BigDecimal utilActual = vActual.subtract(devActual).subtract(costoActual);
+        BigDecimal utilAnt    = vAnt.subtract(devAnt).subtract(costoAnt);
+
+        dto.setVentasActual(vActual);
+        dto.setVentasAnterior(vAnt);
+        dto.setDeltaVentas(porcentajeCambio(vActual, vAnt));
+
+        dto.setCantidadVentasActual(cActual);
+        dto.setCantidadVentasAnterior(cAnt);
+        dto.setDeltaCantidadVentas(porcentajeCambio(BigDecimal.valueOf(cActual), BigDecimal.valueOf(cAnt)));
+
+        BigDecimal tpA = cActual > 0 ? vActual.divide(BigDecimal.valueOf(cActual), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        BigDecimal tpN = cAnt    > 0 ? vAnt.divide(BigDecimal.valueOf(cAnt),    2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        dto.setTicketPromedioActual(tpA);
+        dto.setTicketPromedioAnterior(tpN);
+        dto.setDeltaTicketPromedio(porcentajeCambio(tpA, tpN));
+
+        dto.setDevolucionesActual(devActual);
+        dto.setDevolucionesAnterior(devAnt);
+        dto.setDeltaDevoluciones(porcentajeCambio(devActual, devAnt));
+
+        dto.setUtilidadActual(utilActual);
+        dto.setUtilidadAnterior(utilAnt);
+        dto.setDeltaUtilidad(porcentajeCambio(utilActual, utilAnt));
+
+        return dto;
+    }
+
+    private double porcentajeCambio(BigDecimal actual, BigDecimal anterior) {
+        if (anterior == null || anterior.compareTo(BigDecimal.ZERO) == 0) {
+            return actual != null && actual.compareTo(BigDecimal.ZERO) > 0 ? 100.0 : 0.0;
+        }
+        return actual.subtract(anterior)
+                .multiply(BigDecimal.valueOf(100))
+                .divide(anterior, 2, RoundingMode.HALF_UP)
+                .doubleValue();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // ANULACIONES
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<AnulacionDTO> getAnulaciones(LocalDate inicio, LocalDate fin) {
+        List<AnulacionDTO> result = new ArrayList<>();
+        for (Object[] r : repo.anulacionesEnPeriodo(inicio, fin)) {
+            result.add(new AnulacionDTO(
+                    str(r[0]),
+                    toLong(r[1]),
+                    str(r[2]),
+                    toLocalDateTime(r[3]),
+                    toLocalDateTime(r[4]),
+                    str(r[5]),
+                    toBigDecimal(r[6]),
+                    str(r[7]),
+                    r[8] != null ? toInt(r[8]) : null,
+                    str(r[9])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CONCEPTOS ABIERTOS — USO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<ConceptoAbiertoUsoDTO> getConceptosAbiertosUso(LocalDate inicio, LocalDate fin, String tipo) {
+        String tipoFiltro = tipo == null || tipo.isBlank() ? "TODOS" : tipo.toUpperCase();
+        List<ConceptoAbiertoUsoDTO> result = new ArrayList<>();
+        for (Object[] r : repo.conceptosAbiertosUso(inicio, fin, tipoFiltro)) {
+            result.add(new ConceptoAbiertoUsoDTO(
+                    toLong(r[0]),
+                    str(r[1]),
+                    str(r[2]),
+                    str(r[3]),
+                    str(r[4]),
+                    toLong(r[5]),
+                    toBigDecimal(r[6])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // DEVOLUCIONES DETALLADAS
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<DevolucionDetalladaDTO> getDevolucionesDetalladas(LocalDate inicio, LocalDate fin) {
+        List<DevolucionDetalladaDTO> result = new ArrayList<>();
+        for (Object[] r : repo.devolucionesDetalladas(inicio, fin)) {
+            result.add(new DevolucionDetalladaDTO(
+                    toLong(r[0]),
+                    toLocalDateTime(r[1]),
+                    str(r[2]),
+                    str(r[3]),
+                    str(r[4]),
+                    toBigDecimal(r[5]),
+                    toLong(r[6]),
+                    str(r[7])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // TICKET PROMEDIO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<TicketPromedioDTO> getTicketPromedio(LocalDate inicio, LocalDate fin, String agrupacion) {
+        List<Object[]> rows = "vendedor".equalsIgnoreCase(agrupacion)
+                ? repo.ticketPromedioPorVendedor(inicio, fin)
+                : repo.ticketPromedioPorCajero(inicio, fin);
+
+        List<TicketPromedioDTO> result = new ArrayList<>();
+        for (Object[] r : rows) {
+            Long cantidad = toLong(r[1]);
+            BigDecimal total = toBigDecimal(r[2]);
+            Long unidades = toLong(r[3]);
+            BigDecimal ticketProm = cantidad > 0
+                    ? total.divide(BigDecimal.valueOf(cantidad), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            BigDecimal upt = cantidad > 0
+                    ? BigDecimal.valueOf(unidades).divide(BigDecimal.valueOf(cantidad), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            result.add(new TicketPromedioDTO(
+                    str(r[0]),
+                    cantidad,
+                    total,
+                    ticketProm,
+                    upt,
+                    unidades
+            ));
+        }
+        return result;
     }
 }
 

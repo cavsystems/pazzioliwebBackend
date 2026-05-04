@@ -13,6 +13,7 @@ public class CuentaPorPagarDTO {
     private LocalDate fechaVencimiento;
     private String numeroFactura;
     private BigDecimal valorNeto;
+    private BigDecimal saldo;
     private String estado;
     private LocalDate fechaCreacion;
     private Integer proveedorId;

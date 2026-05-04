@@ -31,8 +31,12 @@ public class MetodosPago {
 	
 	@Enumerated(EnumType.STRING)
     @Column(name = "tipo_negociacion", nullable = false)
-	private TipoNegociacion tipoNegociacion = TipoNegociacion.Contado; 
-	
+	private TipoNegociacion tipoNegociacion = TipoNegociacion.Contado;
+
+	/** CSV con los módulos donde aplica este método: "RECIBO,EGRESO,VENTA". */
+	@Column(name = "tipos", nullable = false, length = 100)
+	private String tipos = "RECIBO,EGRESO,VENTA";
+
 	public enum Estado {
         ACTIVO, INACTIVO
     }
@@ -71,5 +75,21 @@ public class MetodosPago {
 
 	public void setEstado(Estado estado) {
 		this.estado = estado;
+	}
+
+	public TipoNegociacion getTipoNegociacion() {
+		return tipoNegociacion;
+	}
+
+	public void setTipoNegociacion(TipoNegociacion tipoNegociacion) {
+		this.tipoNegociacion = tipoNegociacion;
+	}
+
+	public String getTipos() {
+		return tipos;
+	}
+
+	public void setTipos(String tipos) {
+		this.tipos = tipos;
 	}
 }

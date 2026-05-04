@@ -32,6 +32,10 @@ public class CuentaPorPagar {
     @Column(name = "valor_neto", nullable = false)
     private BigDecimal valorNeto;
 
+    /** Saldo pendiente por pagar (se reduce con abonos, se restaura al anular). */
+    @Column(nullable = false)
+    private BigDecimal saldo = BigDecimal.ZERO;
+
     @Column(nullable = false)
     private String estado = "PENDIENTE";
 

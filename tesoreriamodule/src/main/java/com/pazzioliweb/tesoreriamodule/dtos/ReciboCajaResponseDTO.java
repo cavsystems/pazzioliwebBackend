@@ -30,7 +30,17 @@ public class ReciboCajaResponseDTO {
     private String estado;
     private Boolean conceptoAbierto;
     private BigDecimal montoConceptoAbierto;
+    private Long conceptoAbiertoId;
+    private String conceptoAbiertoDescripcion;
+    private Integer cuentaContableId;
+    private String cuentaContableCodigo;
+    private String cuentaContableNombre;
+    private String beneficiarioNombre;
+    private String beneficiarioDocumento;
     private LocalDateTime fechaCreacion;
+    private LocalDateTime fechaAnulacion;
+    private String motivoAnulacion;
+    private Integer anuladoPorUsuarioId;
     private List<DetalleReciboResponseDTO> detalles;
 
     @Data
