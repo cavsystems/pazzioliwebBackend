@@ -23,9 +23,9 @@ public class ComprobantesService {
 	}
 	
 	public Page<ComprobanteDTO> listar(int page, int size, String sortField, String sortDirection){
-		Sort sort = sortDirection.equalsIgnoreCase("asc")
-                ? Sort.by(sortField).descending()
-                : Sort.by(sortField).ascending();
+		Sort sort = sortDirection != null && sortDirection.equalsIgnoreCase("asc")
+                ? Sort.by(sortField).ascending()
+                : Sort.by(sortField).descending();
     	Pageable pageable = PageRequest.of(page, size, sort);
     	
     	Page<ComprobanteDTO> listadoComprobantes = comprobanteRepository.listarComprobantes(pageable);

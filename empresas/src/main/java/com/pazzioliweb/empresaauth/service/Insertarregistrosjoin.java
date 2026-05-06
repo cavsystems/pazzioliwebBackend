@@ -88,6 +88,7 @@ public class Insertarregistrosjoin {
 			actividarepo.save(nuevaactividad);
 			 actividad=actividarepo.findByDescripcionActividad(nombre);
 		}
+		System.out.println("llego aqui controller antes: "+municipioop.isPresent());
 		if(municipioop.isPresent()) {
 			Municipio	municipio=municipioop.get();
 			
@@ -98,8 +99,8 @@ public class Insertarregistrosjoin {
 			Tipopersona tipopersona=tipoperop.get();
 			Tipoidentificacion tipoidentifica=tipoidenop.get();
 			Actividadeconomica actividadecono=actividad.get();
-			
-			
+
+			System.out.println("llego aqui controller: ");
 			
 			return new Object[]{ municipio, departamento, pais,tipopersona,tipoidentifica,
 					regime,actividadecono};

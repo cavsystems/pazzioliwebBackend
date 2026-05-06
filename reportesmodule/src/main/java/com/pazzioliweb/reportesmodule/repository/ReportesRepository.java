@@ -715,5 +715,76 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
             """, nativeQuery = true)
     List<Object[]> ticketPromedioPorVendedor(@Param("inicio") LocalDate inicio,
                                              @Param("fin") LocalDate fin);
+
+    // ══════════════════════════════════════════════════════════════
+    // CARTERA POR ANTIGÜEDAD (aging buckets)
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                CASE
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) <= 0  THEN 'Al día'
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 1 AND 30  THEN '1-30 días'
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 31 AND 60 THEN '31-60 días'
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 61 AND 90 THEN '61-90 días'
+                    ELSE '>90 días'
+                END AS rangoEdad,
+                CASE
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) <= 0  THEN 0
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 1 AND 30  THEN 1
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 31 AND 60 THEN 2
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 61 AND 90 THEN 3
+                    ELSE 4
+                END AS ordenRango,
+                COUNT(*)                AS cantidad,
+                COALESCE(SUM(saldo), 0) AS totalSaldo
+            FROM cuentas_por_cobrar
+            WHERE estado IN ('PENDIENTE','PARCIAL')
+              AND saldo > 0
+            GROUP BY rangoEdad, ordenRango
+            ORDER BY ordenRango ASC
+            """, nativeQuery = true)
+    List<Object[]> carteraAging();
+
+    // ══════════════════════════════════════════════════════════════
+    // PRODUCTOS SIN MOVIMIENTO (inventario inmovilizado)
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                pv.producto_variantes_id                                       AS productoVarianteId,
+                pv.sku                                                         AS sku,
+                IF(pv.predeterminada=0,
+                   CONCAT(p.descripcion,' - ',pv.referencia_variantes),
+                   p.descripcion)                                              AS descripcion,
+                COALESCE(l.descripcion, 'Sin línea')                           AS linea,
+                COALESCE((SELECT SUM(e.existencia) FROM existencias e
+                           WHERE e.producto_variantes_id = pv.producto_variantes_id), 0) AS existencia,
+                p.costo                                                        AS costo,
+                COALESCE((SELECT SUM(e.existencia) FROM existencias e
+                           WHERE e.producto_variantes_id = pv.producto_variantes_id), 0) * p.costo AS valorInmovilizado,
+                p.fecha_ultima_venta                                           AS fechaUltimaVenta,
+                p.fecha_ultima_compra                                          AS fechaUltimaCompra,
+                CASE WHEN p.fecha_ultima_venta IS NULL THEN NULL
+                     ELSE DATEDIFF(CURDATE(), p.fecha_ultima_venta)
+                END                                                            AS diasSinVender
+            FROM producto_variantes pv
+            JOIN productos p ON p.producto_id = pv.producto_id
+            LEFT JOIN lineas l ON l.linea_id = p.linea_id
+            WHERE pv.activo = 1
+              AND p.estado = 'ACTIVO'
+              AND NOT EXISTS (
+                  SELECT 1 FROM detalles_venta dv
+                    JOIN ventas v ON v.id = dv.venta_id
+                   WHERE dv.codigo_producto = pv.sku
+                     AND v.estado = 'COMPLETADA'
+                     AND v.fecha_emision BETWEEN :inicio AND :fin
+              )
+            ORDER BY valorInmovilizado DESC
+            LIMIT :topN
+            """, nativeQuery = true)
+    List<Object[]> productosSinMovimiento(@Param("inicio") LocalDate inicio,
+                                          @Param("fin") LocalDate fin,
+                                          @Param("topN") int topN);
 }
 

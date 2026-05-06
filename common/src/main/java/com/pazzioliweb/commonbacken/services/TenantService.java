@@ -18,7 +18,7 @@ public class TenantService {
 	      .schemas(schema)
 	      .locations("classpath:db/migration"
 	      		+ "")
-	      .baselineOnMigrate(true)
+
 	      .load()
 	      .migrate();
 	  }

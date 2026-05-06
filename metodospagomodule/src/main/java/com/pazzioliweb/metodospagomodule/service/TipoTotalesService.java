@@ -23,9 +23,9 @@ public class TipoTotalesService {
 	}
 	
 	public Page<TipoTotalDTO> listar(int page, int size, String sortField, String sortDirection){
-		Sort sort = sortDirection.equalsIgnoreCase("asc")
-                ? Sort.by(sortField).descending()
-                : Sort.by(sortField).ascending();
+		Sort sort = sortDirection != null && sortDirection.equalsIgnoreCase("asc")
+                ? Sort.by(sortField).ascending()
+                : Sort.by(sortField).descending();
     	Pageable pageable = PageRequest.of(page, size, sort);
     	
     	Page<TipoTotalDTO> listadoTipoTotales = tipoTotalRepository.listadoTipoTotalesDTO(pageable);

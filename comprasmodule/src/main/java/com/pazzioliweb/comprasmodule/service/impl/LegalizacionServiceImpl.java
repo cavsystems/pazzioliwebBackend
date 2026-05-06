@@ -149,6 +149,8 @@ return ordenCreada;
 
         dto.setId(legalizacion.getId());
         dto.setOrdenCompraId(legalizacion.getOrdenCompra().getId());
+        dto.setNumeroOrden(ord.get().getNumeroOrden());
+        dto.setFechaCreacion(ord.get().getFechaCreacion());
         dto.setItems(legalizacion.getOrdenCompra().getItems().stream().map(detallemaper::detalleToDto).collect(Collectors.toList()));
         dto.setNumeroFacturaProveedor(legalizacion.getNumeroFacturaProveedor());
         dto.setFechaFactura(legalizacion.getFechaFactura());

@@ -11,14 +11,19 @@ import org.springframework.data.jpa.repository.Query;
 import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
 import com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventario;
 
-import io.lettuce.core.dynamic.annotation.Param;
+import org.springframework.data.repository.query.Param;
 
 public interface MovimientoInventarioRepository extends JpaRepository<MovimientoInventario, Long>{
 	Optional<MovimientoInventario> findTopByComprobanteOrderByConsecutivoDesc(Comprobantes comprobante);
 	
+	/**
+	 * Compara el enum tipo con el string del parámetro usando .name() para
+	 * que sea compatible con cualquier modo de Hibernate. La comparación
+	 * directa enum = String falla silenciosamente y devuelve cero filas.
+	 */
 	@Query("""
 		    SELECT m FROM MovimientoInventario m
-		    WHERE (:tipo IS NULL OR m.tipo = :tipo)
+		    WHERE (:tipo IS NULL OR :tipo = '' OR CAST(m.tipo AS string) = :tipo)
 		      AND (:desde IS NULL OR m.fechaEmision >= :desde)
 		      AND (:hasta IS NULL OR m.fechaEmision <= :hasta)
 		""")

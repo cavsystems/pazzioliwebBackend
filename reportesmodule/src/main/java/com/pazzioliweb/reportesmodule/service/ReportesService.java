@@ -75,5 +75,11 @@ public interface ReportesService {
 
     /** Ticket promedio por cajero o vendedor. */
     List<TicketPromedioDTO> getTicketPromedio(LocalDate inicio, LocalDate fin, String agrupacion);
+
+    /** Cartera por antigüedad (aging buckets). */
+    List<CarteraAgingDTO> getCarteraAging();
+
+    /** Productos activos que no han tenido ventas en el periodo. */
+    List<ProductoSinMovimientoDTO> getProductosSinMovimiento(LocalDate inicio, LocalDate fin, int topN);
 }
 

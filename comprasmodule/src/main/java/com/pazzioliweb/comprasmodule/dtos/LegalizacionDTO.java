@@ -8,6 +8,10 @@ public class LegalizacionDTO {
 
     private Long id;
     private Long ordenCompraId;
+    /** Consecutivo legible de la orden de compra. */
+    private String numeroOrden;
+    /** Fecha de creación de la orden (para reportes). */
+    private LocalDate fechaCreacion;
     private String numeroFacturaProveedor;
     private LocalDate fechaFactura;
     private BigDecimal totalFactura;
@@ -19,6 +23,12 @@ public class LegalizacionDTO {
     private String fechafinal;
 
     private String proveedorNombre;
+
+    public String getNumeroOrden() { return numeroOrden; }
+    public void setNumeroOrden(String numeroOrden) { this.numeroOrden = numeroOrden; }
+
+    public LocalDate getFechaCreacion() { return fechaCreacion; }
+    public void setFechaCreacion(LocalDate fechaCreacion) { this.fechaCreacion = fechaCreacion; }
 
 
     public String getFechainicial(){

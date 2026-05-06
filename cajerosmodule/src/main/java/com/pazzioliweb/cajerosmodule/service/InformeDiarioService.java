@@ -18,7 +18,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -298,6 +300,21 @@ public class InformeDiarioService {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  Documentos (recibos/egresos/ventas) anulados durante el día.
+    //  Cuando se anula un recibo o egreso, NO se borra el MovimientoCajero
+    //  original — solo se agrega uno nuevo de tipo ANULACION apuntando al
+    //  mismo referencia_documento_id. Para que el informe no cuente dos veces,
+    //  excluimos los IDs que tienen una ANULACION asociada.
+    // ════════════════════════════════════════════════════════════════════════
+    private Set<Long> idsDocumentosAnulados(List<MovimientoCajero> movimientos) {
+        return movimientos.stream()
+                .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.ANULACION
+                          && m.getReferenciaDocumentoId() != null)
+                .map(MovimientoCajero::getReferenciaDocumentoId)
+                .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  5. RECIBOS DE CAJA  (RECIBO_CAJA)
     // ════════════════════════════════════════════════════════════════════════
     private void buildRecibosCaja(InformeDiarioVentasDTO dto,
@@ -305,9 +322,12 @@ public class InformeDiarioService {
                                    List<Long> sesionIds,
                                    LocalDate fecha) {
         SeccionRecibosCaja seccion = new SeccionRecibosCaja();
+        Set<Long> anulados = idsDocumentosAnulados(movimientos);
 
         List<ReciboCaja> recibos = movimientos.stream()
                 .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.RECIBO_CAJA)
+                .filter(m -> m.getReferenciaDocumentoId() == null
+                          || !anulados.contains(m.getReferenciaDocumentoId()))
                 .map(m -> new ReciboCaja(
                         m.getTerceroNombre() != null ? m.getTerceroNombre() : "",
                         m.getMonto(),
@@ -317,6 +337,8 @@ public class InformeDiarioService {
 
         BigDecimal totalRecibos = movimientos.stream()
                 .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.RECIBO_CAJA)
+                .filter(m -> m.getReferenciaDocumentoId() == null
+                          || !anulados.contains(m.getReferenciaDocumentoId()))
                 .map(MovimientoCajero::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         seccion.setTotalRecibosCaja(totalRecibos);
@@ -351,9 +373,12 @@ public class InformeDiarioService {
                                List<Long> sesionIds,
                                LocalDate fecha) {
         SeccionEgresos seccion = new SeccionEgresos();
+        Set<Long> anulados = idsDocumentosAnulados(movimientos);
 
         List<ComprobanteEgreso> egresos = movimientos.stream()
                 .filter(m -> m.getTipoMovimiento() == MovimientoCajero.TipoMovimiento.EGRESO)
+                .filter(m -> m.getReferenciaDocumentoId() == null
+                          || !anulados.contains(m.getReferenciaDocumentoId()))
                 .map(m -> new ComprobanteEgreso(
                         m.getTerceroNombre() != null ? m.getTerceroNombre() : "",
                         m.getMonto(),
