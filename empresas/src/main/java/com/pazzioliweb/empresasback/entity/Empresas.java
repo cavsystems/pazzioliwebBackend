@@ -40,7 +40,7 @@ import lombok.Data;
 				targetClass = EmpresaTenantProjection.class,
 				columns = {
 						@ColumnResult(name = "tenant", type = String.class),
-
+						@ColumnResult(name = "codigotipopersona", type =  Integer.class),
 						@ColumnResult(name = "codigotipoidentificacion", type =  Integer.class),
 						@ColumnResult(name = "numeroidentificacion", type = String.class),
 						@ColumnResult(name = "digitoverificacion", type = Integer.class),

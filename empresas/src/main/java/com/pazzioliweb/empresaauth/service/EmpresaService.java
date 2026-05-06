@@ -45,6 +45,15 @@ import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
 import com.pazzioliweb.commonbacken.repositorio.TipoidentificacionRepository;
 import com.pazzioliweb.usuariosbacken.entity.Tipopersona;
 import com.pazzioliweb.usuariosbacken.repositorio.TipopersonaRepository;
+import com.pazzioliweb.usuariosbacken.entity.Usuario;
+import com.pazzioliweb.usuariosbacken.entity.Roles;
+import com.pazzioliweb.usuariosbacken.entity.Permiso;
+import com.pazzioliweb.usuariosbacken.entity.PermisoRol;
+import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
+import com.pazzioliweb.usuariosbacken.repositorio.RolesRepository;
+import com.pazzioliweb.usuariosbacken.repositorio.PermisoRepository;
+import com.pazzioliweb.usuariosbacken.repositorio.PermisoRolRepository;
+import com.pazzioliweb.commonbacken.util.PasswordUtils;
 
 @Service
 public class EmpresaService {
@@ -72,6 +81,14 @@ public class EmpresaService {
 	  private Nombredb nombredb;
 	  @Autowired
 	  private BodegasRepository repotoribodega;
+	  @Autowired
+	  private UsuarioRepository usuarioRepository;
+	  @Autowired
+	  private RolesRepository rolesRepository;
+	  @Autowired
+	  private PermisoRepository permisoRepository;
+	  @Autowired
+	  private PermisoRolRepository permisoRolRepository;
 
 	  @Autowired
 	  private Insertarregistrosjoin insertjoi;
@@ -113,6 +130,8 @@ public class EmpresaService {
 				  bodega.setCodigopais((Pais) codigos[2]);
 				  bodega.setTelefono(sucu.getTelefonofijo());
 				  bodega.setCelular(sucu.getCelular());
+				  bodega.setDireccion(sucu.getDireccion());
+				  bodega.setCodigopostal(sucu.getCodigopostal());
 				  bodega.setNombre(sucu.getNombre());
 				  bodega.setCodigosucursal(sucu.getCodigosucursal());
 				  bodega.setCorreo(sucu.getCorreo());
@@ -173,6 +192,9 @@ public class EmpresaService {
 
 		emprerepo.save(empresa);
 		
+		// Crear usuario para la nueva empresa
+		crearUsuarioParaEmpresa(empre);
+		
 		
 		
 		
@@ -181,6 +203,76 @@ public class EmpresaService {
 		
 		
 		
+	}
+	
+	private void crearUsuarioParaEmpresa(Empresaresponse empre) {
+		try {
+			// Buscar rol Admin (código 4 según la migración)
+			Optional<Roles> rolOpt = rolesRepository.findByCodigo(1);
+			if (rolOpt.isEmpty()) {
+				// Si no existe rol Admin, crear uno
+				Roles rolAdmin = new Roles();
+				rolAdmin.setNombre("Admin");
+				rolAdmin = rolesRepository.save(rolAdmin);
+				rolOpt = Optional.of(rolAdmin);
+			}
+			
+			Roles rolAdmin = rolOpt.get();
+			
+			// Asignar todos los permisos al rol Admin
+			asignarTodosLosPermisosAlRol(rolAdmin);
+			
+			// Crear usuario administrador para la empresa
+			Usuario nuevoUsuario = new Usuario();
+			nuevoUsuario.setNombre(empre.getPrimernombre() + " " + empre.getPrimerapellido());
+			nuevoUsuario.setUsuario(empre.getCorreoempresa()); // Usar el email de la empresa como usuario
+			
+			// Encriptar contraseña
+			String contrasenaEncriptada = PasswordUtils.encrypt("admin123");
+			System.out.println("Contraseña original: admin123");
+			System.out.println("Contraseña encriptada: " + contrasenaEncriptada);
+			
+			nuevoUsuario.setContrasena(contrasenaEncriptada); // Contraseña por defecto
+			nuevoUsuario.setEstado("ACTIVO");
+			nuevoUsuario.setCodigousuariocreado(1); // Usuario por defecto que crea
+			nuevoUsuario.setCodigorol(rolAdmin);
+			
+			Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
+			System.out.println("Usuario guardado con ID: " + usuarioGuardado.getCodigo());
+			System.out.println("Contraseña guardada en BD: " + usuarioGuardado.getContrasena());
+			
+		} catch (Exception e) {
+			// En caso de error, lo registramos pero no interrumpimos la creación de la empresa
+			System.err.println("Error al crear usuario para la empresa: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+	
+	private void asignarTodosLosPermisosAlRol(Roles rol) {
+		try {
+			// Obtener todos los permisos disponibles
+			List<Permiso> todosLosPermisos = permisoRepository.findAll();
+			
+			// Para cada permiso, crear la relación con el rol Admin
+			for (Permiso permiso : todosLosPermisos) {
+				// Verificar si ya existe la relación para evitar duplicados
+				List<PermisoRol> relacionesExistentes = permisoRolRepository.findPermisosActivosByRol(rol.getCodigo());
+				boolean yaExiste = relacionesExistentes.stream()
+					.anyMatch(pr -> pr.getCodigopermiso().getCodigo() == permiso.getCodigo());
+				
+				if (!yaExiste) {
+					PermisoRol permisoRol = new PermisoRol();
+					permisoRol.setCodigorol(rol);
+					permisoRol.setCodigopermiso(permiso);
+					permisoRol.setEstado("ACTIVO");
+					permisoRolRepository.save(permisoRol);
+				}
+			}
+			
+		} catch (Exception e) {
+			System.err.println("Error al asignar permisos al rol Admin: " + e.getMessage());
+			e.printStackTrace();
+		}
 	}
 	
 }

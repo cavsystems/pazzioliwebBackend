@@ -172,8 +172,8 @@ FROM (
 		            FROM existencias e
 		            GROUP BY e.producto_variantes_id
 		        ) ex ON ex.varianteId = pv.producto_variantes_id) t 
-		        WHERE LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%')) AND
- t.activo=:activo  ||   LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%')) || LOWER(t.codigobarrasvariante) LIKE LOWER(CONCAT('%', :productodes, '%'))
+		        WHERE (LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%')) ||   LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%')) || LOWER(t.codigobarrasvariante) LIKE LOWER(CONCAT('%', :productodes, '%'))) AND
+ t.activo=:activo   
 		        """,
 			countQuery = "SELECT COUNT(*) FROM producto_variantes",
 			nativeQuery = true

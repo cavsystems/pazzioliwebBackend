@@ -28,6 +28,7 @@ import com.pazzioliweb.commonbacken.conexiondb.ConexionFactory;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
 import com.pazzioliweb.commonbacken.entity.Sesiones;
 import com.pazzioliweb.commonbacken.repositorio.SessionRepository;
+import com.pazzioliweb.commonbacken.util.PasswordUtils;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
 
@@ -80,8 +81,14 @@ public class AuthController {
             if (optional.isPresent()) {
 
                 Usuario usuario = optional.get();
-                System.out.println(usuario.getUsuario());
-                if (usuario.getContrasena().equals(request.password)) {
+                System.out.println("Usuario encontrado: " + usuario.getUsuario());
+                System.out.println("Contraseña ingresada: " + request.password);
+                System.out.println("Contraseña guardada en BD: " + usuario.getContrasena());
+                
+                boolean contrasenaValida = verificarContrasena(request.password, usuario.getContrasena());
+                System.out.println("¿Contraseña válida?: " + contrasenaValida);
+                
+                if (contrasenaValida) {
                     Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
 
                     Sesiones sesion = optionalsession.get();
@@ -146,8 +153,14 @@ return  null;
         if (optional.isPresent()) {
 
             Usuario usuario = optional.get();
-            System.out.println(usuario.getUsuario());
-            if (usuario.getContrasena().equals(request.password)) {
+            System.out.println("Usuario encontrado: " + usuario.getUsuario());
+            System.out.println("Contraseña ingresada: " + request.password);
+            System.out.println("Contraseña guardada en BD: " + usuario.getContrasena());
+            
+            boolean contrasenaValida = verificarContrasena(request.password, usuario.getContrasena());
+            System.out.println("¿Contraseña válida?: " + contrasenaValida);
+            
+            if (contrasenaValida) {
                 Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
 
                 if (optionalsession.isPresent()) {
@@ -336,6 +349,26 @@ return  null;
     // ──────────────────────────────────────────────────────────────────────────
     // Utilidades
     // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Verifica la contraseña del usuario manejando ambos casos:
+     * - Contraseñas encriptadas (nuevos usuarios)
+     * - Contraseñas en texto plano (usuarios existentes)
+     */
+    private boolean verificarContrasena(String passwordIngresada, String passwordGuardada) {
+        // Primero intentar con contraseña encriptada (nuevos usuarios)
+        if (PasswordUtils.matches(passwordIngresada, passwordGuardada)) {
+            return true;
+        }
+        
+        // Si no funciona, intentar con texto plano (usuarios existentes)
+        if (passwordIngresada.equals(passwordGuardada)) {
+            System.out.println("⚠️ Usuario con contraseña en texto plano detectado - se recomienda migrar a contraseña encriptada");
+            return true;
+        }
+        
+        return false;
+    }
 
     public void essuperadministrador(int id) {
     }
