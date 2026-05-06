@@ -7,6 +7,7 @@ import lombok.Data;
 public class EmpresaTenantProjection {
 
     private String tenant;
+    private Integer codigo;
     private  Integer codigotipopersona;
     private  Integer codigotipoidentificacion;
     private String numeroidentificacion;
@@ -37,6 +38,7 @@ public class EmpresaTenantProjection {
 
     public EmpresaTenantProjection(
             String tenant,
+            Integer codigo,
             Integer  codigotipopersona,
             Integer codigotipoidentificacion,
             String numeroidentificacion,
@@ -61,6 +63,7 @@ public class EmpresaTenantProjection {
     ) {
         this.codigotipopersona=codigotipopersona;
         this.tenant = tenant;
+        this.codigo = codigo;
         this.codigotipoidentificacion = codigotipoidentificacion;
         this.numeroidentificacion = numeroidentificacion;
         this.digitoverificacion = digitoverificacion;

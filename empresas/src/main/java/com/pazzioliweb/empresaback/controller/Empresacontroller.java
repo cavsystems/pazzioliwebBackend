@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -167,11 +168,56 @@ public class Empresacontroller {
 		   return ResponseEntity.status(HttpStatus.CREATED).body(response);
 		 	 }
 	 
-
-
-
-
-	 	 @RequestMapping("/traerinformacionem")
+	 @Transactional
+	 @PostMapping(value = "/actualizar/{id}", consumes = "multipart/form-data")
+	 public ResponseEntity<Map<String, Object>> actualizarEmpresa(
+			 @PathVariable Integer id,
+			 @RequestPart("dto") Empresaresponse dto,
+			 @RequestPart(value = "archivo", required = false) MultipartFile archivo) throws Exception{
+		 
+		 // Establecer el tenant actual basado en la empresa existente
+		 Optional<Empresa> empresaOpt = repoempresa.findById(id.longValue());
+		 if (empresaOpt.isEmpty()) {
+			 response.clear();
+			 response.put("error", "Empresa no encontrada con ID: " + id);
+			 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+		 }
+		 
+		 // Obtener el schema/tenant de la empresa existente
+		 String schema = nombredb.getNombre().toLowerCase().replaceAll("[^a-z0-9_]", "");
+		 TenantContext.setCurrentTenant(schema);
+		 
+		 class mensajesuccesempres{
+			 String mensaje;
+			 public String getMensaje() {
+				 return mensaje;
+			 }
+			 public void setMensaje(String mensaje) {
+				 this.mensaje = mensaje;
+			 }
+			 public boolean isEstado() {
+				 return estado;
+			 }
+			 public void setEstado(boolean estado) {
+				 this.estado = estado;
+			 }
+			 boolean estado;
+			 public  mensajesuccesempres(String mensaje,boolean estado) {
+				 this.mensaje=mensaje;
+				 this.estado=estado;
+			 }
+			   
+			 public  mensajesuccesempres() {
+				   
+			 }
+		 }
+		 
+		 serv.updateEmpresa(dto, schema, archivo, id);
+		 response.put("respuesta", new mensajesuccesempres("Empresa actualizada exitosamente", true));
+		 return ResponseEntity.ok().body(response);
+	 }
+	 
+	 @RequestMapping("/traerinformacionem")
 	 	 public ResponseEntity<Map<String, Object>> traerempresainfo() {
 	 		 List<Empresa>  empresas=repoempresa.findAll();
 	 		 response.clear();

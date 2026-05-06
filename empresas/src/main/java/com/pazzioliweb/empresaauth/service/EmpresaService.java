@@ -9,8 +9,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -203,6 +207,137 @@ public class EmpresaService {
 		
 		
 		
+	}
+	
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void updateEmpresa(Empresaresponse empre, String db, MultipartFile archivo, Integer empresaId) throws Exception{
+		// Buscar la empresa existente
+		Optional<Empresa> empresaOpt = emprerepo.findById(empresaId.longValue());
+		if (empresaOpt.isEmpty()) {
+			throw new Exception("Empresa no encontrada con ID: " + empresaId);
+		}
+		
+		Empresa empresa = empresaOpt.get();
+		
+		// Actualizar sucursales (bodegas) de forma segura
+		if(!empre.getSucursales().isEmpty()) {
+			// Obtener todas las bodegas existentes para comparar por nombre
+			List<Bodegas> todasLasBodegas = repotoribodega.findAll();
+			
+			// Crear mapas para facilitar la comparación por nombre
+			Map<String, Bodegas> existentesMap = new HashMap<>();
+			for(Bodegas existente : todasLasBodegas) {
+				String key = existente.getNombre() != null ? existente.getNombre().toLowerCase().trim() : "";
+				existentesMap.put(key, existente);
+			}
+			
+			List<Bodegas> bodegasActualizar = new ArrayList<>();
+			List<Bodegas> bodegasNuevas = new ArrayList<>();
+			Set<String> sucursalesRecibidas = new HashSet<>();
+			
+			// Procesar cada sucursal recibida
+			for(Sucursales sucu : empre.getSucursales()) {
+				String nombreSucursal = sucu.getNombre() != null ? sucu.getNombre().toLowerCase().trim() : "";
+				sucursalesRecibidas.add(nombreSucursal);
+				
+				Object[] codigos = insertjoi.obtenercodigos(sucu.getMunicipio().getCodigo(), sucu.getDepartamento().getCodigo(), sucu.getPais().getCodigo());
+				
+				Bodegas bodegaExistente = existentesMap.get(nombreSucursal);
+				
+				if(bodegaExistente != null) {
+					// Actualizar bodega existente (preserva ID y relaciones)
+					bodegaExistente.setCelular(sucu.getCelular());
+					bodegaExistente.setCodigodepartamento((Departamento) codigos[1]);
+					bodegaExistente.setCodigomunicipio((Municipio) codigos[0]);
+					bodegaExistente.setCodigopais((Pais) codigos[2]);
+					bodegaExistente.setTelefono(sucu.getTelefonofijo());
+					bodegaExistente.setDireccion(sucu.getDireccion());
+					bodegaExistente.setCodigopostal(sucu.getCodigopostal());
+					// El nombre ya es el mismo, no se actualiza
+					bodegaExistente.setCorreo(sucu.getCorreo());
+					bodegasActualizar.add(bodegaExistente);
+				} else {
+					// Crear nueva bodega
+					Bodegas nuevaBodega = new Bodegas();
+					nuevaBodega.setCelular(sucu.getCelular());
+					nuevaBodega.setCodigodepartamento((Departamento) codigos[1]);
+					nuevaBodega.setCodigomunicipio((Municipio) codigos[0]);
+					nuevaBodega.setCodigopais((Pais) codigos[2]);
+					nuevaBodega.setTelefono(sucu.getTelefonofijo());
+					nuevaBodega.setDireccion(sucu.getDireccion());
+					nuevaBodega.setCodigopostal(sucu.getCodigopostal());
+					nuevaBodega.setNombre(sucu.getNombre());
+					nuevaBodega.setCodigosucursal(sucu.getCodigosucursal());
+					nuevaBodega.setCorreo(sucu.getCorreo());
+					bodegasNuevas.add(nuevaBodega);
+				}
+			}
+			
+			// Identificar bodegas a desactivar (las que no vienen en la actualización)
+			List<Bodegas> bodegasDesactivar = new ArrayList<>();
+			for(Map.Entry<String, Bodegas> entry : existentesMap.entrySet()) {
+				if(!sucursalesRecibidas.contains(entry.getKey())) {
+					// Opción 1: Desactivar en lugar de eliminar
+					// entry.getValue().setEstado("INACTIVO"); // Si tuviera campo estado
+					// bodegasActualizar.add(entry.getValue()));
+					
+					// Opción 2: Eliminar solo si no tienen transacciones (más seguro)
+					// Por ahora, mantenemos las bodegas existentes para no romper relaciones
+					System.out.println("Bodega no actualizada: " + entry.getKey() + " - se mantiene para preservar relaciones existentes");
+				}
+			}
+			
+			// Guardar cambios
+			if(!bodegasActualizar.isEmpty()) {
+				repotoribodega.saveAll(bodegasActualizar);
+			}
+			if(!bodegasNuevas.isEmpty()) {
+				repotoribodega.saveAll(bodegasNuevas);
+			}
+		}
+		
+		// Actualizar impuestos
+		if(!empre.getImpuestos().isEmpty()) {
+			for(com.pazzioliweb.empresaback.dtos.Empresaresponse.Impuestos in: empre.getImpuestos()) {
+				Optional<Impuestos> impuestosOp = impuestorepositorio.findByCodigo(in.getCodigo());
+				if (impuestosOp.isPresent()) {
+					Impuestos impuesto = impuestosOp.get();
+					impuesto.setEstado("ACTIVO");
+					impuestorepositorio.save(impuesto);
+				}
+			}
+		}
+		
+		// Actualizar datos de la empresa
+		Object[] codigosempr = insertjoi.obtenercodigos(empre.getMunicipio(), empre.getDepartamento(), empre.getPais(), empre.getTipodepersona(), empre.getTipodeidentificacion(), empre.getRegimen(), empre.getActividadeconomica());
+		
+		empresa.setCodigomunicipio((Municipio) codigosempr[0]);
+		empresa.setCodigodepartamento((Departamento) codigosempr[1]);
+		empresa.setCodigopais((Pais) codigosempr[2]);
+		empresa.setCodigotipopersona((Tipopersona) codigosempr[3]);
+		empresa.setCodigotipoidentificacion((Tipoidentificacion) codigosempr[4]);
+		empresa.setCodigoregimen((Regimen) codigosempr[5]);
+		empresa.setCodigoactividadeconomica((Actividadeconomica) codigosempr[6]);
+		empresa.setCelularempresa(empre.getCelularempresa());
+		empresa.setCorreoempresa(empre.getCorreoempresa());
+		empresa.setNombrecomercial(empre.getNombrecomercial());
+		empresa.setNumeroidentificacion(empre.getNumeroidentificacion());
+		empresa.setDigitoverificacion(empre.getDigitodeverificacion());
+		empresa.setCodigopostal(empre.getCodigopostal());
+		empresa.setPrimernombre(empre.getPrimernombre());
+		empresa.setPrimerapellido(empre.getPrimerapellido());
+		empresa.setSegundonombre(empre.getSegundonombre());
+		empresa.setSegundoapellido(empre.getSegundoapellido());
+		empresa.setRazonsocial(empre.getRazonsocial());
+		empresa.setTelfonofijo(empre.getTelefonofijo());
+		
+		// Actualizar imagen solo si se proporciona una nueva
+		if (archivo != null && !archivo.isEmpty()) {
+			empresa.setImagenEmpresa(archivo.getBytes());
+			empresa.setTipoImagen(archivo.getContentType());
+		}
+
+		emprerepo.save(empresa);
 	}
 	
 	private void crearUsuarioParaEmpresa(Empresaresponse empre) {
