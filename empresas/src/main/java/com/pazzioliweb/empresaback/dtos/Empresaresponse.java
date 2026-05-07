@@ -28,6 +28,8 @@ public class Empresaresponse {
   	private int tipodeidentificacion;
   	
   	private int 	tipodepersona;
+	private String estado;
+	
   	public List<Impuestos> getImpuestos() {
 		return impuestos;
 	}
@@ -162,6 +164,14 @@ public class Empresaresponse {
 
 	public void setTipodepersona(int tipodepersona) {
 		this.tipodepersona = tipodepersona;
+	}
+
+	public String getEstado() {
+		return estado;
+	}
+
+	public void setEstado(String estado) {
+		this.estado = estado;
 	}
 
 	public int getMunicipio() {

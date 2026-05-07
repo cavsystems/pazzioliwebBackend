@@ -1,6 +1,8 @@
 package com.pazzioliweb.empresaauth.service;
 
 import com.pazzioliweb.empresaback.dtos.EmpresaTenantProjection;
+import com.pazzioliweb.empresaback.exception.Empresaexception;
+import com.pazzioliweb.empresasback.entity.Estado;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
@@ -58,6 +60,13 @@ import com.pazzioliweb.usuariosbacken.repositorio.RolesRepository;
 import com.pazzioliweb.usuariosbacken.repositorio.PermisoRepository;
 import com.pazzioliweb.usuariosbacken.repositorio.PermisoRolRepository;
 import com.pazzioliweb.commonbacken.util.PasswordUtils;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Service
 public class EmpresaService {
@@ -115,6 +124,12 @@ public class EmpresaService {
 	public List<EmpresaTenantProjection> listartodoslossquemas() {
 		return em.createNativeQuery("CALL sp_listar_empresas_todos_tenants()", "EmpresaResponseMapping")
 
+				.getResultList();
+	}
+
+	public List<EmpresaTenantProjection> buscarEmpresasConFiltro(String busqueda) {
+		return em.createNativeQuery("CALL sp_buscar_empresas_todos_tenants_filtro(:busqueda)", "EmpresaResponseMapping")
+				.setParameter("busqueda", busqueda)
 				.getResultList();
 	}
 
@@ -189,6 +204,7 @@ public class EmpresaService {
 		empresa.setSegundoapellido(empre.getSegundoapellido());
 		empresa.setRazonsocial(empre.getRazonsocial());
 		empresa.setTelfonofijo(empre.getTelefonofijo());
+		empresa.setEstado(Estado.ACTIVA);
 		if (archivo != null && !archivo.isEmpty()) {
 			empresa.setImagenEmpresa(archivo.getBytes());
 		    empresa.setTipoImagen(archivo.getContentType()); // Guardamos el tipo MIME
@@ -331,6 +347,18 @@ public class EmpresaService {
 		empresa.setRazonsocial(empre.getRazonsocial());
 		empresa.setTelfonofijo(empre.getTelefonofijo());
 		
+		// Actualizar estado si se proporciona
+		if (empre.getEstado() != null && !empre.getEstado().trim().isEmpty()) {
+			try {
+				// Convertir String a enum con validación
+				String estadoStr = empre.getEstado().toUpperCase().trim();
+				Estado nuevoEstado = Estado.valueOf(estadoStr);
+				empresa.setEstado(nuevoEstado);
+			} catch (IllegalArgumentException e) {
+				throw new Exception("Estado inválido: '" + empre.getEstado() + "'. Valores válidos: ACTIVA, INACTIVA");
+			}
+		}
+		
 		// Actualizar imagen solo si se proporciona una nueva
 		if (archivo != null && !archivo.isEmpty()) {
 			empresa.setImagenEmpresa(archivo.getBytes());
@@ -339,7 +367,28 @@ public class EmpresaService {
 
 		emprerepo.save(empresa);
 	}
-	
+
+
+	public void updateEstado(Integer id, String estado) {
+
+		Empresa empresa = emprerepo.findById(id.longValue()).orElse(null);
+		if (empresa == null) {
+			throw new Empresaexception("Empresa no encontrada con id: " + id);
+		}
+
+		try {
+			// Convertir String a enum con validación
+			String estadoStr = estado.toUpperCase().trim();
+			Estado nuevoEstado = Estado.valueOf(estadoStr);
+			empresa.setEstado(nuevoEstado);
+			emprerepo.save(empresa);
+		} catch (IllegalArgumentException e) {
+			throw new Empresaexception("Estado inválido: '" + estado + "'. Valores válidos: ACTIVA, INACTIVA");
+		}
+
+
+	}
+
 	private void crearUsuarioParaEmpresa(Empresaresponse empre) {
 		try {
 			// Buscar rol Admin (código 4 según la migración)
@@ -407,6 +456,89 @@ public class EmpresaService {
 		} catch (Exception e) {
 			System.err.println("Error al asignar permisos al rol Admin: " + e.getMessage());
 			e.printStackTrace();
+		}
+	}
+	
+	public boolean crearBackupSchema(String nombreEmpresa) {
+		try {
+			String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+			String backupPath = "C:\\Users\\AUXPAZZIOLI\\Documents\\backupsempresas";
+			String backupFileName = nombreEmpresa + "_" + timestamp + ".sql";
+			
+			Path path = Paths.get(backupPath);
+			if (!Files.exists(path)) {
+				Files.createDirectories(path);
+			}
+			String backupCommand = String.format(
+					"mysqldump -u root -proot125 --single-transaction --routines --triggers %s > \"%s\\%s\"",
+					nombreEmpresa,
+					backupPath,
+					backupFileName
+			);
+			
+			Process process = Runtime.getRuntime().exec("cmd /c " + backupCommand);
+			int exitCode = process.waitFor();
+			
+			return exitCode == 0;
+		} catch (IOException | InterruptedException e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+	
+	public boolean eliminarEmpresaConBackup(String nombreTenant) {
+		try {
+			System.out.println("Intentando eliminar empresa con tenant: " + nombreTenant);
+			
+			// Verificar si el schema existe antes de intentar eliminarlo
+			String checkSchemaSql = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '" + nombreTenant + "'";
+			List<Map<String, Object>> schemas = jdbc.queryForList(checkSchemaSql);
+			
+			System.out.println("Schemas encontrados: " + schemas.size());
+			for (Map<String, Object> schema : schemas) {
+				System.out.println("Schema: " + schema.get("SCHEMA_NAME"));
+			}
+			
+			if (schemas.isEmpty()) {
+				throw new RuntimeException("El schema '" + nombreTenant + "' no existe en la base de datos");
+			}
+			
+			if (!crearBackupSchema(nombreTenant)) {
+				throw new RuntimeException("No se pudo crear el backup del schema");
+			}
+			
+			// Intentar eliminar el schema
+			String dropSchemaSql = "DROP SCHEMA IF EXISTS `" + nombreTenant + "`";
+			System.out.println("Ejecutando SQL: " + dropSchemaSql);
+			
+			jdbc.execute(dropSchemaSql);
+			
+			// Verificar que se eliminó correctamente
+			List<Map<String, Object>> schemasAfter = jdbc.queryForList(checkSchemaSql);
+			if (!schemasAfter.isEmpty()) {
+				throw new RuntimeException("El schema no pudo ser eliminado");
+			}
+			
+			System.out.println("Schema eliminado exitosamente: " + nombreTenant);
+			return true;
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("Error al eliminar empresa: " + e.getMessage());
+		}
+	}
+	
+	public List<String> listarTodosLosSchemas() {
+		try {
+			String sql = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')";
+			List<Map<String, Object>> schemas = jdbc.queryForList(sql);
+			List<String> schemaNames = new ArrayList<>();
+			for (Map<String, Object> schema : schemas) {
+				schemaNames.add((String) schema.get("SCHEMA_NAME"));
+			}
+			return schemaNames;
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("Error al listar schemas: " + e.getMessage());
 		}
 	}
 	

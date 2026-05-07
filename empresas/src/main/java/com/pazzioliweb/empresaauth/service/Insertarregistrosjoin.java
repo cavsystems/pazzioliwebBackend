@@ -75,42 +75,50 @@ public class Insertarregistrosjoin {
 	
 	public Object[] obtenercodigos(int codigomunicipio,int codigodepartamento,int codigopais,int codigotipoper,int codigidenti,
 			int regimen,String nombre) {
-		Optional<Municipio> municipioop=repositorimunicipio.findByCodigo(codigomunicipio);
-		Optional<Departamento> departamentoop=repositoridepartemento.findByCodigo(codigodepartamento);
-		Optional<Pais> paisop=paisrepositoripais.findByCodigo(codigopais);
-		Optional<Regimen> regimenop=regimenrepo.findByCodigo(regimen);
-		Optional<Tipopersona> tipoperop=tiporepo.findByCodigo(codigotipoper);
-		Optional<Tipoidentificacion> tipoidenop=tipoidenrepo.findByCodigo(codigidenti);
-		Optional<Actividadeconomica> actividad=actividarepo.findByDescripcionActividad(nombre);
-		if(actividad.isEmpty()) {
-			Actividadeconomica nuevaactividad=new Actividadeconomica();
-			nuevaactividad.setDescripcionActividad(nombre);
-			actividarepo.save(nuevaactividad);
-			 actividad=actividarepo.findByDescripcionActividad(nombre);
-		}
-		System.out.println("llego aqui controller antes: "+municipioop.isPresent());
-		if(municipioop.isPresent()) {
-			Municipio	municipio=municipioop.get();
-			
-			Departamento departamento=departamentoop.get();
-			
-			Pais pais=paisop.get();
-			Regimen regime=regimenop.get();
-			Tipopersona tipopersona=tipoperop.get();
-			Tipoidentificacion tipoidentifica=tipoidenop.get();
-			Actividadeconomica actividadecono=actividad.get();
+		try {
+			Optional<Municipio> municipioop=repositorimunicipio.findByCodigo(codigomunicipio);
+			Optional<Departamento> departamentoop=repositoridepartemento.findByCodigo(codigodepartamento);
+			Optional<Pais> paisop=paisrepositoripais.findByCodigo(codigopais);
+			Optional<Regimen> regimenop=regimenrepo.findByCodigo(regimen);
+			Optional<Tipopersona> tipoperop=tiporepo.findByCodigo(codigotipoper);
+			Optional<Tipoidentificacion> tipoidenop=tipoidenrepo.findByCodigo(codigidenti);
+			System.out.println("llego aqui controller: "+municipioop.isPresent());
+			Optional<Actividadeconomica> actividad=actividarepo.findByDescripcionActividad(nombre);
+			System.out.println("llego aqui controller nombre activida: "+ nombre);
+			if(actividad.isEmpty()) {
+				Actividadeconomica nuevaactividad=new Actividadeconomica();
+				nuevaactividad.setDescripcionActividad(nombre);
+				actividarepo.save(nuevaactividad);
+				actividad=actividarepo.findByDescripcionActividad(nombre);
+			}
+			System.out.println("llego aqui controller antes: "+municipioop.isPresent());
+			if(municipioop.isPresent()) {
+				Municipio	municipio=municipioop.get();
 
-			System.out.println("llego aqui controller: ");
-			
-			return new Object[]{ municipio, departamento, pais,tipopersona,tipoidentifica,
-					regime,actividadecono};
-			
-			
-				
+				Departamento departamento=departamentoop.get();
+
+				Pais pais=paisop.get();
+				Regimen regime=regimenop.get();
+				Tipopersona tipopersona=tipoperop.get();
+				Tipoidentificacion tipoidentifica=tipoidenop.get();
+				Actividadeconomica actividadecono=actividad.get();
+
+				System.out.println("llego aqui controller: ");
+
+				return new Object[]{ municipio, departamento, pais,tipopersona,tipoidentifica,
+						regime,actividadecono};
+
+
+
 			}else {
 				return new Object[]{ null, null, null,null,null,null,null };
 			}
-			
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new Object[]{ null, null, null,null,null,null,null };
+		}
+
 		
 		
 		

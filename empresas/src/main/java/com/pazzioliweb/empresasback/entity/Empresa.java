@@ -6,15 +6,7 @@ import com.pazzioliweb.commonbacken.entity.Pais;
 import com.pazzioliweb.commonbacken.entity.Tipoidentificacion;
 import com.pazzioliweb.usuariosbacken.entity.Tipopersona;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
@@ -198,6 +190,9 @@ private byte[] imagenEmpresa;
 
 private String tipoImagen;
 
+	@Enumerated(EnumType.STRING)
+	private Estado estado;
+
 public byte[] getImagenEmpresa() {
 	return imagenEmpresa;
 }
@@ -209,6 +204,12 @@ public String getTipoImagen() {
 }
 public void setTipoImagen(String tipoImagen) {
 	this.tipoImagen = tipoImagen;
+}
+public Estado getEstado() {
+	return estado;
+}
+public void setEstado(Estado estado) {
+	this.estado = estado;
 }
 
 

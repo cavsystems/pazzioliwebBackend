@@ -13,13 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.pazzioliweb.commonbacken.repositorio.DepartamentoRepositori;
@@ -174,47 +168,55 @@ public class Empresacontroller {
 			 @PathVariable Integer id,
 			 @RequestPart("dto") Empresaresponse dto,
 			 @RequestPart(value = "archivo", required = false) MultipartFile archivo) throws Exception{
+
+			  try {
+				  // Establecer el tenant actual basado en la empresa existente
+				  Optional<Empresa> empresaOpt = repoempresa.findById(id.longValue());
+				  if (empresaOpt.isEmpty()) {
+					  response.clear();
+					  response.put("error", "Empresa no encontrada con ID: " + id);
+					  return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+				  }
+				  nombredb.setNombre(dto.getRazonsocial());
+				  // Obtener el schema/tenant de la empresa existente
+				String schema = nombredb.getNombre().toLowerCase().replaceAll("[^a-z0-9_]", "");
+				  TenantContext.setCurrentTenant(schema);
+
+				  class mensajesuccesempres{
+					  String mensaje;
+					  public String getMensaje() {
+						  return mensaje;
+					  }
+					  public void setMensaje(String mensaje) {
+						  this.mensaje = mensaje;
+					  }
+					  public boolean isEstado() {
+						  return estado;
+					  }
+					  public void setEstado(boolean estado) {
+						  this.estado = estado;
+					  }
+					  boolean estado;
+					  public  mensajesuccesempres(String mensaje,boolean estado) {
+						  this.mensaje=mensaje;
+						  this.estado=estado;
+					  }
+
+					  public  mensajesuccesempres() {
+
+					  }
+				  }
+
+				  serv.updateEmpresa(dto, schema, archivo, id);
+				  response.put("respuesta", new mensajesuccesempres("Empresa actualizada exitosamente", true));
+				  return ResponseEntity.ok().body(response);
+			  } catch (Exception e) {
+				  System.out.println("Error al actualizar empresa: " + e.getMessage());
+				  e.printStackTrace();
+				  return ResponseEntity.ok().body(null);
+			  }
 		 
-		 // Establecer el tenant actual basado en la empresa existente
-		 Optional<Empresa> empresaOpt = repoempresa.findById(id.longValue());
-		 if (empresaOpt.isEmpty()) {
-			 response.clear();
-			 response.put("error", "Empresa no encontrada con ID: " + id);
-			 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-		 }
-		 
-		 // Obtener el schema/tenant de la empresa existente
-		 String schema = nombredb.getNombre().toLowerCase().replaceAll("[^a-z0-9_]", "");
-		 TenantContext.setCurrentTenant(schema);
-		 
-		 class mensajesuccesempres{
-			 String mensaje;
-			 public String getMensaje() {
-				 return mensaje;
-			 }
-			 public void setMensaje(String mensaje) {
-				 this.mensaje = mensaje;
-			 }
-			 public boolean isEstado() {
-				 return estado;
-			 }
-			 public void setEstado(boolean estado) {
-				 this.estado = estado;
-			 }
-			 boolean estado;
-			 public  mensajesuccesempres(String mensaje,boolean estado) {
-				 this.mensaje=mensaje;
-				 this.estado=estado;
-			 }
-			   
-			 public  mensajesuccesempres() {
-				   
-			 }
-		 }
-		 
-		 serv.updateEmpresa(dto, schema, archivo, id);
-		 response.put("respuesta", new mensajesuccesempres("Empresa actualizada exitosamente", true));
-		 return ResponseEntity.ok().body(response);
+
 	 }
 	 
 	 @RequestMapping("/traerinformacionem")
@@ -230,6 +232,52 @@ public class Empresacontroller {
 		  @RequestMapping("/todas")
 		  public List<EmpresaTenantProjection> traerempresas(){
 			  return serv.listartodoslossquemas();
+		  }
+
+		  @RequestMapping("/buscar")
+		  public List<EmpresaTenantProjection> buscarEmpresas(@RequestParam String busqueda){
+			  return serv.buscarEmpresasConFiltro(busqueda);
+		  }
+
+		  @DeleteMapping("/eliminar")
+		  public ResponseEntity<Map<String, Object>> eliminarEmpresa(@RequestBody Map<String, String> request) {
+			  response.clear();
+			  try {
+				  String nombreTenant = request.get("empresa");
+				  if (nombreTenant == null || nombreTenant.trim().isEmpty()) {
+					  response.put("error", "El nombre de la empresa es requerido");
+					  return ResponseEntity.badRequest().body(response);
+				  }
+				  
+				  serv.eliminarEmpresaConBackup(nombreTenant);
+				  response.put("mensaje", "Empresa eliminada exitosamente con backup");
+				  response.put("empresa", nombreTenant);
+				  return ResponseEntity.ok().body(response);
+			  } catch (Exception e) {
+				  response.put("error", "Error al eliminar empresa: " + e.getMessage());
+				  return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+			  }
+		  }
+
+		  @RequestMapping("/schemas")
+		  public ResponseEntity<Map<String, Object>> listarSchemas() {
+			  response.clear();
+			  try {
+				  List<String> schemas = serv.listarTodosLosSchemas();
+				  response.put("schemas", schemas);
+				  return ResponseEntity.ok().body(response);
+			  } catch (Exception e) {
+				  response.put("error", "Error al listar schemas: " + e.getMessage());
+				  return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+			  }
+		  }
+
+
+		  @PatchMapping(value = "/estado/{id}")
+		  public ResponseEntity<Void> updateEstado(@PathVariable Integer id, @RequestParam String estado) {
+
+              serv.updateEstado(id, estado);
+			  return ResponseEntity.ok().build();
 		  }
 
 	 @RequestMapping("/traerempresa")

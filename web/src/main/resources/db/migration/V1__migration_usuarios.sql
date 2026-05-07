@@ -753,7 +753,8 @@ CREATE TABLE `empresa` (
   `codigomunicipio` int DEFAULT NULL,
   `imagenempresa` longblob,
   `tipoImagen` varchar(100) DEFAULT '',
-  PRIMARY KEY (`codigo`)
+  `estado`  enum('ACTIVA','INACTIVA') DEFAULT 'ACTIVA',
+    PRIMARY KEY (`codigo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
