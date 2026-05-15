@@ -471,13 +471,14 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
     // ══════════════════════════════════════════════════════════════
 
     @Query(value = """
-            SELECT 
+            SELECT
                 dv.codigo_producto AS codigoProducto,
                 MAX(p.descripcion) AS descripcion,
                 MAX(COALESCE(l.descripcion, 'Sin línea')) AS linea,
                 SUM(dv.cantidad) AS cantidadVendida,
                 SUM(dv.total) AS ingresos,
-                SUM(dv.cantidad * p.costo) AS costoTotal
+                SUM(dv.cantidad * p.costo) AS costoTotal,
+                MAX(p.costo) AS costoUnitario
             FROM detalles_venta dv
             JOIN ventas v ON v.id = dv.venta_id
             LEFT JOIN producto_variantes pv ON pv.sku = dv.codigo_producto
@@ -745,6 +746,330 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
             ORDER BY ordenRango ASC
             """, nativeQuery = true)
     List<Object[]> carteraAging();
+
+    // ══════════════════════════════════════════════════════════════
+    // INVENTARIO COMPLETO — todas las existencias con detalle
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                pv.producto_variantes_id                                       AS productoVarianteId,
+                pv.sku                                                         AS sku,
+                p.descripcion                                                  AS descripcion,
+                CASE WHEN pv.predeterminada = 1 THEN NULL
+                     ELSE pv.referencia_variantes
+                END                                                            AS referenciaVariante,
+                COALESCE(l.descripcion, 'Sin línea')                           AS linea,
+                COALESCE(g.descripcion, 'Sin grupo')                           AS grupo,
+                b.nombre                                                       AS bodega,
+                e.ubicacion                                                    AS ubicacion,
+                COALESCE(e.existencia, 0)                                      AS existencia,
+                COALESCE(e.stock_min, 0)                                       AS stockMin,
+                COALESCE(e.stock_max, 0)                                       AS stockMax,
+                COALESCE(p.costo, 0)                                           AS costo,
+                COALESCE(e.existencia, 0) * COALESCE(p.costo, 0)               AS valorInventario,
+                CASE
+                    WHEN e.existencia = 0                                                THEN 'AGOTADO'
+                    WHEN e.stock_min > 0 AND e.existencia <= e.stock_min / 2             THEN 'CRITICO'
+                    WHEN e.stock_min > 0 AND e.existencia <= e.stock_min                 THEN 'BAJO'
+                    WHEN e.stock_max > 0 AND e.existencia > e.stock_max                  THEN 'EXCESO'
+                    ELSE 'NORMAL'
+                END                                                            AS estado,
+                e.fecha_ultimo_movimiento                                      AS fechaUltimoMovimiento,
+                COALESCE(pv.imagen, p.imagen)                                  AS imagen
+            FROM existencias e
+            JOIN producto_variantes pv ON pv.producto_variantes_id = e.producto_variantes_id
+            JOIN productos p ON p.producto_id = pv.producto_id
+            JOIN bodegas b ON b.codigo = e.bodega_id
+            LEFT JOIN lineas l ON l.linea_id = p.linea_id
+            LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
+            WHERE pv.activo = 1
+            ORDER BY p.descripcion ASC, b.nombre ASC
+            """, nativeQuery = true)
+    List<Object[]> inventarioCompleto();
+
+    // ══════════════════════════════════════════════════════════════
+    // EXCESO DE STOCK — productos con existencia > stock_max
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                pv.producto_variantes_id                                       AS productoVarianteId,
+                pv.sku                                                         AS sku,
+                p.descripcion                                                  AS descripcion,
+                CASE WHEN pv.predeterminada = 1 THEN NULL
+                     ELSE pv.referencia_variantes
+                END                                                            AS referenciaVariante,
+                COALESCE(l.descripcion, 'Sin línea')                           AS linea,
+                COALESCE(g.descripcion, 'Sin grupo')                           AS grupo,
+                b.nombre                                                       AS bodega,
+                e.ubicacion                                                    AS ubicacion,
+                e.existencia                                                   AS existencia,
+                e.stock_min                                                    AS stockMin,
+                e.stock_max                                                    AS stockMax,
+                COALESCE(p.costo, 0)                                           AS costo,
+                e.existencia * COALESCE(p.costo, 0)                            AS valorInventario,
+                'EXCESO'                                                       AS estado,
+                e.fecha_ultimo_movimiento                                      AS fechaUltimoMovimiento,
+                COALESCE(pv.imagen, p.imagen)                                  AS imagen
+            FROM existencias e
+            JOIN producto_variantes pv ON pv.producto_variantes_id = e.producto_variantes_id
+            JOIN productos p ON p.producto_id = pv.producto_id
+            JOIN bodegas b ON b.codigo = e.bodega_id
+            LEFT JOIN lineas l ON l.linea_id = p.linea_id
+            LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
+            WHERE pv.activo = 1
+              AND e.stock_max > 0
+              AND e.existencia > e.stock_max
+            ORDER BY (e.existencia - e.stock_max) * COALESCE(p.costo, 0) DESC
+            """, nativeQuery = true)
+    List<Object[]> excesoStock();
+
+    // ══════════════════════════════════════════════════════════════
+    // VALORIZACIÓN POR LÍNEA
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                'linea'                                                        AS agrupacion,
+                COALESCE(l.descripcion, 'Sin línea')                           AS nombre,
+                COUNT(DISTINCT pv.producto_variantes_id)                       AS cantidadProductos,
+                COALESCE(SUM(e.existencia), 0)                                 AS unidadesTotales,
+                COALESCE(SUM(e.existencia * p.costo), 0)                       AS valorTotal
+            FROM existencias e
+            JOIN producto_variantes pv ON pv.producto_variantes_id = e.producto_variantes_id
+            JOIN productos p ON p.producto_id = pv.producto_id
+            LEFT JOIN lineas l ON l.linea_id = p.linea_id
+            WHERE pv.activo = 1
+            GROUP BY l.descripcion
+            ORDER BY valorTotal DESC
+            """, nativeQuery = true)
+    List<Object[]> valorizacionPorLinea();
+
+    // ══════════════════════════════════════════════════════════════
+    // VALORIZACIÓN POR GRUPO
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                'grupo'                                                        AS agrupacion,
+                COALESCE(g.descripcion, 'Sin grupo')                           AS nombre,
+                COUNT(DISTINCT pv.producto_variantes_id)                       AS cantidadProductos,
+                COALESCE(SUM(e.existencia), 0)                                 AS unidadesTotales,
+                COALESCE(SUM(e.existencia * p.costo), 0)                       AS valorTotal
+            FROM existencias e
+            JOIN producto_variantes pv ON pv.producto_variantes_id = e.producto_variantes_id
+            JOIN productos p ON p.producto_id = pv.producto_id
+            LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
+            WHERE pv.activo = 1
+            GROUP BY g.descripcion
+            ORDER BY valorTotal DESC
+            """, nativeQuery = true)
+    List<Object[]> valorizacionPorGrupo();
+
+    // ══════════════════════════════════════════════════════════════
+    // VALORIZACIÓN POR BODEGA
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                'bodega'                                                       AS agrupacion,
+                b.nombre                                                       AS nombre,
+                COUNT(DISTINCT pv.producto_variantes_id)                       AS cantidadProductos,
+                COALESCE(SUM(e.existencia), 0)                                 AS unidadesTotales,
+                COALESCE(SUM(e.existencia * p.costo), 0)                       AS valorTotal
+            FROM existencias e
+            JOIN producto_variantes pv ON pv.producto_variantes_id = e.producto_variantes_id
+            JOIN productos p ON p.producto_id = pv.producto_id
+            JOIN bodegas b ON b.codigo = e.bodega_id
+            WHERE pv.activo = 1
+            GROUP BY b.nombre
+            ORDER BY valorTotal DESC
+            """, nativeQuery = true)
+    List<Object[]> valorizacionPorBodega();
+
+    // ══════════════════════════════════════════════════════════════
+    // ABC ANALYSIS — clasifica productos por contribución a ventas
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                dv.codigo_producto                                             AS codigoProducto,
+                MAX(p.descripcion)                                             AS descripcion,
+                MAX(COALESCE(l.descripcion, 'Sin línea'))                      AS linea,
+                SUM(dv.cantidad)                                               AS cantidadVendida,
+                SUM(dv.total)                                                  AS totalVendido,
+                (SELECT COALESCE(SUM(ex.existencia), 0)
+                   FROM existencias ex
+                   JOIN producto_variantes pv2 ON pv2.producto_variantes_id = ex.producto_variantes_id
+                  WHERE pv2.sku = dv.codigo_producto)                          AS stockActual
+            FROM detalles_venta dv
+            JOIN ventas v ON v.id = dv.venta_id
+            LEFT JOIN producto_variantes pv ON pv.sku = dv.codigo_producto
+            LEFT JOIN productos p ON p.producto_id = pv.producto_id
+            LEFT JOIN lineas l ON l.linea_id = p.linea_id
+            WHERE v.estado = 'COMPLETADA'
+              AND v.fecha_emision BETWEEN :inicio AND :fin
+            GROUP BY dv.codigo_producto
+            ORDER BY totalVendido DESC
+            """, nativeQuery = true)
+    List<Object[]> abcProductos(@Param("inicio") LocalDate inicio, @Param("fin") LocalDate fin);
+
+    // ══════════════════════════════════════════════════════════════
+    // STOCK ACTUAL POR SKU (para enriquecer reportes de ventas)
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                pv.sku                                                         AS codigoProducto,
+                COALESCE(SUM(e.existencia), 0)                                 AS stockTotal
+            FROM producto_variantes pv
+            LEFT JOIN existencias e ON e.producto_variantes_id = pv.producto_variantes_id
+            WHERE pv.activo = 1
+            GROUP BY pv.sku
+            """, nativeQuery = true)
+    List<Object[]> stockPorSku();
+
+    // ══════════════════════════════════════════════════════════════
+    // VARIANTES VENDIDAS — drill-down de un producto padre
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                dv.codigo_producto                                             AS sku,
+                MAX(p.descripcion)                                             AS descripcionPadre,
+                MAX(CASE WHEN pv.predeterminada = 1 THEN NULL
+                         ELSE pv.referencia_variantes
+                    END)                                                       AS referenciaVariante,
+                MAX(COALESCE(l.descripcion, 'Sin línea'))                      AS linea,
+                SUM(dv.cantidad)                                               AS cantidadVendida,
+                SUM(dv.total)                                                  AS totalVendido,
+                SUM(dv.cantidad * COALESCE(p.costo, 0))                        AS costoTotal,
+                COALESCE((SELECT SUM(ex.existencia)
+                            FROM existencias ex
+                            JOIN producto_variantes pv3 ON pv3.producto_variantes_id = ex.producto_variantes_id
+                           WHERE pv3.sku = dv.codigo_producto), 0)              AS stockActual
+            FROM detalles_venta dv
+            JOIN ventas v ON v.id = dv.venta_id
+            LEFT JOIN producto_variantes pv ON pv.sku = dv.codigo_producto
+            LEFT JOIN productos p ON p.producto_id = pv.producto_id
+            LEFT JOIN lineas l ON l.linea_id = p.linea_id
+            WHERE v.estado = 'COMPLETADA'
+              AND v.fecha_emision BETWEEN :inicio AND :fin
+              AND p.producto_id = (
+                  SELECT pv2.producto_id FROM producto_variantes pv2
+                   WHERE pv2.sku = :skuPadre LIMIT 1
+              )
+            GROUP BY dv.codigo_producto
+            ORDER BY totalVendido DESC
+            """, nativeQuery = true)
+    List<Object[]> variantesVendidasDeProducto(@Param("skuPadre") String skuPadre,
+                                               @Param("inicio") LocalDate inicio,
+                                               @Param("fin") LocalDate fin);
+
+    // ══════════════════════════════════════════════════════════════
+    // HISTÓRICO MENSUAL DE UN PRODUCTO
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                DATE_FORMAT(v.fecha_emision, '%Y-%m')                          AS periodo,
+                SUM(dv.cantidad)                                               AS cantidad,
+                SUM(dv.total)                                                  AS totalVendido,
+                SUM(dv.cantidad * COALESCE(p.costo, 0))                        AS costoTotal
+            FROM detalles_venta dv
+            JOIN ventas v ON v.id = dv.venta_id
+            LEFT JOIN producto_variantes pv ON pv.sku = dv.codigo_producto
+            LEFT JOIN productos p ON p.producto_id = pv.producto_id
+            WHERE v.estado = 'COMPLETADA'
+              AND v.fecha_emision BETWEEN :inicio AND :fin
+              AND dv.codigo_producto = :sku
+            GROUP BY DATE_FORMAT(v.fecha_emision, '%Y-%m')
+            ORDER BY periodo ASC
+            """, nativeQuery = true)
+    List<Object[]> historicoMensualProducto(@Param("sku") String sku,
+                                            @Param("inicio") LocalDate inicio,
+                                            @Param("fin") LocalDate fin);
+
+    // ══════════════════════════════════════════════════════════════
+    // CARTERA — DETALLE POR CLIENTE / FACTURA
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                cxc.id                                      AS id,
+                cxc.cliente_id                              AS clienteId,
+                cxc.nit                                     AS identificacion,
+                cxc.nombre                                  AS clienteNombre,
+                cxc.numero_venta                            AS numeroVenta,
+                COALESCE(cxc.valor_neto, 0)                 AS valorNeto,
+                COALESCE(cxc.saldo, 0)                      AS saldo,
+                cxc.fecha_emision                           AS fechaEmision,
+                cxc.fecha_vencimiento                       AS fechaVencimiento,
+                cxc.plazo_dias                              AS plazoDias,
+                DATEDIFF(CURDATE(), cxc.fecha_vencimiento)  AS diasVencido,
+                cxc.estado                                  AS estado,
+                (SELECT ct.valor_contacto
+                   FROM contactos_tercero ct
+                   JOIN tipo_contacto tc ON tc.tipo_contacto_id = ct.tipo_contacto_id
+                  WHERE ct.tercero_id = cxc.cliente_id
+                    AND (tc.nombre LIKE '%elef%' OR tc.nombre LIKE '%elular%' OR tc.nombre LIKE '%hone%' OR tc.nombre LIKE '%obil%')
+                  ORDER BY ct.es_principal DESC, ct.contacto_id ASC
+                  LIMIT 1)                                  AS telefono
+            FROM cuentas_por_cobrar cxc
+            WHERE cxc.estado IN ('PENDIENTE','PARCIAL','VENCIDA')
+              AND cxc.saldo > 0
+            ORDER BY cxc.fecha_vencimiento ASC, cxc.saldo DESC
+            """, nativeQuery = true)
+    List<Object[]> cuentasPorCobrarDetalle();
+
+    // ══════════════════════════════════════════════════════════════
+    // CUENTAS POR PAGAR — RESUMEN POR ESTADO
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                cpp.estado                                  AS estado,
+                COUNT(cpp.id)                               AS cantidad,
+                COALESCE(SUM(cpp.valor_neto), 0)            AS totalValorNeto,
+                COALESCE(SUM(cpp.saldo), 0)                 AS totalSaldo
+            FROM cuentas_por_pagar cpp
+            GROUP BY cpp.estado
+            ORDER BY totalSaldo DESC
+            """, nativeQuery = true)
+    List<Object[]> cuentasPorPagarPorEstado();
+
+    // ══════════════════════════════════════════════════════════════
+    // CUENTAS POR PAGAR — DETALLE POR PROVEEDOR / FACTURA
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                cpp.id                                      AS id,
+                cpp.proveedor_id                            AS proveedorId,
+                cpp.nit                                     AS nit,
+                cpp.nombre                                  AS proveedorNombre,
+                cpp.numero_factura                          AS numeroFactura,
+                cpp.numero_factura_proveedor                AS numeroFacturaProveedor,
+                COALESCE(cpp.valor_neto, 0)                 AS valorNeto,
+                COALESCE(cpp.saldo, 0)                      AS saldo,
+                cpp.fecha_creacion                          AS fechaCreacion,
+                cpp.fecha_vencimiento                       AS fechaVencimiento,
+                DATEDIFF(CURDATE(), cpp.fecha_vencimiento)  AS diasVencido,
+                cpp.estado                                  AS estado,
+                (SELECT ct.valor_contacto
+                   FROM contactos_tercero ct
+                   JOIN tipo_contacto tc ON tc.tipo_contacto_id = ct.tipo_contacto_id
+                  WHERE ct.tercero_id = cpp.proveedor_id
+                    AND (tc.nombre LIKE '%elef%' OR tc.nombre LIKE '%elular%' OR tc.nombre LIKE '%hone%' OR tc.nombre LIKE '%obil%')
+                  ORDER BY ct.es_principal DESC, ct.contacto_id ASC
+                  LIMIT 1)                                  AS telefono
+            FROM cuentas_por_pagar cpp
+            WHERE cpp.estado IN ('PENDIENTE','PARCIAL','VENCIDA')
+              AND cpp.saldo > 0
+            ORDER BY cpp.fecha_vencimiento ASC, cpp.saldo DESC
+            """, nativeQuery = true)
+    List<Object[]> cuentasPorPagarDetalle();
 
     // ══════════════════════════════════════════════════════════════
     // PRODUCTOS SIN MOVIMIENTO (inventario inmovilizado)

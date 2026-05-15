@@ -1,5 +1,6 @@
 package com.pazzioliweb.ventasmodule.entity;
 
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import jakarta.persistence.*;
@@ -72,5 +73,14 @@ public class Venta {
 
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDate fechaCreacion = LocalDate.now();
+
+    /** Comprobante contable usado para generar el número de venta (FC o VC). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comprobante_id")
+    private ComprobanteContable comprobante;
+
+    /** Consecutivo del comprobante en el momento de la venta (para auditoría). */
+    @Column(name = "consecutivo_comprobante")
+    private Integer consecutivoComprobante;
     // Getters y setters generados por Lombok
 }

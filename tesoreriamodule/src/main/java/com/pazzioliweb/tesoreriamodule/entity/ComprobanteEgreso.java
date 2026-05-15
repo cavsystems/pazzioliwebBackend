@@ -1,5 +1,6 @@
 package com.pazzioliweb.tesoreriamodule.entity;
 
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -114,4 +115,13 @@ public class ComprobanteEgreso {
 
     @OneToMany(mappedBy = "comprobanteEgreso", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ComprobanteEgresoMedioPago> mediosPago = new ArrayList<>();
+
+    /** Comprobante contable usado para generar el número (CE). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comprobante_id")
+    private ComprobanteContable comprobante;
+
+    /** Número del documento en formato PREFIJO-N (ej: CE-1-15). */
+    @Column(name = "numero_documento", length = 40)
+    private String numeroDocumento;
 }

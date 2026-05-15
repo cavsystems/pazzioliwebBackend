@@ -16,6 +16,10 @@ public class RealizarOrdenRequestDTO {
     private DescuentosDTO inputsdescuentos;
     private Long proveedorId;
     private Integer bodegaId;
+    /** Cajero que registra la compra (requerido para resolver el comprobante). */
+    private Integer cajeroId;
+    /** true si la compra es a crédito (genera CxP), false si es contado. */
+    private Boolean esCredito;
 
     @Data
     public static class ProveedorRequestDTO {

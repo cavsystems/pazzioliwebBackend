@@ -42,6 +42,7 @@ public class DevolucionServiceImpl implements DevolucionService {
     private final DetalleCajeroService detalleCajeroService;
     private final CajeroRepository cajeroRepository;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
+    private final com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante;
   @Autowired
   private PedidoService pedidoService;
 @Autowired
@@ -54,7 +55,8 @@ public class DevolucionServiceImpl implements DevolucionService {
             ProductoVarianteRepository productoVarianteRepository,
             DetalleCajeroService detalleCajeroService,
             CajeroRepository cajeroRepository,
-            RedisTemplate<String, DatosSesiones> redisTemplate) {
+            RedisTemplate<String, DatosSesiones> redisTemplate,
+            com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante) {
         this.ventaRepository = ventaRepository;
         this.devolucionRepository = devolucionRepository;
         this.existenciasRepository = existenciasRepository;
@@ -62,6 +64,7 @@ public class DevolucionServiceImpl implements DevolucionService {
         this.detalleCajeroService = detalleCajeroService;
         this.cajeroRepository = cajeroRepository;
         this.redisTemplate = redisTemplate;
+        this.asignacionComprobante = asignacionComprobante;
     }
 
     @Override
@@ -77,23 +80,39 @@ public class DevolucionServiceImpl implements DevolucionService {
             throw new VentaException("Solo se pueden registrar devoluciones en ventas COMPLETADAS. Estado actual: " + venta.getEstado());
         }
 
-        // 3. Generar número de devolución
-        String numeroDevolucion = generarNumeroDevolucion(venta);
+        // 3. Resolver cajero (sesión activa)
+        DatosSesiones sesionActual = obtenerSesionActiva();
+        Integer cajeroId = null;
+        if (sesionActual != null && sesionActual.getCajeroId() != null) {
+            cajeroId = sesionActual.getCajeroId();
+        }
 
         // 4. Crear encabezado de devolución
         Devolucion devolucion = new Devolucion();
         devolucion.setVenta(venta);
-        devolucion.setNumeroDevolucion(numeroDevolucion);
         devolucion.setMotivo(request.getMotivo());
         devolucion.setObservaciones(request.getObservaciones());
         devolucion.setEstado("REGISTRADA");
         devolucion.setUsuarioCreacion(request.getUsuarioCreacion());
         devolucion.setFechaCreacion(LocalDate.now());
 
-        // Asociar cajero desde la sesión activa
-        DatosSesiones sesionActual = obtenerSesionActiva();
-        if (sesionActual != null && sesionActual.getCajeroId() != null) {
-            cajeroRepository.findById(sesionActual.getCajeroId()).ifPresent(devolucion::setCajero);
+        if (cajeroId != null) {
+            cajeroRepository.findById(cajeroId).ifPresent(devolucion::setCajero);
+        }
+
+        // 5. Asignar comprobante (DV) usando el prefijo del cajero
+        if (cajeroId == null) {
+            throw new VentaException("Se requiere una sesión de cajero activa para registrar la devolución.");
+        }
+        try {
+            com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado r =
+                    asignacionComprobante.asignar(cajeroId,
+                            com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.DV);
+            devolucion.setComprobante(r.getComprobante());
+            devolucion.setConsecutivoComprobante(r.getConsecutivo());
+            devolucion.setNumeroDevolucion(r.getNumeroDocumento());
+        } catch (com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new VentaException(ex.getMessage());
         }
 
         // 5. Procesar cada ítem

@@ -1,6 +1,8 @@
 package com.pazzioliweb.ventasmodule.service.impl;
 
 import com.pazzioliweb.commonbacken.events.VentaCompletadaEvent;
+import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
@@ -70,6 +72,7 @@ public class VentaServiceImpl implements VentaService {
     private final CuentaPorCobrarRepository cuentaPorCobrarRepository;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final AsignacionComprobanteService asignacionComprobante;
 
     @Autowired
     public VentaServiceImpl(VentaRepository ventaRepository, VentaMapper ventaMapper,
@@ -86,7 +89,8 @@ public class VentaServiceImpl implements VentaService {
                             CuentaPorCobrarService cuentaPorCobrarService,
                             CuentaPorCobrarRepository cuentaPorCobrarRepository,
                             RedisTemplate<String, DatosSesiones> redisTemplate,
-                            ApplicationEventPublisher eventPublisher) {
+                            ApplicationEventPublisher eventPublisher,
+                            AsignacionComprobanteService asignacionComprobante) {
         this.ventaRepository = ventaRepository;
         this.ventaMapper = ventaMapper;
         this.productoVarianteRepository = productoVarianteRepository;
@@ -103,6 +107,19 @@ public class VentaServiceImpl implements VentaService {
         this.cuentaPorCobrarRepository = cuentaPorCobrarRepository;
         this.redisTemplate = redisTemplate;
         this.eventPublisher = eventPublisher;
+        this.asignacionComprobante = asignacionComprobante;
+    }
+
+    /**
+     * Determina si la venta tiene método de pago a crédito (afecta el tipo de comprobante: FC vs VC).
+     */
+    private boolean tieneCredito(VentaDTO ventaDTO) {
+        if (ventaDTO.getMetodosPago() == null) return false;
+        return ventaDTO.getMetodosPago().stream().anyMatch(mp -> {
+            MetodosPago m = metodosPagoRepository.findById(mp.getMetodoPagoId().intValue()).orElse(null);
+            return m != null && m.getTipoNegociacion() != null
+                && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
+        });
     }
 
     @Override
@@ -194,6 +211,24 @@ public class VentaServiceImpl implements VentaService {
         venta.setIva(ivaTotal);
         venta.setDescuentos(descuentosTotal);
         venta.setTotalVenta(subtotal);
+
+        // ─── Asignar comprobante contable (FC o VC) y número usando el prefijo del cajero ───
+        if (venta.getCajero() == null) {
+            throw new VentaException("Se requiere un cajero para generar el comprobante de la venta.");
+        }
+        TipoMovimientoComprobante tipo = tieneCredito(ventaDTO)
+                ? TipoMovimientoComprobante.VC
+                : TipoMovimientoComprobante.FC;
+        try {
+            AsignacionComprobanteService.Resultado r =
+                    asignacionComprobante.asignar(venta.getCajero().getCajeroId(), tipo);
+            venta.setComprobante(r.getComprobante());
+            venta.setConsecutivoComprobante(r.getConsecutivo());
+            venta.setNumeroVenta(r.getNumeroDocumento());
+        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new VentaException(ex.getMessage());
+        }
+
         Venta ven=ventaRepository.save(venta);
         final VentaDTO ventacreada= ventaMapper.toDto(ven);
 

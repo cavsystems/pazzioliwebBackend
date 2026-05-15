@@ -1,6 +1,7 @@
 package com.pazzioliweb.ventasmodule.entity;
 
 import com.pazzioliweb.cajerosmodule.entity.Cajero;
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -69,6 +70,14 @@ public class Devolucion {
 
     @OneToMany(mappedBy = "devolucion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleDevolucion> items;
+
+    /** Comprobante contable usado para generar el número (DV). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comprobante_id")
+    private ComprobanteContable comprobante;
+
+    @Column(name = "consecutivo_comprobante")
+    private Integer consecutivoComprobante;
 }
 
 

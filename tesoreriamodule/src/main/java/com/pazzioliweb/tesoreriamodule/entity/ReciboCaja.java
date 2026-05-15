@@ -1,5 +1,6 @@
 package com.pazzioliweb.tesoreriamodule.entity;
 
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -120,4 +121,13 @@ public class ReciboCaja {
 
     @OneToMany(mappedBy = "reciboCaja", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ReciboCajaMedioPago> mediosPago = new ArrayList<>();
+
+    /** Comprobante contable usado para generar el número (RC). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comprobante_id")
+    private ComprobanteContable comprobante;
+
+    /** Número del recibo en formato PREFIJO-N (ej: RC-1-15). Redundante con consecutivo pero útil para búsqueda. */
+    @Column(name = "numero_documento", length = 40)
+    private String numeroDocumento;
 }

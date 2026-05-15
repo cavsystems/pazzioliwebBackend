@@ -10,6 +10,8 @@ import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
 import com.pazzioliweb.comprasmodule.service.OrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.ProductoService;
+import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +36,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final CuentaPorPagarService cuentaPorPagarService;
     private final TercerosRepository tercerosRepository;
     private final BodegasRepository bodegasRepository;
+    private final AsignacionComprobanteService asignacionComprobante;
 
     @Autowired
     public OrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
@@ -42,7 +45,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                                   ProductoClient productoClient,
                                   CuentaPorPagarService cuentaPorPagarService,
                                   TercerosRepository tercerosRepository,
-                                  BodegasRepository bodegasRepository) {
+                                  BodegasRepository bodegasRepository,
+                                  AsignacionComprobanteService asignacionComprobante) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.ordenCompraMapper = ordenCompraMapper;
         this.productoService = productoService;
@@ -50,6 +54,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         this.cuentaPorPagarService = cuentaPorPagarService;
         this.tercerosRepository = tercerosRepository;
         this.bodegasRepository = bodegasRepository;
+        this.asignacionComprobante = asignacionComprobante;
     }
 
     @Override
@@ -322,8 +327,23 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
 
     private OrdenCompra crearOrdenDesdeRequest(RealizarOrdenRequestDTO request) {
         OrdenCompra orden = new OrdenCompra();
-    Optional<Long> idnumero=ordenCompraRepository.findMaxId();
-        orden.setNumeroOrden("OC-" + String.valueOf(idnumero.orElse(0L) + 1));
+        // ─── Comprobante contable (CC contado / CR crédito) según el prefijo del cajero ───
+        if (request.getCajeroId() == null) {
+            throw new OrdenCompraException("Se requiere el cajero para asignar el comprobante de compra.");
+        }
+        TipoMovimientoComprobante tipo = Boolean.TRUE.equals(request.getEsCredito())
+                ? TipoMovimientoComprobante.CR
+                : TipoMovimientoComprobante.CC;
+        try {
+            AsignacionComprobanteService.Resultado r =
+                    asignacionComprobante.asignar(request.getCajeroId(), tipo);
+            orden.setComprobante(r.getComprobante());
+            orden.setConsecutivoComprobante(r.getConsecutivo());
+            orden.setNumeroOrden(r.getNumeroDocumento());
+            orden.setCajeroId(request.getCajeroId());
+        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new OrdenCompraException(ex.getMessage());
+        }
         orden.setEstado("PENDIENTE");
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");

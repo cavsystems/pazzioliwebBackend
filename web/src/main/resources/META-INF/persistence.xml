@@ -60,6 +60,7 @@
         <class>com.pazzioliweb.comprobantesmodule.entity.Comprobantes</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.CuentaContable</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable</class>
         <!-- Cajas -->
         <class>com.pazzioliweb.cajasmodule.entity.Cajas</class>
         

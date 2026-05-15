@@ -81,5 +81,38 @@ public interface ReportesService {
 
     /** Productos activos que no han tenido ventas en el periodo. */
     List<ProductoSinMovimientoDTO> getProductosSinMovimiento(LocalDate inicio, LocalDate fin, int topN);
+
+    /** Detalle de cuentas por cobrar pendientes (quién debe, cuánto, vencimiento). */
+    List<CarteraDetalleDTO> getCarteraDetalle();
+
+    /** Cuentas por pagar agrupadas por estado. */
+    List<CuentasPorPagarResumenDTO> getCuentasPorPagarPorEstado();
+
+    /** Detalle de cuentas por pagar pendientes (a quién le debemos). */
+    List<CuentaPorPagarDetalleDTO> getCuentasPorPagarDetalle();
+
+    /** Sábana consolidada — agrupa todas las secciones del rango en un solo payload. */
+    SabanaReporteDTO getSabana(LocalDate inicio, LocalDate fin);
+
+    /** Inventario completo — todas las existencias por (variante, bodega). */
+    List<InventarioCompletoDTO> getInventarioCompleto();
+
+    /** Productos con existencia por encima del stock máximo. */
+    List<InventarioCompletoDTO> getExcesoStock();
+
+    /** Valorización del inventario agrupada por línea, grupo o bodega. */
+    List<ValorizacionInventarioDTO> getValorizacionInventario(String agrupacion);
+
+    /** Análisis ABC de productos por contribución a ventas en el periodo. */
+    List<AbcProductoDTO> getAbcProductos(LocalDate inicio, LocalDate fin);
+
+    /** Stock actual por SKU (para cruzar con reportes de ventas). */
+    List<StockProductoDTO> getStockPorSku();
+
+    /** Variantes (talla/color/ref) vendidas de un producto padre en el rango. */
+    List<VarianteVendidaDTO> getVariantesVendidasDeProducto(String skuPadre, LocalDate inicio, LocalDate fin);
+
+    /** Histórico mensual de ventas de un producto/sku. */
+    List<HistoricoProductoDTO> getHistoricoProducto(String sku, LocalDate inicio, LocalDate fin);
 }
 

@@ -10,6 +10,10 @@ import java.util.List;
 public class ComprobanteEgresoResponseDTO {
     private Long id;
     private Integer consecutivo;
+    /** Número de documento formateado: PREFIJO-N (ej: CE-1-15) */
+    private String numeroDocumento;
+    private String prefijo;
+    private Long comprobanteId;
     private Integer terceroId;
     private String terceroNombre;
     private String terceroNit;

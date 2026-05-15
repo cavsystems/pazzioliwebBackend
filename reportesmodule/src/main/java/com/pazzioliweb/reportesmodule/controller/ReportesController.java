@@ -334,5 +334,123 @@ public class ReportesController {
         LocalDate[] r = defaults(inicio, fin);
         return ResponseEntity.ok(reportesService.getProductosSinMovimiento(r[0], r[1], topN));
     }
+
+    // ════════════════════════════════════════════════
+    // 25. CARTERA — DETALLE POR CLIENTE / FACTURA
+    //     Lista cada cuenta por cobrar pendiente con el cliente,
+    //     saldo, vencimiento y días vencidos.
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/cartera-detalle")
+    public ResponseEntity<List<CarteraDetalleDTO>> carteraDetalle() {
+        return ResponseEntity.ok(reportesService.getCarteraDetalle());
+    }
+
+    // ════════════════════════════════════════════════
+    // 26. CUENTAS POR PAGAR — RESUMEN POR ESTADO
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/cuentas-por-pagar")
+    public ResponseEntity<List<CuentasPorPagarResumenDTO>> cuentasPorPagar() {
+        return ResponseEntity.ok(reportesService.getCuentasPorPagarPorEstado());
+    }
+
+    // ════════════════════════════════════════════════
+    // 27. CUENTAS POR PAGAR — DETALLE POR PROVEEDOR / FACTURA
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/cuentas-por-pagar-detalle")
+    public ResponseEntity<List<CuentaPorPagarDetalleDTO>> cuentasPorPagarDetalle() {
+        return ResponseEntity.ok(reportesService.getCuentasPorPagarDetalle());
+    }
+
+    // ════════════════════════════════════════════════
+    // 28. SÁBANA — Consolidado de TODOS los reportes del rango
+    //     Devuelve en un solo payload todas las secciones para
+    //     exportar como Excel multi-hoja.
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/sabana")
+    public ResponseEntity<SabanaReporteDTO> sabana(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getSabana(r[0], r[1]));
+    }
+
+    // ════════════════════════════════════════════════
+    // 29. INVENTARIO COMPLETO — todas las existencias
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/inventario-completo")
+    public ResponseEntity<List<InventarioCompletoDTO>> inventarioCompleto() {
+        return ResponseEntity.ok(reportesService.getInventarioCompleto());
+    }
+
+    // ════════════════════════════════════════════════
+    // 30. EXCESO DE STOCK — existencia > stock_max
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/exceso-stock")
+    public ResponseEntity<List<InventarioCompletoDTO>> excesoStock() {
+        return ResponseEntity.ok(reportesService.getExcesoStock());
+    }
+
+    // ════════════════════════════════════════════════
+    // 31. VALORIZACIÓN DEL INVENTARIO (linea, grupo o bodega)
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/valorizacion-inventario")
+    public ResponseEntity<List<ValorizacionInventarioDTO>> valorizacionInventario(
+            @RequestParam(defaultValue = "linea") String agrupacion) {
+        return ResponseEntity.ok(reportesService.getValorizacionInventario(agrupacion));
+    }
+
+    // ════════════════════════════════════════════════
+    // 32. ABC ANALYSIS — clasifica productos por contribución a ventas
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/abc-productos")
+    public ResponseEntity<List<AbcProductoDTO>> abcProductos(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getAbcProductos(r[0], r[1]));
+    }
+
+    // ════════════════════════════════════════════════
+    // 33. STOCK POR SKU — mapa de stock actual para cruzar con ventas
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/stock-por-sku")
+    public ResponseEntity<List<StockProductoDTO>> stockPorSku() {
+        return ResponseEntity.ok(reportesService.getStockPorSku());
+    }
+
+    // ════════════════════════════════════════════════
+    // 34. VARIANTES VENDIDAS — drill-down de un producto padre
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/variantes-vendidas")
+    public ResponseEntity<List<VarianteVendidaDTO>> variantesVendidas(
+            @RequestParam String sku,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getVariantesVendidasDeProducto(sku, r[0], r[1]));
+    }
+
+    // ════════════════════════════════════════════════
+    // 35. HISTÓRICO MENSUAL DE UN PRODUCTO
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/historico-producto")
+    public ResponseEntity<List<HistoricoProductoDTO>> historicoProducto(
+            @RequestParam String sku,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getHistoricoProducto(sku, r[0], r[1]));
+    }
 }
 
