@@ -10,6 +10,10 @@ import java.util.List;
 public class ReciboCajaResponseDTO {
     private Long id;
     private Integer consecutivo;
+    /** Número de documento formateado: PREFIJO-N (ej: RC-1-15) */
+    private String numeroDocumento;
+    private String prefijo;
+    private Long comprobanteId;
     private Integer terceroId;
     private String terceroNombre;
     private String terceroNit;

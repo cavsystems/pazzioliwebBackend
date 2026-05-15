@@ -22,6 +22,20 @@
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
+        <!-- Dependencia del módulo de Comprobantes (para ComprobanteContable) -->
+        <dependency>
+            <groupId>com.pazzioliweb</groupId>
+            <artifactId>comprobantesmodule</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- Dependencia del módulo de Cajeros (para resolver el comprobante) -->
+        <dependency>
+            <groupId>com.pazzioliweb</groupId>
+            <artifactId>cajerosmodule</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>

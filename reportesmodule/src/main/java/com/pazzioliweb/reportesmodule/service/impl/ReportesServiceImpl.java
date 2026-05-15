@@ -370,22 +370,29 @@ public class ReportesServiceImpl implements ReportesService {
     public List<RentabilidadProductoDTO> getRentabilidadProductos(LocalDate inicio, LocalDate fin, int topN) {
         List<RentabilidadProductoDTO> result = new ArrayList<>();
         for (Object[] r : repo.rentabilidadPorProducto(inicio, fin, topN)) {
+            Long cantidad = toLong(r[3]);
             BigDecimal ingresos = toBigDecimal(r[4]);
             BigDecimal costo = toBigDecimal(r[5]);
+            BigDecimal costoUnitario = toBigDecimal(r[6]);
             BigDecimal utilidad = ingresos.subtract(costo);
             double margen = ingresos.compareTo(BigDecimal.ZERO) > 0
                     ? utilidad.multiply(BigDecimal.valueOf(100))
                     .divide(ingresos, 2, RoundingMode.HALF_UP).doubleValue()
                     : 0.0;
+            BigDecimal precioPromedio = cantidad > 0
+                    ? ingresos.divide(BigDecimal.valueOf(cantidad), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
             result.add(new RentabilidadProductoDTO(
                     str(r[0]),
                     str(r[1]),
                     str(r[2]),
-                    toLong(r[3]),
+                    cantidad,
                     ingresos,
                     costo,
                     utilidad,
-                    margen
+                    margen,
+                    precioPromedio,
+                    costoUnitario
             ));
         }
         return result;
@@ -458,6 +465,14 @@ public class ReportesServiceImpl implements ReportesService {
         if (obj instanceof Timestamp ts) return ts.toLocalDateTime();
         if (obj instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
         return LocalDateTime.parse(obj.toString().replace(" ", "T"));
+    }
+
+    private LocalDate toLocalDate(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof LocalDate ld) return ld;
+        if (obj instanceof java.sql.Date d) return d.toLocalDate();
+        if (obj instanceof Timestamp ts) return ts.toLocalDateTime().toLocalDate();
+        return LocalDate.parse(obj.toString().substring(0, 10));
     }
 
     // ════════════════════════════════════════════════════════════
@@ -645,6 +660,279 @@ public class ReportesServiceImpl implements ReportesService {
             ));
         }
         return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CARTERA — DETALLE POR CLIENTE
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<CarteraDetalleDTO> getCarteraDetalle() {
+        List<CarteraDetalleDTO> result = new ArrayList<>();
+        for (Object[] r : repo.cuentasPorCobrarDetalle()) {
+            result.add(new CarteraDetalleDTO(
+                    toLong(r[0]),
+                    r[1] != null ? toInt(r[1]) : null,
+                    str(r[2]),
+                    str(r[3]),
+                    str(r[4]),
+                    toBigDecimal(r[5]),
+                    toBigDecimal(r[6]),
+                    toLocalDate(r[7]),
+                    toLocalDate(r[8]),
+                    r[9] != null ? toInt(r[9]) : null,
+                    r[10] != null ? toLong(r[10]) : 0L,
+                    str(r[11]),
+                    str(r[12])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CUENTAS POR PAGAR — RESUMEN POR ESTADO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<CuentasPorPagarResumenDTO> getCuentasPorPagarPorEstado() {
+        List<CuentasPorPagarResumenDTO> result = new ArrayList<>();
+        for (Object[] r : repo.cuentasPorPagarPorEstado()) {
+            result.add(new CuentasPorPagarResumenDTO(
+                    str(r[0]),
+                    toLong(r[1]),
+                    toBigDecimal(r[2]),
+                    toBigDecimal(r[3])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CUENTAS POR PAGAR — DETALLE POR PROVEEDOR
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<CuentaPorPagarDetalleDTO> getCuentasPorPagarDetalle() {
+        List<CuentaPorPagarDetalleDTO> result = new ArrayList<>();
+        for (Object[] r : repo.cuentasPorPagarDetalle()) {
+            result.add(new CuentaPorPagarDetalleDTO(
+                    toLong(r[0]),
+                    r[1] != null ? toInt(r[1]) : null,
+                    str(r[2]),
+                    str(r[3]),
+                    str(r[4]),
+                    str(r[5]),
+                    toBigDecimal(r[6]),
+                    toBigDecimal(r[7]),
+                    toLocalDate(r[8]),
+                    toLocalDate(r[9]),
+                    r[10] != null ? toLong(r[10]) : 0L,
+                    str(r[11]),
+                    str(r[12])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // INVENTARIO COMPLETO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<InventarioCompletoDTO> getInventarioCompleto() {
+        return mapInventarioCompleto(repo.inventarioCompleto());
+    }
+
+    @Override
+    public List<InventarioCompletoDTO> getExcesoStock() {
+        return mapInventarioCompleto(repo.excesoStock());
+    }
+
+    private List<InventarioCompletoDTO> mapInventarioCompleto(List<Object[]> rows) {
+        List<InventarioCompletoDTO> result = new ArrayList<>();
+        for (Object[] r : rows) {
+            result.add(new InventarioCompletoDTO(
+                    toLong(r[0]),
+                    str(r[1]),
+                    str(r[2]),
+                    str(r[3]),
+                    str(r[4]),
+                    str(r[5]),
+                    str(r[6]),
+                    str(r[7]),
+                    toBigDecimal(r[8]),
+                    toBigDecimal(r[9]),
+                    toBigDecimal(r[10]),
+                    toBigDecimal(r[11]),
+                    toBigDecimal(r[12]),
+                    str(r[13]),
+                    toLocalDateTime(r[14]),
+                    str(r[15])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // VALORIZACIÓN DE INVENTARIO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<ValorizacionInventarioDTO> getValorizacionInventario(String agrupacion) {
+        List<Object[]> rows;
+        String tipo = agrupacion == null ? "linea" : agrupacion.toLowerCase();
+        switch (tipo) {
+            case "grupo":  rows = repo.valorizacionPorGrupo();  break;
+            case "bodega": rows = repo.valorizacionPorBodega(); break;
+            default:       rows = repo.valorizacionPorLinea();  tipo = "linea"; break;
+        }
+        BigDecimal granTotal = rows.stream()
+                .map(r -> toBigDecimal(r[4]))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<ValorizacionInventarioDTO> result = new ArrayList<>();
+        for (Object[] r : rows) {
+            BigDecimal valor = toBigDecimal(r[4]);
+            double pct = granTotal.compareTo(BigDecimal.ZERO) > 0
+                    ? valor.multiply(BigDecimal.valueOf(100))
+                        .divide(granTotal, 2, RoundingMode.HALF_UP).doubleValue()
+                    : 0.0;
+            result.add(new ValorizacionInventarioDTO(
+                    tipo,
+                    str(r[1]),
+                    toLong(r[2]),
+                    toBigDecimal(r[3]),
+                    valor,
+                    pct
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // ABC ANALYSIS
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<AbcProductoDTO> getAbcProductos(LocalDate inicio, LocalDate fin) {
+        List<Object[]> rows = repo.abcProductos(inicio, fin);
+        BigDecimal granTotal = rows.stream()
+                .map(r -> toBigDecimal(r[4]))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<AbcProductoDTO> result = new ArrayList<>();
+        double acumulado = 0.0;
+        for (Object[] r : rows) {
+            BigDecimal total = toBigDecimal(r[4]);
+            double pct = granTotal.compareTo(BigDecimal.ZERO) > 0
+                    ? total.multiply(BigDecimal.valueOf(100))
+                        .divide(granTotal, 4, RoundingMode.HALF_UP).doubleValue()
+                    : 0.0;
+            acumulado += pct;
+            String clase = acumulado <= 80.0 ? "A"
+                          : acumulado <= 95.0 ? "B"
+                          : "C";
+            result.add(new AbcProductoDTO(
+                    str(r[0]),
+                    str(r[1]),
+                    str(r[2]),
+                    toBigDecimal(r[3]),
+                    total,
+                    pct,
+                    acumulado,
+                    clase,
+                    toBigDecimal(r[5])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // STOCK POR SKU
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<StockProductoDTO> getStockPorSku() {
+        List<StockProductoDTO> result = new ArrayList<>();
+        for (Object[] r : repo.stockPorSku()) {
+            result.add(new StockProductoDTO(str(r[0]), toBigDecimal(r[1])));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // VARIANTES VENDIDAS DE UN PRODUCTO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<VarianteVendidaDTO> getVariantesVendidasDeProducto(String skuPadre, LocalDate inicio, LocalDate fin) {
+        List<VarianteVendidaDTO> result = new ArrayList<>();
+        for (Object[] r : repo.variantesVendidasDeProducto(skuPadre, inicio, fin)) {
+            BigDecimal ingresos = toBigDecimal(r[5]);
+            BigDecimal costo = toBigDecimal(r[6]);
+            result.add(new VarianteVendidaDTO(
+                    str(r[0]),
+                    str(r[1]),
+                    str(r[2]),
+                    str(r[3]),
+                    toBigDecimal(r[4]),
+                    ingresos,
+                    costo,
+                    ingresos.subtract(costo),
+                    toBigDecimal(r[7])
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // HISTÓRICO MENSUAL DE UN PRODUCTO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<HistoricoProductoDTO> getHistoricoProducto(String sku, LocalDate inicio, LocalDate fin) {
+        List<HistoricoProductoDTO> result = new ArrayList<>();
+        for (Object[] r : repo.historicoMensualProducto(sku, inicio, fin)) {
+            BigDecimal total = toBigDecimal(r[2]);
+            BigDecimal costo = toBigDecimal(r[3]);
+            result.add(new HistoricoProductoDTO(
+                    str(r[0]),
+                    toBigDecimal(r[1]),
+                    total,
+                    costo,
+                    total.subtract(costo)
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // SÁBANA — CONSOLIDADO DE TODOS LOS REPORTES DEL RANGO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public SabanaReporteDTO getSabana(LocalDate inicio, LocalDate fin) {
+        SabanaReporteDTO s = new SabanaReporteDTO();
+        s.setInicio(inicio);
+        s.setFin(fin);
+        s.setResumen(getDashboard(inicio, fin));
+        s.setVentasPorDia(getVentasPorDia(inicio, fin));
+        s.setMetodosPago(getVentasPorMetodoPago(inicio, fin));
+        s.setVentasPorVendedor(getVentasPorVendedor(inicio, fin));
+        s.setVentasPorCajero(getVentasPorCajero(inicio, fin));
+        s.setTopClientes(getTopClientes(inicio, fin, 50));
+        s.setTopProductos(getTopProductos(inicio, fin, 50));
+        s.setVentasPorLinea(getVentasPorLinea(inicio, fin));
+        s.setRentabilidad(getRentabilidadProductos(inicio, fin, 50));
+        s.setComprasPorProveedor(getComprasPorProveedor(inicio, fin, 50));
+        s.setMovimientosCaja(getMovimientosCajaPorTipo(inicio, fin));
+        s.setCarteraPorEstado(getCarteraPorEstado());
+        s.setCarteraDetalle(getCarteraDetalle());
+        s.setCuentasPorPagar(getCuentasPorPagarPorEstado());
+        s.setCuentasPorPagarDetalle(getCuentasPorPagarDetalle());
+        s.setAnulaciones(getAnulaciones(inicio, fin));
+        s.setDevoluciones(getDevolucionesDetalladas(inicio, fin));
+        return s;
     }
 
     @Override

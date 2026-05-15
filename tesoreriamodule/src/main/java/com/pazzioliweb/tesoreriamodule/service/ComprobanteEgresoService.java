@@ -7,8 +7,10 @@ import com.pazzioliweb.comprasmodule.entity.CuentaPorPagar;
 import com.pazzioliweb.comprasmodule.repository.CuentaPorPagarRepository;
 import com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
+import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ConceptoAbiertoRepository;
 import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
+import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -41,6 +43,7 @@ public class ComprobanteEgresoService {
     private final CuentaContableRepository cuentaContableRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
+    private final AsignacionComprobanteService asignacionComprobante;
 
     public ComprobanteEgresoService(ComprobanteEgresoRepository egresoRepository,
                                      CuentaPorPagarRepository cxpRepository,
@@ -49,7 +52,8 @@ public class ComprobanteEgresoService {
                                      ConceptoAbiertoRepository conceptoAbiertoRepository,
                                      CuentaContableRepository cuentaContableRepository,
                                      DetalleCajeroService detalleCajeroService,
-                                     RedisTemplate<String, DatosSesiones> redisTemplate) {
+                                     RedisTemplate<String, DatosSesiones> redisTemplate,
+                                     AsignacionComprobanteService asignacionComprobante) {
         this.egresoRepository = egresoRepository;
         this.cxpRepository = cxpRepository;
         this.tercerosRepository = tercerosRepository;
@@ -58,6 +62,21 @@ public class ComprobanteEgresoService {
         this.cuentaContableRepository = cuentaContableRepository;
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
+        this.asignacionComprobante = asignacionComprobante;
+    }
+
+    /** Construye el nombre completo de un tercero (nombres + apellidos) o razón social. */
+    private String construirNombreCompleto(Terceros t) {
+        if (t == null) return "";
+        if (t.getRazonSocial() != null && !t.getRazonSocial().isBlank()) {
+            return t.getRazonSocial().trim();
+        }
+        StringBuilder sb = new StringBuilder();
+        if (t.getNombre1() != null && !t.getNombre1().isBlank()) sb.append(t.getNombre1().trim());
+        if (t.getNombre2() != null && !t.getNombre2().isBlank()) sb.append(" ").append(t.getNombre2().trim());
+        if (t.getApellido1() != null && !t.getApellido1().isBlank()) sb.append(" ").append(t.getApellido1().trim());
+        if (t.getApellido2() != null && !t.getApellido2().isBlank()) sb.append(" ").append(t.getApellido2().trim());
+        return sb.toString().replaceAll("\\s+", " ").trim();
     }
 
     public Integer obtenerSiguienteConsecutivo() {
@@ -102,7 +121,19 @@ public class ComprobanteEgresoService {
         }
 
         ComprobanteEgreso egreso = new ComprobanteEgreso();
-        egreso.setConsecutivo(obtenerSiguienteConsecutivo());
+        // ─── Asignar comprobante CE con el prefijo del cajero ───
+        if (dto.getCajeroId() == null) {
+            throw new RuntimeException("Se requiere el cajero para asignar el comprobante de egreso.");
+        }
+        try {
+            AsignacionComprobanteService.Resultado r =
+                    asignacionComprobante.asignar(dto.getCajeroId(), TipoMovimientoComprobante.CE);
+            egreso.setComprobante(r.getComprobante());
+            egreso.setNumeroDocumento(r.getNumeroDocumento());
+            egreso.setConsecutivo(r.getConsecutivo());
+        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new RuntimeException(ex.getMessage());
+        }
         egreso.setConceptoAbierto(esConceptoAbierto);
         egreso.setFecha(LocalDate.now());
         egreso.setFechaEgreso(dto.getFechaEgreso() != null && !dto.getFechaEgreso().isBlank()
@@ -144,15 +175,13 @@ public class ComprobanteEgresoService {
             Terceros tercero = tercerosRepository.findById(dto.getTerceroId())
                     .orElseThrow(() -> new RuntimeException("Tercero no encontrado: " + dto.getTerceroId()));
             egreso.setTercero(tercero);
-            egreso.setTerceroNombre(tercero.getNombre1() + " " +
-                    (tercero.getApellido1() != null ? tercero.getApellido1() : ""));
+            egreso.setTerceroNombre(construirNombreCompleto(tercero));
             egreso.setTerceroNit(tercero.getIdentificacion());
         } else if (dto.getTerceroId() != null) {
             Terceros t = tercerosRepository.findById(dto.getTerceroId()).orElse(null);
             if (t != null) {
                 egreso.setTercero(t);
-                egreso.setTerceroNombre(t.getNombre1() + " " +
-                        (t.getApellido1() != null ? t.getApellido1() : ""));
+                egreso.setTerceroNombre(construirNombreCompleto(t));
                 egreso.setTerceroNit(t.getIdentificacion());
             }
         }
@@ -381,6 +410,11 @@ public class ComprobanteEgresoService {
         ComprobanteEgresoResponseDTO dto = new ComprobanteEgresoResponseDTO();
         dto.setId(e.getId());
         dto.setConsecutivo(e.getConsecutivo());
+        dto.setNumeroDocumento(e.getNumeroDocumento());
+        if (e.getComprobante() != null) {
+            dto.setComprobanteId(e.getComprobante().getId());
+            dto.setPrefijo(e.getComprobante().getPrefijo());
+        }
         dto.setTerceroId(e.getTercero() != null ? e.getTercero().getTerceroId() : null);
         dto.setTerceroNombre(e.getTerceroNombre());
         dto.setTerceroNit(e.getTerceroNit());

@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 
@@ -60,6 +61,18 @@ public class OrdenCompra {
 
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDate fechaCreacion = LocalDate.now();
+
+    /** Cajero que registró la compra (necesario para resolver el comprobante). */
+    @Column(name = "cajero_id")
+    private Integer cajeroId;
+
+    /** Comprobante contable usado para generar el número de orden (CC o CR). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comprobante_id")
+    private ComprobanteContable comprobante;
+
+    @Column(name = "consecutivo_comprobante")
+    private Integer consecutivoComprobante;
 
     // Getters y setters generados por Lombok
 }

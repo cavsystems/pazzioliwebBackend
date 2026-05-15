@@ -13,5 +13,8 @@
       <artifactId>tercerosmodule</artifactId>
       <version>1.0-SNAPSHOT</version>
     </dependency>
+    <!-- NOTA: no se incluye cajerosmodule para evitar dependencia circular
+         (cajerosmodule ya depende de comprobantesmodule). La validación del
+         cajero se hace por consulta SQL nativa en ComprobanteContableService. -->
   </dependencies>
 </project>

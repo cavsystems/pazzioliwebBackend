@@ -21,5 +21,9 @@ public class RentabilidadProductoDTO {
     private BigDecimal costo;
     private BigDecimal utilidad;
     private Double margenPorcentaje;
+    /** Precio promedio real de venta = ingresos / cantidadVendida */
+    private BigDecimal precioPromedio;
+    /** Costo unitario actual del producto (de la tabla productos) */
+    private BigDecimal costoUnitario;
 }
 

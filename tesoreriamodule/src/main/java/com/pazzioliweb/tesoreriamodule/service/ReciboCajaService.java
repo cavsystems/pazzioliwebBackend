@@ -5,8 +5,10 @@ import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
 import com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
+import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ConceptoAbiertoRepository;
 import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
+import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -41,6 +43,7 @@ public class ReciboCajaService {
     private final CuentaContableRepository cuentaContableRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
+    private final AsignacionComprobanteService asignacionComprobante;
 
     public ReciboCajaService(ReciboCajaRepository reciboRepository,
                               CuentaPorCobrarRepository cxcRepository,
@@ -49,7 +52,8 @@ public class ReciboCajaService {
                               ConceptoAbiertoRepository conceptoAbiertoRepository,
                               CuentaContableRepository cuentaContableRepository,
                               DetalleCajeroService detalleCajeroService,
-                              RedisTemplate<String, DatosSesiones> redisTemplate) {
+                              RedisTemplate<String, DatosSesiones> redisTemplate,
+                              AsignacionComprobanteService asignacionComprobante) {
         this.reciboRepository = reciboRepository;
         this.cxcRepository = cxcRepository;
         this.tercerosRepository = tercerosRepository;
@@ -58,6 +62,21 @@ public class ReciboCajaService {
         this.cuentaContableRepository = cuentaContableRepository;
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
+        this.asignacionComprobante = asignacionComprobante;
+    }
+
+    /** Construye el nombre completo de un tercero (nombres + apellidos) o razón social. */
+    private String construirNombreCompleto(Terceros t) {
+        if (t == null) return "";
+        if (t.getRazonSocial() != null && !t.getRazonSocial().isBlank()) {
+            return t.getRazonSocial().trim();
+        }
+        StringBuilder sb = new StringBuilder();
+        if (t.getNombre1() != null && !t.getNombre1().isBlank()) sb.append(t.getNombre1().trim());
+        if (t.getNombre2() != null && !t.getNombre2().isBlank()) sb.append(" ").append(t.getNombre2().trim());
+        if (t.getApellido1() != null && !t.getApellido1().isBlank()) sb.append(" ").append(t.getApellido1().trim());
+        if (t.getApellido2() != null && !t.getApellido2().isBlank()) sb.append(" ").append(t.getApellido2().trim());
+        return sb.toString().replaceAll("\\s+", " ").trim();
     }
 
     public Integer obtenerSiguienteConsecutivo() {
@@ -106,7 +125,19 @@ public class ReciboCajaService {
         }
 
         ReciboCaja recibo = new ReciboCaja();
-        recibo.setConsecutivo(obtenerSiguienteConsecutivo());
+        // ─── Asignar comprobante RC con el prefijo del cajero ───
+        if (dto.getCajeroId() == null) {
+            throw new RuntimeException("Se requiere el cajero para asignar el comprobante del recibo de caja.");
+        }
+        try {
+            AsignacionComprobanteService.Resultado r =
+                    asignacionComprobante.asignar(dto.getCajeroId(), TipoMovimientoComprobante.RC);
+            recibo.setComprobante(r.getComprobante());
+            recibo.setNumeroDocumento(r.getNumeroDocumento());
+            recibo.setConsecutivo(r.getConsecutivo());
+        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new RuntimeException(ex.getMessage());
+        }
         recibo.setConceptoAbierto(esConceptoAbierto);
         recibo.setFecha(LocalDate.now());
         recibo.setFechaRecibo(LocalDate.parse(dto.getFechaRecibo()));
@@ -153,16 +184,14 @@ public class ReciboCajaService {
             Terceros tercero = tercerosRepository.findById(dto.getTerceroId())
                     .orElseThrow(() -> new RuntimeException("Tercero no encontrado: " + dto.getTerceroId()));
             recibo.setTercero(tercero);
-            recibo.setTerceroNombre(tercero.getNombre1() + " " +
-                    (tercero.getApellido1() != null ? tercero.getApellido1() : ""));
+            recibo.setTerceroNombre(construirNombreCompleto(tercero));
             recibo.setTerceroNit(tercero.getIdentificacion());
         } else if (dto.getTerceroId() != null) {
             // Concepto abierto con tercero asociado: lo enlazamos para trazabilidad.
             Terceros t = tercerosRepository.findById(dto.getTerceroId()).orElse(null);
             if (t != null) {
                 recibo.setTercero(t);
-                recibo.setTerceroNombre(t.getNombre1() + " " +
-                        (t.getApellido1() != null ? t.getApellido1() : ""));
+                recibo.setTerceroNombre(construirNombreCompleto(t));
                 recibo.setTerceroNit(t.getIdentificacion());
             }
         }
@@ -398,6 +427,11 @@ public class ReciboCajaService {
         ReciboCajaResponseDTO dto = new ReciboCajaResponseDTO();
         dto.setId(r.getId());
         dto.setConsecutivo(r.getConsecutivo());
+        dto.setNumeroDocumento(r.getNumeroDocumento());
+        if (r.getComprobante() != null) {
+            dto.setComprobanteId(r.getComprobante().getId());
+            dto.setPrefijo(r.getComprobante().getPrefijo());
+        }
         dto.setTerceroId(r.getTercero() != null ? r.getTercero().getTerceroId() : null);
         dto.setTerceroNombre(r.getTerceroNombre());
         dto.setTerceroNit(r.getTerceroNit());

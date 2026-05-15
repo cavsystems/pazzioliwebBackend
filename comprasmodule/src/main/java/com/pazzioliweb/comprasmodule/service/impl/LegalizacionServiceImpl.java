@@ -77,16 +77,22 @@ return ordenCreada;
     private void crearLegalizacion(LegalizacionRequestDTO request, OrdenCompraDTO ordenCreada) {
         try {
             Legalizacion legalizacion = new Legalizacion();
-            OrdenCompra orden = new OrdenCompra();
-            orden.setId(ordenCreada.getId());
-            legalizacion.setOrdenCompra(orden);
+            // Cargar la orden persistida para heredar el comprobante asignado por realizarOrden()
+            OrdenCompra ordenPersistida = ordenCompraRepository.findById(ordenCreada.getId())
+                    .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada: " + ordenCreada.getId()));
+            legalizacion.setOrdenCompra(ordenPersistida);
             legalizacion.setNumeroFacturaProveedor(request.getNumeroFactura());
             legalizacion.setFechaFactura(LocalDate.parse(request.getFechaFactura(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
             legalizacion.setTotalFactura(request.getOrdenCompraData().getOrden_compra().getTotalOrdenCompra());
-            // Set proveedorId
             legalizacion.setProveedorId(request.getOrdenCompraData().getProvedor().getTerceroId().longValue());
             legalizacion.setEstado("LEGALIZADA");
             legalizacion.setUsuarioCreacion("system");
+
+            // ─── Heredar el comprobante contable de la orden (CC o CR según el caso) ───
+            if (ordenPersistida.getComprobante() != null) {
+                legalizacion.setComprobante(ordenPersistida.getComprobante());
+                legalizacion.setConsecutivoComprobante(ordenPersistida.getConsecutivoComprobante());
+            }
 
             legalizacionRepository.save(legalizacion);
         } catch (Exception e) {
@@ -160,6 +166,14 @@ return ordenCreada;
         dto.setProveedorId(legalizacion.getProveedorId());
         dto.setEstado(legalizacion.getEstado());
         dto.setUsuarioCreacion(legalizacion.getUsuarioCreacion());
+
+        // Comprobante contable (heredado de la orden)
+        if (legalizacion.getComprobante() != null) {
+            dto.setComprobanteId(legalizacion.getComprobante().getId());
+            dto.setPrefijoComprobante(legalizacion.getComprobante().getPrefijo());
+            dto.setTipoMovimientoComprobante(legalizacion.getComprobante().getTipoMovimiento().name());
+            dto.setConsecutivoComprobante(legalizacion.getConsecutivoComprobante());
+        }
         return dto;
     }
 }

@@ -64,7 +64,12 @@ public class SecurityConfig {
 						.permitAll().requestMatchers("/api/cuentas-por-cobrar/**").permitAll().requestMatchers("/api/cuentas-por-pagar/**")
 						.permitAll().requestMatchers("/api/comprobantes-egreso/**").permitAll().requestMatchers("/api/recibos-caja/**")
 						.permitAll().requestMatchers("/api/reportes/**")
-						.permitAll().anyRequest().authenticated()).exceptionHandling(ex -> ex
+						.permitAll().requestMatchers("/api/comprobantes-contables/**").permitAll()
+						.requestMatchers("/api/cuentas-contables/**").permitAll()
+						.requestMatchers("/api/conceptos-abiertos/**").permitAll()
+						.requestMatchers("/api/legalizacion/**").permitAll()
+						.requestMatchers("/api/mis-reportes/**").permitAll()
+						.anyRequest().authenticated()).exceptionHandling(ex -> ex
 						.accessDeniedHandler((request, response, accessDeniedException) -> {
 							if (!response.isCommitted()) {
 								response.setStatus(HttpServletResponse.SC_FORBIDDEN);

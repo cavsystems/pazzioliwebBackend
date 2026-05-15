@@ -24,6 +24,27 @@ public class LegalizacionDTO {
 
     private String proveedorNombre;
 
+    /** Prefijo del comprobante contable (heredado de la orden). */
+    private String prefijoComprobante;
+    /** Tipo de movimiento del comprobante (CC o CR). */
+    private String tipoMovimientoComprobante;
+    /** ID del comprobante contable usado. */
+    private Long comprobanteId;
+    /** Consecutivo asignado al ejecutar el movimiento. */
+    private Integer consecutivoComprobante;
+
+    public String getPrefijoComprobante() { return prefijoComprobante; }
+    public void setPrefijoComprobante(String p) { this.prefijoComprobante = p; }
+
+    public String getTipoMovimientoComprobante() { return tipoMovimientoComprobante; }
+    public void setTipoMovimientoComprobante(String t) { this.tipoMovimientoComprobante = t; }
+
+    public Long getComprobanteId() { return comprobanteId; }
+    public void setComprobanteId(Long c) { this.comprobanteId = c; }
+
+    public Integer getConsecutivoComprobante() { return consecutivoComprobante; }
+    public void setConsecutivoComprobante(Integer c) { this.consecutivoComprobante = c; }
+
     public String getNumeroOrden() { return numeroOrden; }
     public void setNumeroOrden(String numeroOrden) { this.numeroOrden = numeroOrden; }
 
