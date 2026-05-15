@@ -218,7 +218,12 @@ public class Empresacontroller {
 		 
 
 	 }
-	 
+
+	 @PatchMapping("/licencia/{id}")
+	 public ResponseEntity<EmpresaTenantProjection> actualizarlicencia(@RequestBody Empresaresponse empre, @PathVariable Integer id) {
+			  return  ResponseEntity.ok(serv.actulizarlicencia(empre, id));
+	 }
+
 	 @RequestMapping("/traerinformacionem")
 	 	 public ResponseEntity<Map<String, Object>> traerempresainfo() {
 	 		 List<Empresa>  empresas=repoempresa.findAll();

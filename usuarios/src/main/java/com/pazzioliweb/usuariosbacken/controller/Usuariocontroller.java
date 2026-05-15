@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.pazzioliweb.usuariosbacken.dtos.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.repository.query.Param;
 import org.springframework.http.HttpStatus;
@@ -65,7 +67,8 @@ public class Usuariocontroller {
 	private UsuarioclientesRepository personacliente;
 	@Autowired
 	private UsuarioclientesusuarioRepository usuclienteu;
-
+	@PersistenceContext
+	private EntityManager entityManager;
 	@GetMapping("/roles")
 	public ResponseEntity<Map<String, Object>> traerroles() {
 		Map<String, Object> response = new HashMap<>();
@@ -98,7 +101,20 @@ public class Usuariocontroller {
 		return ResponseEntity.ok(usurepo.findBybodegausuario(codigo, codigobodega));
 
 	}
+   @RequestMapping("/verificarnumerousuarios")
+   public ResponseEntity<Boolean> verificarnumerousuarios(){
+       Long numerouser=usurepo.count();
 
+	   Integer limiteUsuarios = (Integer) entityManager
+			   .createNativeQuery("SELECT numerousuarios FROM empresa LIMIT 1")
+			   .getSingleResult();
+	   boolean disponible = numerouser< limiteUsuarios;
+
+	   return ResponseEntity.ok(disponible);
+
+
+
+   }
 	@GetMapping("/traerusuarios")
 	public ResponseEntity<UsuarioDTO> traerusuario(@RequestParam int codigousuario) {
 		Map<String, Object> response = new HashMap<>();

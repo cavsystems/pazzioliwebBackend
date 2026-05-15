@@ -3,6 +3,8 @@ package com.pazzioliweb.empresaauth.service;
 import com.pazzioliweb.empresaback.dtos.EmpresaTenantProjection;
 import com.pazzioliweb.empresaback.exception.Empresaexception;
 import com.pazzioliweb.empresasback.entity.Estado;
+import com.pazzioliweb.productosmodule.entity.Usuariobodega;
+import com.pazzioliweb.productosmodule.repositori.UsuariobodegaRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
@@ -104,6 +106,8 @@ public class EmpresaService {
 	  private PermisoRolRepository permisoRolRepository;
 
 	  @Autowired
+	  private UsuariobodegaRepository bodegarepositori;
+	  @Autowired
 	  private Insertarregistrosjoin insertjoi;
 	  private Datosempresa datosempresa=new Datosempresa();
 	  @Autowired
@@ -193,7 +197,8 @@ public class EmpresaService {
 		empresa.setCodigoactividadeconomica((Actividadeconomica) codigosempr[6]);
 		empresa.setCelularempresa(empre.getCelularempresa());
 		empresa.setCorreoempresa(empre.getCorreoempresa());
-	
+	      empresa.setPlazo(empre.getPlazo());
+	      empresa.setNumerousuarios(empre.getNumerousuarios());
 		empresa.setNombrecomercial(empre.getNombrecomercial());
 		empresa.setNumeroidentificacion(empre.getNumeroidentificacion());
 		empresa.setDigitoverificacion(empre.getDigitodeverificacion());
@@ -204,6 +209,8 @@ public class EmpresaService {
 		empresa.setSegundoapellido(empre.getSegundoapellido());
 		empresa.setRazonsocial(empre.getRazonsocial());
 		empresa.setTelfonofijo(empre.getTelefonofijo());
+		empresa.setFechainiciolicencia(empre.getFechainiciolicencia());
+		empresa.setFechafinallicencia(empre.getFechafinallicencia());
 		empresa.setEstado(Estado.ACTIVA);
 		if (archivo != null && !archivo.isEmpty()) {
 			empresa.setImagenEmpresa(archivo.getBytes());
@@ -224,7 +231,16 @@ public class EmpresaService {
 		
 		
 	}
-	
+
+      public  EmpresaTenantProjection actulizarlicencia(Empresaresponse empre, int codigoempresa){
+		Empresa empresa=emprerepo.findByCodigo(codigoempresa).get();
+		empresa.setFechainiciolicencia(empre.getFechainiciolicencia());
+		empresa.setFechafinallicencia(empre.getFechafinallicencia());
+		empresa.setPlazo(empre.getPlazo());
+		empresa.setNumerousuarios(empre.getNumerousuarios());
+		return  EmpresaTenantProjection.mapperdtos(emprerepo.save(empresa));
+
+	  }
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void updateEmpresa(Empresaresponse empre, String db, MultipartFile archivo, Integer empresaId) throws Exception{
 		// Buscar la empresa existente
@@ -365,6 +381,13 @@ public class EmpresaService {
 			empresa.setTipoImagen(archivo.getContentType());
 		}
 
+		// Procesar usuarios (crear nuevos y actualizar existentes) solo si no es nulo
+		if (empre.getUsuarios() != null && !empre.getUsuarios().isEmpty()) {
+			procesarUsuariosParaEmpresa(empre.getUsuarios());
+		} else if (empre.getUsuarios() == null) {
+			System.out.println("La lista de usuarios es nula, no se procesarán usuarios");
+		}
+
 		emprerepo.save(empresa);
 	}
 
@@ -391,43 +414,207 @@ public class EmpresaService {
 
 	private void crearUsuarioParaEmpresa(Empresaresponse empre) {
 		try {
-			// Buscar rol Admin (código 4 según la migración)
-			Optional<Roles> rolOpt = rolesRepository.findByCodigo(1);
-			if (rolOpt.isEmpty()) {
-				// Si no existe rol Admin, crear uno
-				Roles rolAdmin = new Roles();
-				rolAdmin.setNombre("Admin");
-				rolAdmin = rolesRepository.save(rolAdmin);
-				rolOpt = Optional.of(rolAdmin);
+			// Verificar si hay usuarios para crear
+			if (empre.getUsuarios() == null || empre.getUsuarios().isEmpty()) {
+				System.out.println("No hay usuarios para crear");
+				return;
 			}
 			
-			Roles rolAdmin = rolOpt.get();
+			// Procesar cada usuario de la lista
+			for (Empresaresponse.usuario usuarioDto : empre.getUsuarios()) {
+				crearUsuarioIndividual(usuarioDto, empre);
+			}
 			
-			// Asignar todos los permisos al rol Admin
-			asignarTodosLosPermisosAlRol(rolAdmin);
+		} catch (Exception e) {
+			// En caso de error, lo registramos pero no interrumpimos la creación de la empresa
+			System.err.println("Error al crear usuarios para la empresa: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+	
+	private void crearUsuarioIndividual(Empresaresponse.usuario usuarioDto, Empresaresponse empre) {
+		try {
+			// Obtener rol por nombre
+			Roles rol = obtenerRolPorNombre(usuarioDto.getRol());
+			if (rol == null) {
+				System.err.println("No se encontró el rol: " + usuarioDto.getRol() + " para el usuario: " + usuarioDto.getUsuario());
+				return;
+			}
 			
-			// Crear usuario administrador para la empresa
+			// Asignar todos los permisos al rol si es Admin
+			if ("Admin".equalsIgnoreCase(rol.getNombre())) {
+				asignarTodosLosPermisosAlRol(rol);
+			}
+			
+			// Crear usuario
 			Usuario nuevoUsuario = new Usuario();
-			nuevoUsuario.setNombre(empre.getPrimernombre() + " " + empre.getPrimerapellido());
-			nuevoUsuario.setUsuario(empre.getCorreoempresa()); // Usar el email de la empresa como usuario
+			nuevoUsuario.setNombre(usuarioDto.getUsuario()); // Usar el nombre de usuario como nombre
+			nuevoUsuario.setUsuario(usuarioDto.getUsuario());
+			
+			// Usar contraseña proporcionada o generar una por defecto
+			String contrasena = usuarioDto.getContrasena() != null && !usuarioDto.getContrasena().trim().isEmpty() 
+				? usuarioDto.getContrasena() : "admin123";
 			
 			// Encriptar contraseña
-			String contrasenaEncriptada = PasswordUtils.encrypt("admin123");
-			System.out.println("Contraseña original: admin123");
-			System.out.println("Contraseña encriptada: " + contrasenaEncriptada);
+			String contrasenaEncriptada = PasswordUtils.encrypt(contrasena);
+			System.out.println("Usuario: " + usuarioDto.getUsuario() + " - Contraseña original: " + contrasena);
+			System.out.println("Usuario: " + usuarioDto.getUsuario() + " - Contraseña encriptada: " + contrasenaEncriptada);
 			
-			nuevoUsuario.setContrasena(contrasenaEncriptada); // Contraseña por defecto
-			nuevoUsuario.setEstado("ACTIVO");
+			nuevoUsuario.setContrasena(contrasenaEncriptada);
+			nuevoUsuario.setEstado(usuarioDto.getEstado() != null ? usuarioDto.getEstado() : "ACTIVO");
 			nuevoUsuario.setCodigousuariocreado(1); // Usuario por defecto que crea
-			nuevoUsuario.setCodigorol(rolAdmin);
+			nuevoUsuario.setCodigorol(rol);
+			
+			// Asignar bodega si se proporcionó
+			if (usuarioDto.getBodega() != null && !usuarioDto.getBodega().trim().isEmpty()) {
+				Bodegas bodega = obtenerBodegaPorNombre(usuarioDto.getBodega());
+				if (bodega != null) {
+					// Aquí necesitarías tener una relación entre Usuario y Bodega
+					// Por ahora, solo registramos que se encontró la bodega
+					Usuariobodega usuariobodega = new Usuariobodega();
+					usuariobodega.setUsuarioid(nuevoUsuario);
+					usuariobodega.setBodegaid(bodega);
+					bodegarepositori.save(usuariobodega);
+					System.out.println("Bodega asignada para usuario " + usuarioDto.getUsuario() + ": " + bodega.getNombre());
+				} else {
+					System.err.println("No se encontró la bodega: " + usuarioDto.getBodega() + " para el usuario: " + usuarioDto.getUsuario());
+				}
+			}
 			
 			Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 			System.out.println("Usuario guardado con ID: " + usuarioGuardado.getCodigo());
 			System.out.println("Contraseña guardada en BD: " + usuarioGuardado.getContrasena());
 			
 		} catch (Exception e) {
-			// En caso de error, lo registramos pero no interrumpimos la creación de la empresa
-			System.err.println("Error al crear usuario para la empresa: " + e.getMessage());
+			System.err.println("Error al crear usuario individual " + usuarioDto.getUsuario() + ": " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+	
+	private Roles obtenerRolPorNombre(String nombreRol) {
+		try {
+			if (nombreRol == null || nombreRol.trim().isEmpty()) {
+				return null;
+			}
+			
+			// Buscar rol por nombre (ignorando mayúsculas/minúsculas)
+			List<Roles> roles = rolesRepository.findAll();
+			for (Roles rol : roles) {
+				if (rol.getNombre() != null && rol.getNombre().equalsIgnoreCase(nombreRol.trim())) {
+					return rol;
+				}
+			}
+			
+			// Si no se encuentra, crear un nuevo rol con ese nombre
+			Roles nuevoRol = new Roles();
+			nuevoRol.setNombre(nombreRol.trim());
+			return rolesRepository.save(nuevoRol);
+			
+		} catch (Exception e) {
+			System.err.println("Error al obtener rol por nombre '" + nombreRol + "': " + e.getMessage());
+			return null;
+		}
+	}
+	
+	private Bodegas obtenerBodegaPorNombre(String nombreBodega) {
+		try {
+			if (nombreBodega == null || nombreBodega.trim().isEmpty()) {
+				return null;
+			}
+			
+			// Buscar bodega por nombre (ignorando mayúsculas/minúsculas)
+			List<Bodegas> bodegas = repotoribodega.findAll();
+			for (Bodegas bodega : bodegas) {
+				if (bodega.getNombre() != null && bodega.getNombre().equalsIgnoreCase(nombreBodega.trim())) {
+					return bodega;
+				}
+			}
+			
+			return null; // No crear bodega si no existe
+			
+		} catch (Exception e) {
+			System.err.println("Error al obtener bodega por nombre '" + nombreBodega + "': " + e.getMessage());
+			return null;
+		}
+	}
+	
+	private void procesarUsuariosParaEmpresa(List<Empresaresponse.usuario> usuarios) {
+		try {
+			for (Empresaresponse.usuario usuarioDto : usuarios) {
+				if (usuarioDto.getCodigo() != null && usuarioDto.getCodigo() > 0) {
+					// Actualizar usuario existente
+					actualizarUsuarioIndividual(usuarioDto);
+				} else {
+					// Crear nuevo usuario
+					crearUsuarioIndividual(usuarioDto, null);
+				}
+			}
+		} catch (Exception e) {
+			System.err.println("Error al procesar usuarios para la empresa: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+	
+	private void actualizarUsuarioIndividual(Empresaresponse.usuario usuarioDto) {
+		try {
+			// Buscar usuario existente por código
+			Optional<Usuario> usuarioOpt = usuarioRepository.findByCodigo(usuarioDto.getCodigo());
+			if (usuarioOpt.isEmpty()) {
+				System.err.println("No se encontró el usuario con código: " + usuarioDto.getCodigo());
+				return;
+			}
+			
+			Usuario usuarioExistente = usuarioOpt.get();
+			
+			// Actualizar rol si se proporcionó
+			if (usuarioDto.getRol() != null && !usuarioDto.getRol().trim().isEmpty()) {
+				Roles rol = obtenerRolPorNombre(usuarioDto.getRol());
+				if (rol != null) {
+					usuarioExistente.setCodigorol(rol);
+					// Asignar todos los permisos al rol si es Admin
+					if ("Admin".equalsIgnoreCase(rol.getNombre())) {
+						asignarTodosLosPermisosAlRol(rol);
+					}
+				} else {
+					System.err.println("No se encontró el rol: " + usuarioDto.getRol() + " para el usuario: " + usuarioDto.getUsuario());
+				}
+			}
+			
+			// Actualizar nombre de usuario si se proporcionó
+			if (usuarioDto.getUsuario() != null && !usuarioDto.getUsuario().trim().isEmpty()) {
+				usuarioExistente.setUsuario(usuarioDto.getUsuario());
+				usuarioExistente.setNombre(usuarioDto.getUsuario());
+			}
+			
+			// Actualizar contraseña si se proporcionó
+			if (usuarioDto.getContrasena() != null && !usuarioDto.getContrasena().trim().isEmpty()) {
+				String contrasenaEncriptada = PasswordUtils.encrypt(usuarioDto.getContrasena());
+				usuarioExistente.setContrasena(contrasenaEncriptada);
+				System.out.println("Contraseña actualizada para usuario: " + usuarioDto.getUsuario());
+			}
+			
+			// Actualizar estado si se proporcionó
+			if (usuarioDto.getEstado() != null && !usuarioDto.getEstado().trim().isEmpty()) {
+				usuarioExistente.setEstado(usuarioDto.getEstado());
+			}
+			
+			// Actualizar bodega si se proporcionó
+			if (usuarioDto.getBodega() != null && !usuarioDto.getBodega().trim().isEmpty()) {
+				Bodegas bodega = obtenerBodegaPorNombre(usuarioDto.getBodega());
+				if (bodega != null) {
+					// Aquí necesitarías tener una relación entre Usuario y Bodega
+					// Por ahora, solo registramos que se encontró la bodega
+					System.out.println("Bodega actualizada para usuario " + usuarioDto.getUsuario() + ": " + bodega.getNombre());
+				} else {
+					System.err.println("No se encontró la bodega: " + usuarioDto.getBodega() + " para el usuario: " + usuarioDto.getUsuario());
+				}
+			}
+			
+			Usuario usuarioActualizado = usuarioRepository.save(usuarioExistente);
+			System.out.println("Usuario actualizado con ID: " + usuarioActualizado.getCodigo());
+			
+		} catch (Exception e) {
+			System.err.println("Error al actualizar usuario individual " + usuarioDto.getUsuario() + " (código: " + usuarioDto.getCodigo() + "): " + e.getMessage());
 			e.printStackTrace();
 		}
 	}
@@ -540,6 +727,8 @@ public class EmpresaService {
 			e.printStackTrace();
 			throw new RuntimeException("Error al listar schemas: " + e.getMessage());
 		}
+
+
 	}
 	
 }

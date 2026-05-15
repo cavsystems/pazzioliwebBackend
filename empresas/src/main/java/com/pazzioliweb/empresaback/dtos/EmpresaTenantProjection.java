@@ -1,6 +1,8 @@
 package com.pazzioliweb.empresaback.dtos;
 
 
+import com.pazzioliweb.empresasback.entity.Empresa;
+import jakarta.persistence.ColumnResult;
 import lombok.Data;
 
 @Data
@@ -37,6 +39,14 @@ public class EmpresaTenantProjection {
     private String imagenempresa;
     private String tipoImagen;
 
+
+    private String fechainiciolicencia;
+            private String fechafinallicencia;
+private   Integer plazo;
+            private String estadolicencia;
+
+            private Integer numerousuarios;
+
     public EmpresaTenantProjection(
             String tenant,
             String estado,
@@ -61,7 +71,14 @@ public class EmpresaTenantProjection {
             Integer codigodepartamento,
             Integer codigomunicipio,
             String imagenempresa,
-            String tipoImagen
+            String tipoImagen,
+            String fechainiciolicencia,
+    String fechafinallicencia,
+
+    String estadolicencia,
+            Integer plazo,
+             Integer numerousuarios
+
     ) {
         this.codigotipopersona=codigotipopersona;
         this.estado = estado;
@@ -87,5 +104,23 @@ public class EmpresaTenantProjection {
         this.codigomunicipio = codigomunicipio;
         this.imagenempresa = imagenempresa;
         this.tipoImagen = tipoImagen;
+        this.fechainiciolicencia = fechainiciolicencia;
+        this.fechafinallicencia = fechafinallicencia;
+        this.estadolicencia = estadolicencia;
+        this.plazo = plazo;
+        this.numerousuarios = numerousuarios;
+    }
+
+    public EmpresaTenantProjection(){
+
+    }
+    public static EmpresaTenantProjection mapperdtos(Empresa empresa){
+        EmpresaTenantProjection empresaresponse=new EmpresaTenantProjection();
+        empresaresponse.setCodigo(empresa.getCodigo());
+        empresaresponse.setRazonsocial(empresa.getRazonsocial());
+
+return empresaresponse;
+
+
     }
 }

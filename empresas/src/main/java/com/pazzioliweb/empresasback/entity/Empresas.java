@@ -40,6 +40,7 @@ import lombok.Data;
 				targetClass = EmpresaTenantProjection.class,
 				columns = {
 						@ColumnResult(name = "tenant", type = String.class),
+
 						@ColumnResult(name = "estado", type = String.class),
 						@ColumnResult(name = "codigo", type = Integer.class),
 						@ColumnResult(name = "codigotipopersona", type =  Integer.class),
@@ -68,7 +69,13 @@ import lombok.Data;
 						@ColumnResult(name = "codigomunicipio", type = Integer.class),
 
 						@ColumnResult(name = "imagenempresa", type = String.class),
-						@ColumnResult(name = "tipoImagen", type = String.class)
+						@ColumnResult(name = "tipoImagen", type = String.class),
+						@ColumnResult(name = "fechainiciolicencia", type = String.class),
+						@ColumnResult(name = "fechafinallicencia", type = String.class),
+						@ColumnResult(name = "estadolicencia", type = String.class),
+						@ColumnResult(name = "plazo", type = Integer.class),
+						@ColumnResult(name = "numerousuarios", type = Integer.class)
+
 
 				}
 		)

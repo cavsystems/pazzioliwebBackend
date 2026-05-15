@@ -1,5 +1,8 @@
 package com.pazzioliweb.empresaback.dtos;
 
+import com.pazzioliweb.empresasback.entity.Empresa;
+
+import java.time.LocalDate;
 import java.util.List;
 
 
@@ -17,7 +20,45 @@ public class Empresaresponse {
 	 private String digitodeverificacion;
 	 private String nombrecomercial;
 	 private  String primerapellido;
-		
+
+	public LocalDate getFechainiciolicencia() {
+		return fechainiciolicencia;
+	}
+
+	public void setFechainiciolicencia(LocalDate fechainiciolicencia) {
+		this.fechainiciolicencia = fechainiciolicencia;
+	}
+
+	private LocalDate fechainiciolicencia;
+
+	public LocalDate getFechafinallicencia() {
+		return fechafinallicencia;
+	}
+
+	public void setFechafinallicencia(LocalDate fechafinallicencia) {
+		this.fechafinallicencia = fechafinallicencia;
+	}
+
+	private LocalDate fechafinallicencia;
+	public int getPlazo() {
+		return plazo;
+	}
+
+	public void setPlazo(int plazo) {
+		this.plazo = plazo;
+	}
+
+	private int plazo;
+
+	public int getNumerousuarios() {
+		return numerousuarios;
+	}
+
+	public void setNumerousuarios(int numerousuarios) {
+		this.numerousuarios = numerousuarios;
+	}
+
+	private int numerousuarios;
       private String primernombre;
       private String numeroidentificacion;
       private int  regimen;
@@ -29,6 +70,20 @@ public class Empresaresponse {
   	
   	private int 	tipodepersona;
 	private String estado;
+
+	public void setDepartamento(int departamento) {
+		this.departamento = departamento;
+	}
+
+	public List<usuario> getUsuarios() {
+		return usuarios;
+	}
+
+	public void setUsuarios(List<usuario> usuarios) {
+		this.usuarios = usuarios;
+	}
+
+	private List<usuario> usuarios;
 	
   	public List<Impuestos> getImpuestos() {
 		return impuestos;
@@ -296,6 +351,68 @@ public class Empresaresponse {
 	
 		
 	}
+
+	public static class usuario{
+		public Integer getCodigo() {
+			return codigo;
+		}
+
+		public void setCodigo(Integer codigo) {
+			this.codigo = codigo;
+		}
+
+		private Integer codigo;
+
+		public String getEstado() {
+			return estado;
+		}
+
+		public void setEstado(String estado) {
+			this.estado = estado;
+		}
+
+		public String getBodega() {
+			return bodega;
+		}
+
+		public void setBodega(String bodega) {
+			this.bodega = bodega;
+		}
+
+		private String bodega;
+
+		public String getContrasena() {
+			return contrasena;
+		}
+
+		public void setContrasena(String contrasena) {
+			this.contrasena = contrasena;
+		}
+
+		private String contrasena;
+		private String estado;
+
+		public String getRol() {
+			return rol;
+		}
+
+		public void setRol(String rol) {
+			this.rol = rol;
+		}
+
+		private String rol;
+
+		public String getUsuario() {
+			return usuario;
+		}
+
+		public void setUsuario(String usuario) {
+			this.usuario = usuario;
+		}
+
+		private String usuario;
+
+	}
 	
 	public static class Sucursales{
 		private String celular;
@@ -484,6 +601,9 @@ public class Empresaresponse {
 		
 		
 	}
+
+
+
 	
     
 

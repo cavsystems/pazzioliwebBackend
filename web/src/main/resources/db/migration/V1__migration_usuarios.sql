@@ -751,6 +751,11 @@ CREATE TABLE `empresa` (
   `codigopais` int DEFAULT NULL,
   `codigodepartamento` int DEFAULT NULL,
   `codigomunicipio` int DEFAULT NULL,
+  `plazo` int null,
+  `numerousuarios` int null,
+  `fechainiciolicencia` date,
+  `fechafinallicencia` date,
+
   `imagenempresa` longblob,
   `tipoImagen` varchar(100) DEFAULT '',
   `estado`  enum('ACTIVA','INACTIVA') DEFAULT 'ACTIVA',

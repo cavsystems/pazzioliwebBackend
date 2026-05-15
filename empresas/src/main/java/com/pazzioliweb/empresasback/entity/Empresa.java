@@ -9,6 +9,8 @@ import com.pazzioliweb.usuariosbacken.entity.Tipopersona;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Entity
 @Table(name = "empresa")
 @Data
@@ -39,7 +41,29 @@ public class Empresa {
   @ManyToOne
   @JoinColumn(name = " codigotipoidentificacion")
   private Tipoidentificacion  codigotipoidentificacion;
-  
+
+
+	public LocalDate getFechainiciolicencia() {
+		return fechainiciolicencia;
+	}
+
+	public void setFechainiciolicencia(LocalDate fechainiciolicencia) {
+		this.fechainiciolicencia = fechainiciolicencia;
+	}
+
+	@Column(name = "fechainiciolicencia")
+	private LocalDate fechainiciolicencia;
+
+	public LocalDate getFechafinallicencia() {
+		return fechafinallicencia;
+	}
+
+	public void setFechafinallicencia(LocalDate fechafinallicencia) {
+		this.fechafinallicencia = fechafinallicencia;
+	}
+
+	@Column(name = "fechafinallicencia")
+	private LocalDate fechafinallicencia;
   
  private String numeroidentificacion;
  private String digitoverificacion;
@@ -49,6 +73,26 @@ public class Empresa {
  private String  segundoapellido  ;
  private String razonsocial;
  private String codigopostal;
+
+	public int getNumerousuarios() {
+		return numerousuarios;
+	}
+
+	public void setNumerousuarios(int numerousuarios) {
+		this.numerousuarios = numerousuarios;
+	}
+
+	private int plazo ;
+
+	public int getPlazo() {
+		return plazo;
+	}
+
+	public void setPlazo(int plazo) {
+		this.plazo = plazo;
+	}
+
+	private int numerousuarios;
  
 public String getCodigopostal() {
 	return codigopostal;
