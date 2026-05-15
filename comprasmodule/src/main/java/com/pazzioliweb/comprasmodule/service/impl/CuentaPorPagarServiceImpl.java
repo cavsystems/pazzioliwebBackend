@@ -57,8 +57,9 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
     @Override
     @Transactional(readOnly = true)
     public List<CuentaPorPagarDTO> listarPorProveedor(Integer proveedorId) {
+        // Solo CxP pagables: excluye órdenes en estado PENDIENTE (sin ingreso de mercancía)
         return cuentaPorPagarRepository
-                .findByProveedor_TerceroIdAndEstadoIn(proveedorId, List.of("PENDIENTE", "PARCIAL"))
+                .findPagablesByProveedor(proveedorId)
                 .stream().map(this::toDTO).collect(Collectors.toList());
     }
 

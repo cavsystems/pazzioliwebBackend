@@ -62,4 +62,42 @@ public class ComprobanteContableController {
                 .collect(Collectors.toList())
         );
     }
+
+    /**
+     * Devuelve el siguiente número que se asignará al próximo movimiento de
+     * (cajero, tipo) sin reservarlo. Útil para previsualizar en el header de
+     * formularios. Si no hay comprobante configurado, devuelve un payload
+     * indicando ese estado para que el frontend muestre el mensaje correcto.
+     */
+    @GetMapping("/preview-siguiente")
+    public ResponseEntity<Map<String, Object>> previewSiguiente(
+            @RequestParam Integer cajeroId,
+            @RequestParam String tipo) {
+        try {
+            TipoMovimientoComprobante t = TipoMovimientoComprobante.valueOf(tipo.toUpperCase());
+            return service.listarPorCajero(cajeroId).stream()
+                .filter(c -> Boolean.TRUE.equals(c.getActivo()) && !Boolean.TRUE.equals(c.getEsLegacy())
+                          && t.name().equalsIgnoreCase(c.getTipoMovimiento()))
+                .findFirst()
+                .<ResponseEntity<Map<String, Object>>>map(c -> {
+                    Map<String, Object> body = new java.util.HashMap<>();
+                    body.put("configurado", true);
+                    body.put("prefijo", c.getPrefijo());
+                    body.put("siguienteConsecutivo", c.getSiguienteConsecutivo());
+                    body.put("numeroPreview", c.getPrefijo() + "-" + c.getSiguienteConsecutivo());
+                    return ResponseEntity.ok(body);
+                })
+                .orElseGet(() -> {
+                    Map<String, Object> body = new java.util.HashMap<>();
+                    body.put("configurado", false);
+                    body.put("mensaje", "El cajero " + cajeroId + " no tiene un comprobante " + tipo + " configurado.");
+                    return ResponseEntity.ok(body);
+                });
+        } catch (IllegalArgumentException ex) {
+            Map<String, Object> body = new java.util.HashMap<>();
+            body.put("configurado", false);
+            body.put("mensaje", "Tipo de movimiento inválido: " + tipo);
+            return ResponseEntity.badRequest().body(body);
+        }
+    }
 }

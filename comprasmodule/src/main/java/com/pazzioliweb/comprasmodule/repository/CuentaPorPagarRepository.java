@@ -2,6 +2,8 @@ package com.pazzioliweb.comprasmodule.repository;
 
 import com.pazzioliweb.comprasmodule.entity.CuentaPorPagar;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -10,4 +12,25 @@ import java.util.List;
 public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, Long> {
     List<CuentaPorPagar> findByNumeroFactura(String numeroFactura);
     List<CuentaPorPagar> findByProveedor_TerceroIdAndEstadoIn(Integer proveedorId, List<String> estados);
+
+    /**
+     * Cuentas por pagar de un proveedor que SÍ son pagables — excluye las CxP cuya
+     * orden de compra asociada está en estado PENDIENTE (es decir, mercadería
+     * todavía no recibida físicamente). Esto evita que el cajero abone facturas
+     * cuya mercancía aún no ha llegado.
+     *
+     * Las CxP manuales (sin orden asociada por numero_factura) se incluyen.
+     */
+    @Query(value = """
+            SELECT cpp.* FROM cuentas_por_pagar cpp
+             WHERE cpp.proveedor_id = :proveedorId
+               AND cpp.estado IN ('PENDIENTE','PARCIAL')
+               AND NOT EXISTS (
+                   SELECT 1 FROM ordenes_compra oc
+                    WHERE oc.numero_orden = cpp.numero_factura
+                      AND oc.estado = 'PENDIENTE'
+               )
+             ORDER BY cpp.fecha_vencimiento ASC
+            """, nativeQuery = true)
+    List<CuentaPorPagar> findPagablesByProveedor(@Param("proveedorId") Integer proveedorId);
 }

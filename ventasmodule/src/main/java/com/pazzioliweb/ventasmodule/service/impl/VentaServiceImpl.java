@@ -115,11 +115,43 @@ public class VentaServiceImpl implements VentaService {
      */
     private boolean tieneCredito(VentaDTO ventaDTO) {
         if (ventaDTO.getMetodosPago() == null) return false;
-        return ventaDTO.getMetodosPago().stream().anyMatch(mp -> {
+        return tieneCredito(ventaDTO.getMetodosPago());
+    }
+
+    private boolean tieneCredito(List<VentaMetodoPagoDTO> metodos) {
+        if (metodos == null || metodos.isEmpty()) return false;
+        return metodos.stream().anyMatch(mp -> {
             MetodosPago m = metodosPagoRepository.findById(mp.getMetodoPagoId().intValue()).orElse(null);
             return m != null && m.getTipoNegociacion() != null
                 && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
         });
+    }
+
+    /**
+     * Asigna el comprobante (FC o VC) a la venta usando el prefijo del cajero.
+     * Si la venta ya tiene un comprobante NO temporal asignado, no hace nada
+     * (el consecutivo solo se reserva una vez).
+     */
+    private void asignarComprobanteAVenta(Venta venta, boolean tieneCredito) {
+        if (venta.getComprobante() != null && venta.getNumeroVenta() != null
+            && !venta.getNumeroVenta().startsWith("TMP-")) {
+            return; // ya tiene comprobante real
+        }
+        if (venta.getCajero() == null) {
+            throw new VentaException("Se requiere un cajero para generar el comprobante de la venta.");
+        }
+        TipoMovimientoComprobante tipo = tieneCredito
+                ? TipoMovimientoComprobante.VC
+                : TipoMovimientoComprobante.FC;
+        try {
+            AsignacionComprobanteService.Resultado r =
+                    asignacionComprobante.asignar(venta.getCajero().getCajeroId(), tipo);
+            venta.setComprobante(r.getComprobante());
+            venta.setConsecutivoComprobante(r.getConsecutivo());
+            venta.setNumeroVenta(r.getNumeroDocumento());
+        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new VentaException(ex.getMessage());
+        }
     }
 
     @Override
@@ -212,21 +244,18 @@ public class VentaServiceImpl implements VentaService {
         venta.setDescuentos(descuentosTotal);
         venta.setTotalVenta(subtotal);
 
-        // ─── Asignar comprobante contable (FC o VC) y número usando el prefijo del cajero ───
+        // ─── Asignación de comprobante: solo si ya sabemos los métodos de pago.
+        //     Si la venta se crea sin métodos (modo "abrir → agregar items → cobrar"),
+        //     guardamos un número TMP temporal y la asignación real se hace en
+        //     completarVenta() cuando ya se conoce si es contado o crédito.
         if (venta.getCajero() == null) {
             throw new VentaException("Se requiere un cajero para generar el comprobante de la venta.");
         }
-        TipoMovimientoComprobante tipo = tieneCredito(ventaDTO)
-                ? TipoMovimientoComprobante.VC
-                : TipoMovimientoComprobante.FC;
-        try {
-            AsignacionComprobanteService.Resultado r =
-                    asignacionComprobante.asignar(venta.getCajero().getCajeroId(), tipo);
-            venta.setComprobante(r.getComprobante());
-            venta.setConsecutivoComprobante(r.getConsecutivo());
-            venta.setNumeroVenta(r.getNumeroDocumento());
-        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
-            throw new VentaException(ex.getMessage());
+        if (ventaDTO.getMetodosPago() != null && !ventaDTO.getMetodosPago().isEmpty()) {
+            asignarComprobanteAVenta(venta, tieneCredito(ventaDTO));
+        } else {
+            // Placeholder único — se reemplaza con el número definitivo al completar
+            venta.setNumeroVenta("TMP-" + System.currentTimeMillis());
         }
 
         Venta ven=ventaRepository.save(venta);
@@ -383,6 +412,11 @@ public class VentaServiceImpl implements VentaService {
             vmp.setPlazoEnDias(mpDTO.getPlazoEnDias());
             venta.getMetodosPago().add(vmp);
         }
+
+        // ─── Asignar el comprobante DEFINITIVO ahora que ya sabemos si es FC o VC ───
+        // Si la venta tenía un número TMP (creada sin métodos), aquí se le asigna su prefijo
+        // y consecutivo real. Si ya tenía un comprobante real, no se cambia.
+        asignarComprobanteAVenta(venta, tieneCredito);
 
         venta.setEstado("COMPLETADA");
         Venta ventaGuardada = ventaRepository.save(venta);
