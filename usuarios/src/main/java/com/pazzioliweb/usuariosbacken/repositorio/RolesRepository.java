@@ -17,8 +17,8 @@ public List<RolesDTOS>  findByNombreNot(String nombre);
 public Optional<Roles>  findByCodigo(int codigo);
 @Query(value = """
 		select u.codigo as codigo,r.nombre as  rol ,u.usuario as usuario,
-           u.contrasena as contrasena,
-           u.estado as estado from  Roles r inner join r.usuarios u 
+           u.contrasena as contrasena,u.avatar as avatar,
+           u.estado as estado from  Roles r inner join r.usuarios u  left join 
 		 """)
 public List<RolesusuariosDTOS>  findByUsuariobodega( );
 }

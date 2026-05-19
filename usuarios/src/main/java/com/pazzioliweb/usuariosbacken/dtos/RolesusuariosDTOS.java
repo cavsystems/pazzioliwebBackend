@@ -6,5 +6,5 @@ public String getUsuario();
 public String getRol();
 public String getContrasena();
 public String getEstado();
-
+public byte[] getAvatar();
 }
