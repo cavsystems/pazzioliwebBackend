@@ -43,6 +43,10 @@ public class DevolucionServiceImpl implements DevolucionService {
     private final CajeroRepository cajeroRepository;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
     private final com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.AsientoContableService asientoService;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService configContable;
   @Autowired
   private PedidoService pedidoService;
 @Autowired
@@ -194,7 +198,74 @@ public class DevolucionServiceImpl implements DevolucionService {
         // 9. Registrar movimiento en cajero para el cuadre de caja
         registrarMovimientoEnCajero(venta, guardada, totalNeto);
 
+        // 10. Generar asiento contable de devolución (reversa de venta)
+        generarAsientoDevolucion(guardada, venta, totalNeto);
+
         return toDTO(guardada);
+    }
+
+    /**
+     * Asiento de devolución (DV) — reverso parcial/total de la venta original:
+     *   DÉBITO Devolución en ventas (4175)  por subtotal devuelto sin IVA
+     *   DÉBITO IVA generado (240801) [revierte]  por IVA devuelto
+     *   CRÉDITO Caja/CxC                   por el total devuelto
+     */
+    private void generarAsientoDevolucion(Devolucion devolucion, Venta venta, BigDecimal totalDevuelto) {
+        try {
+            java.util.List<com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+
+            BigDecimal iva = devolucion.getIvaDevuelto() != null ? devolucion.getIvaDevuelto() : BigDecimal.ZERO;
+            BigDecimal subtotal = totalDevuelto.subtract(iva).max(BigDecimal.ZERO);
+
+            // DÉBITO Devolución en ventas
+            com.pazzioliweb.comprobantesmodule.entity.CuentaContable devVent = configContable.devolucionVentas().orElse(null);
+            if (devVent == null) {
+                System.out.println("[AsientoDevolucion] Cuenta 4175 Devoluciones no configurada. Asiento omitido.");
+                return;
+            }
+            lineas.add(com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.debito(
+                    devVent.getId(),
+                    subtotal.compareTo(BigDecimal.ZERO) > 0 ? subtotal : totalDevuelto,
+                    "Devolución venta " + venta.getNumeroVenta()));
+
+            // DÉBITO IVA generado (revierte)
+            if (iva.compareTo(BigDecimal.ZERO) > 0) {
+                com.pazzioliweb.comprobantesmodule.entity.CuentaContable ivaGen = configContable.ivaGenerado().orElse(null);
+                if (ivaGen != null) {
+                    lineas.add(com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.debito(
+                            ivaGen.getId(), iva, "Reversa IVA por devolución"));
+                }
+            }
+
+            // CRÉDITO Caja general (reembolso al cliente)
+            com.pazzioliweb.comprobantesmodule.entity.CuentaContable caja = configContable.cajaGeneral().orElse(null);
+            if (caja == null) {
+                System.out.println("[AsientoDevolucion] Cuenta 1105 Caja no configurada. Asiento omitido.");
+                return;
+            }
+            com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO creditoLinea =
+                    com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(
+                            caja.getId(), totalDevuelto, "Reembolso devolución " + devolucion.getNumeroDevolucion());
+            if (venta.getCliente() != null) {
+                creditoLinea.conTercero(venta.getCliente().getTerceroId(),
+                        venta.getCliente().getRazonSocial() != null && !venta.getCliente().getRazonSocial().isBlank()
+                            ? venta.getCliente().getRazonSocial()
+                            : venta.getCliente().getNombre1());
+            }
+            lineas.add(creditoLinea);
+
+            asientoService.generarAsiento(
+                    devolucion.getNumeroDevolucion(),
+                    devolucion.getFechaCreacion() != null ? devolucion.getFechaCreacion() : LocalDate.now(),
+                    "Devolución " + devolucion.getNumeroDevolucion() + " de venta " + venta.getNumeroVenta(),
+                    "DV",
+                    devolucion.getId(),
+                    devolucion.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoDevolucion] Error generando asiento (no crítico): " + ex.getMessage());
+        }
     }
 
     @Override
@@ -402,7 +473,8 @@ public class DevolucionServiceImpl implements DevolucionService {
                     montoEfectivoDevuelto,
                     montoElectronicoDevuelto,
                     "Devolución " + devolucion.getNumeroDevolucion() +
-                            " de venta " + venta.getNumeroVenta()
+                            " de venta " + venta.getNumeroVenta(),
+                    devolucion.getComprobante()
             );
         } catch (Exception e) {
             System.out.println("[DevolucionService] Error al registrar movimiento en cajero: " + e.getMessage());

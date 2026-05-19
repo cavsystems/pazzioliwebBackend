@@ -61,6 +61,9 @@
         <class>com.pazzioliweb.comprobantesmodule.entity.ConceptoAbierto</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.CuentaContable</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.AsientoContable</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.AsientoContableLinea</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.PeriodoContable</class>
         <!-- Cajas -->
         <class>com.pazzioliweb.cajasmodule.entity.Cajas</class>
         
@@ -72,6 +75,7 @@
         <!-- Metodos pago -->
         <class>com.pazzioliweb.metodospagomodule.entity.MetodosPago</class>
         <class>com.pazzioliweb.metodospagomodule.entity.TipoTotales</class>
+        <class>com.pazzioliweb.metodospagomodule.entity.CuentaBancaria</class>
         
         <!-- Facturacion -->
         <class>com.pazzioliweb.facturacionmodule.entity.Facturas</class>

@@ -1,12 +1,16 @@
 package com.pazzioliweb.metodospagomodule.entity;
 
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 
@@ -36,6 +40,24 @@ public class MetodosPago {
 	/** CSV con los módulos donde aplica este método: "RECIBO,EGRESO,VENTA". */
 	@Column(name = "tipos", nullable = false, length = 100)
 	private String tipos = "RECIBO,EGRESO,VENTA";
+
+	/**
+	 * Cuenta bancaria a la que entra/sale el dinero cuando se usa este método.
+	 * Aplica solo a métodos electrónicos (tarjeta, transferencia). Para efectivo
+	 * queda NULL — se asume que va a la cuenta contable de caja directamente.
+	 */
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "cuenta_bancaria_id")
+	private CuentaBancaria cuentaBancaria;
+
+	/**
+	 * Cuenta contable a la que afecta este método de pago.
+	 * Si tiene cuenta bancaria, esta cuenta puede heredarse de la cuenta bancaria.
+	 * Si es efectivo, apunta a la cuenta de caja del PUC (típicamente 1105).
+	 */
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "cuenta_contable_id")
+	private CuentaContable cuentaContable;
 
 	public enum Estado {
         ACTIVO, INACTIVO

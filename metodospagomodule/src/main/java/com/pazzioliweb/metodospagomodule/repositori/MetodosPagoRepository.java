@@ -21,8 +21,15 @@ public interface MetodosPagoRepository extends JpaRepository<MetodosPago, Intege
 				mp.sigla AS sigla,
 				mp.estado AS estado,
 				mp.tipoNegociacion AS tipoNegociacion,
-				mp.tipos AS tipos
+				mp.tipos AS tipos,
+				cb.id AS cuentaBancariaId,
+				cb.nombre AS cuentaBancariaNombre,
+				cc.id AS cuentaContableId,
+				cc.codigo AS cuentaContableCodigo,
+				cc.nombre AS cuentaContableNombre
 			FROM MetodosPago mp
+			 LEFT JOIN mp.cuentaBancaria cb
+			 LEFT JOIN mp.cuentaContable cc
 			""")
 	Page<MetodoPagoDTO> listadoMetodosPagoDTO(Pageable pageable);
 

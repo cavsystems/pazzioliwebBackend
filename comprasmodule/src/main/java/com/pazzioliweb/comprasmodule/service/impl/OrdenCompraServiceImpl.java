@@ -10,8 +10,11 @@ import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
 import com.pazzioliweb.comprasmodule.service.OrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.ProductoService;
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
+import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +40,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final TercerosRepository tercerosRepository;
     private final BodegasRepository bodegasRepository;
     private final AsignacionComprobanteService asignacionComprobante;
+    private final AsientoContableService asientoService;
+    private final ConfiguracionContableService configContable;
 
     @Autowired
     public OrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
@@ -46,7 +51,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                                   CuentaPorPagarService cuentaPorPagarService,
                                   TercerosRepository tercerosRepository,
                                   BodegasRepository bodegasRepository,
-                                  AsignacionComprobanteService asignacionComprobante) {
+                                  AsignacionComprobanteService asignacionComprobante,
+                                  AsientoContableService asientoService,
+                                  ConfiguracionContableService configContable) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.ordenCompraMapper = ordenCompraMapper;
         this.productoService = productoService;
@@ -55,6 +62,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         this.tercerosRepository = tercerosRepository;
         this.bodegasRepository = bodegasRepository;
         this.asignacionComprobante = asignacionComprobante;
+        this.asientoService = asientoService;
+        this.configContable = configContable;
     }
 
     @Override
@@ -245,7 +254,78 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // 5. Crear cuenta por pagar
         crearCuentaPorPagarDesdeRequest(ordenGuardada, request);
 
+        // 6. Generar asiento contable
+        generarAsientoCompra(ordenGuardada, request);
+
         return ordenCompraMapper.toDto(ordenGuardada);
+    }
+
+    /**
+     * Asiento de compra:
+     *   DÉBITO Inventarios (1435)        por subtotal sin IVA
+     *   DÉBITO IVA descontable (240810)  por IVA
+     *   CRÉDITO CxP Proveedores (2205)   por el total (siempre que la compra registre CxP)
+     *
+     * Si la compra es CC (contado) y existiera flujo de pago inmediato, sería
+     * CRÉDITO directo a la cuenta del medio de pago. Como el sistema actual
+     * solo crea CxP, la salida de dinero se contabiliza después al pagar con CE.
+     */
+    private void generarAsientoCompra(OrdenCompra orden, RealizarOrdenRequestDTO request) {
+        try {
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+
+            BigDecimal total = orden.getTotalOrdenCompra() != null ? orden.getTotalOrdenCompra() : BigDecimal.ZERO;
+            BigDecimal iva = orden.getIva() != null ? orden.getIva() : BigDecimal.ZERO;
+            BigDecimal subtotalSinIva = total.subtract(iva).max(BigDecimal.ZERO);
+
+            // DÉBITO Inventarios
+            CuentaContable inv = configContable.inventarios().orElse(null);
+            if (inv == null) {
+                System.out.println("[AsientoCompra] Cuenta 1435 Inventarios no configurada. Asiento omitido.");
+                return;
+            }
+            lineas.add(AsientoContableService.LineaDTO.debito(inv.getId(),
+                    subtotalSinIva.compareTo(BigDecimal.ZERO) > 0 ? subtotalSinIva : total,
+                    "Compra " + orden.getNumeroOrden()));
+
+            // DÉBITO IVA descontable
+            if (iva.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable ivaDesc = configContable.ivaDescontable().orElse(null);
+                if (ivaDesc != null) {
+                    lineas.add(AsientoContableService.LineaDTO.debito(ivaDesc.getId(), iva,
+                            "IVA descontable compra " + orden.getNumeroOrden()));
+                }
+            }
+
+            // CRÉDITO CxP
+            CuentaContable cxp = configContable.cxpProveedores().orElse(null);
+            if (cxp == null) {
+                System.out.println("[AsientoCompra] Cuenta 2205 Proveedores no configurada. Asiento omitido.");
+                return;
+            }
+            AsientoContableService.LineaDTO creditoLinea = AsientoContableService.LineaDTO
+                    .credito(cxp.getId(), total, "CxP compra " + orden.getNumeroOrden());
+            if (request.getProvedor() != null && request.getProvedor().getTerceroId() != null) {
+                creditoLinea.conTercero(request.getProvedor().getTerceroId(), request.getProvedor().getNombre());
+            }
+            lineas.add(creditoLinea);
+
+            String tipo = orden.getComprobante() != null
+                    ? orden.getComprobante().getTipoMovimiento().name()
+                    : "CC";
+
+            asientoService.generarAsiento(
+                    orden.getNumeroOrden() != null ? orden.getNumeroOrden() : ("OC-" + orden.getId()),
+                    orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                    "Compra " + orden.getNumeroOrden() + (request.getProvedor() != null ? " - " + request.getProvedor().getNombre() : ""),
+                    tipo,
+                    orden.getId(),
+                    orden.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoCompra] Error generando asiento (no crítico): " + ex.getMessage());
+        }
     }
 
     private void procesarProductosDesdeRequest(List<RealizarOrdenRequestDTO.ProductoRequestPayloadDTO> products) {
@@ -405,6 +485,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                     detalle.setSku(variante.getSku());
                     detalle.setRecibido(false);
                     detalle.setCantidadRecibida(0);
+                    detalle.setManifiesto(variante.getManifiesto());
                     detalles.add(detalle);
                 }
             } else {

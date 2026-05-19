@@ -5,44 +5,36 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * Tabla maestra de comprobantes contables.
- * Cada combinación (cajero × tipo de movimiento) tiene un comprobante propio
- * con su prefijo y consecutivo. Todo movimiento del sistema (venta, compra,
- * recibo, egreso, devolución) queda amarrado al comprobante usado para
- * generar su número.
+ * Tabla maestra de comprobantes contables (numeraciones).
  *
- * Los comprobantes LEGACY tienen cajero null y son creados automáticamente
- * para amarrar registros existentes antes de la migración.
+ * Modelo similar a Alegra: una numeración (prefijo + consecutivo) puede
+ * estar ASIGNADA A VARIOS CAJEROS. Todos los cajeros asignados a la misma
+ * numeración comparten el contador. Si querés numeraciones independientes
+ * por cajero, crea un comprobante separado y asígnaselo a un solo cajero.
+ *
+ * Los comprobantes LEGACY no tienen cajeros asignados — son auto-creados
+ * para amarrar registros previos a la implementación del módulo.
  */
 @Data
 @Entity
-@Table(
-    name = "comprobantes_contables",
-    uniqueConstraints = {
-        @UniqueConstraint(name = "uq_comp_cajero_tipo", columnNames = {"cajero_id", "tipo_movimiento"})
-    }
-)
+@Table(name = "comprobantes_contables")
 public class ComprobanteContable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Cajero al que pertenece este comprobante. NULL solo para LEGACY del sistema.
-     * Se guarda como Integer plano (no FK relacional) para evitar dependencias circulares
-     * entre módulos. La integridad referencial se valida a nivel de servicio.
-     */
-    @Column(name = "cajero_id")
-    private Integer cajeroId;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_movimiento", nullable = false, length = 10)
     private TipoMovimientoComprobante tipoMovimiento;
 
-    /** Ej: "FC-1", "VC-1", "CE-2", "LEGACY-FC" */
+    /** Ej: "FC-1", "VC-1", "CE-2", "LEGACY-FC". El mismo prefijo puede
+     *  reutilizarse en distintos tipos (FC-1 para FC y FC-1 para CC), pero
+     *  el frontend impide duplicados dentro del MISMO tipo de movimiento. */
     @Column(name = "prefijo", nullable = false, length = 20)
     private String prefijo;
 
@@ -66,13 +58,26 @@ public class ComprobanteContable {
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;
 
-    /**
-     * Marca comprobantes creados automáticamente por la migración inicial.
-     * Estos amarran los registros que existían antes de implementar el módulo.
-     */
+    /** Comprobantes auto-generados por la migración LEGACY (no editables). */
     @Column(name = "es_legacy", nullable = false)
     private Boolean esLegacy = false;
 
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion = LocalDateTime.now();
+
+    /**
+     * Cajeros asignados a este comprobante. Modelo N:M: un comprobante puede
+     * ser usado por varios cajeros, y un cajero puede tener varios comprobantes
+     * (uno por tipo de movimiento, aunque podrían ser compartidos).
+     *
+     * Se guarda como colección de Integer (no FK a la entidad Cajero) para
+     * evitar dependencias circulares entre comprobantesmodule y cajerosmodule.
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "comprobante_cajero",
+            joinColumns = @JoinColumn(name = "comprobante_id")
+    )
+    @Column(name = "cajero_id")
+    private Set<Integer> cajeroIds = new HashSet<>();
 }

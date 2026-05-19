@@ -14,10 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,17 +34,17 @@ public class ComprobanteContableService {
 
     @Transactional(readOnly = true)
     public List<ComprobanteContableDTO> listar() {
-        return enriquecerConNombreCajero(repo.findAll());
+        return enriquecerConNombresCajero(repo.findAll());
     }
 
     @Transactional(readOnly = true)
     public List<ComprobanteContableDTO> listarActivos() {
-        return enriquecerConNombreCajero(repo.findByActivoTrueOrderByCajeroIdAscTipoMovimientoAsc());
+        return enriquecerConNombresCajero(repo.findByActivoTrueOrderByTipoMovimientoAsc());
     }
 
     @Transactional(readOnly = true)
     public List<ComprobanteContableDTO> listarPorCajero(Integer cajeroId) {
-        return enriquecerConNombreCajero(repo.findByCajeroId(cajeroId));
+        return enriquecerConNombresCajero(repo.findByCajeroId(cajeroId));
     }
 
     @Transactional(readOnly = true)
@@ -55,7 +52,7 @@ public class ComprobanteContableService {
         ComprobanteContable c = repo.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Comprobante no encontrado: " + id));
         ComprobanteContableDTO dto = toDto(c);
-        if (c.getCajeroId() != null) dto.setCajeroNombre(buscarNombreCajero(c.getCajeroId()));
+        agregarNombresCajero(dto);
         return dto;
     }
 
@@ -67,7 +64,7 @@ public class ComprobanteContableService {
         c.setEsLegacy(false);
         c.setFechaCreacion(LocalDateTime.now());
         ComprobanteContableDTO out = toDto(repo.save(c));
-        if (c.getCajeroId() != null) out.setCajeroNombre(buscarNombreCajero(c.getCajeroId()));
+        agregarNombresCajero(out);
         return out;
     }
 
@@ -81,7 +78,7 @@ public class ComprobanteContableService {
         validar(dto, id);
         aplicarDto(c, dto);
         ComprobanteContableDTO out = toDto(repo.save(c));
-        if (c.getCajeroId() != null) out.setCajeroNombre(buscarNombreCajero(c.getCajeroId()));
+        agregarNombresCajero(out);
         return out;
     }
 
@@ -96,26 +93,21 @@ public class ComprobanteContableService {
         repo.save(c);
     }
 
-    // ─── Helpers ────────────────────────────────────────────────
+    // ─── Validación y mapeo ─────────────────────────────────────
 
     private void validar(ComprobanteContableCreateDTO dto, Long idActual) {
         if (dto.getTipoMovimiento() == null || dto.getTipoMovimiento().isBlank())
             throw new IllegalArgumentException("El tipo de movimiento es obligatorio.");
         if (dto.getPrefijo() == null || dto.getPrefijo().isBlank())
             throw new IllegalArgumentException("El prefijo es obligatorio.");
-        if (dto.getCajeroId() == null)
-            throw new IllegalArgumentException("El cajero es obligatorio.");
+        if (dto.getCajeroIds() == null || dto.getCajeroIds().isEmpty())
+            throw new IllegalArgumentException("Asigne al menos un cajero a este comprobante.");
 
-        // Validar que el cajero exista realmente (sin depender del módulo cajerosmodule)
-        if (!existeCajero(dto.getCajeroId()))
-            throw new IllegalArgumentException("El cajero " + dto.getCajeroId() + " no existe.");
-
-        // Validar prefijo único
-        boolean prefijoExiste = idActual == null
-                ? repo.existsByPrefijo(dto.getPrefijo().trim())
-                : repo.existsByPrefijoAndIdNot(dto.getPrefijo().trim(), idActual);
-        if (prefijoExiste)
-            throw new IllegalArgumentException("Ya existe un comprobante con el prefijo '" + dto.getPrefijo() + "'");
+        // Cajeros existen
+        for (Integer cajId : dto.getCajeroIds()) {
+            if (!existeCajero(cajId))
+                throw new IllegalArgumentException("El cajero " + cajId + " no existe.");
+        }
 
         TipoMovimientoComprobante tipo;
         try {
@@ -123,21 +115,37 @@ public class ComprobanteContableService {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("Tipo de movimiento inválido: " + dto.getTipoMovimiento());
         }
-        Optional<ComprobanteContable> existente = repo.findActivoByCajeroAndTipo(dto.getCajeroId(), tipo);
-        if (existente.isPresent() && (idActual == null || !existente.get().getId().equals(idActual))) {
-            throw new IllegalArgumentException(
-                "Ya existe un comprobante activo para este cajero y tipo de movimiento."
-            );
+
+        // Prefijo único POR TIPO (no global) — varios cajeros pueden compartir el mismo prefijo+tipo,
+        // pero NO el mismo prefijo dentro del mismo tipo está duplicado.
+        boolean prefijoExiste = idActual == null
+                ? repo.existsByPrefijoAndTipo(dto.getPrefijo().trim(), tipo)
+                : repo.existsByPrefijoAndTipoAndIdNot(dto.getPrefijo().trim(), tipo, idActual);
+        if (prefijoExiste)
+            throw new IllegalArgumentException("Ya existe un comprobante " + tipo.name() +
+                    " con el prefijo '" + dto.getPrefijo() + "'.");
+
+        // Validar que ningún cajero asignado ya tenga OTRO comprobante activo del mismo tipo.
+        // Excepción: si el otro comprobante es éste mismo (idActual), está bien.
+        for (Integer cajId : dto.getCajeroIds()) {
+            Optional<ComprobanteContable> existente = repo.findActivoByCajeroAndTipo(cajId, tipo);
+            if (existente.isPresent() && (idActual == null || !existente.get().getId().equals(idActual))) {
+                throw new IllegalArgumentException(
+                    "El cajero " + cajId + " ya tiene asignado el comprobante '"
+                    + existente.get().getPrefijo() + "' para " + tipo.name()
+                    + ". Quítalo de allí primero o usa ese mismo comprobante."
+                );
+            }
         }
     }
 
     private void aplicarDto(ComprobanteContable c, ComprobanteContableCreateDTO dto) {
-        c.setCajeroId(dto.getCajeroId());
         c.setTipoMovimiento(TipoMovimientoComprobante.valueOf(dto.getTipoMovimiento().toUpperCase()));
         c.setPrefijo(dto.getPrefijo().trim());
         c.setDescripcion(dto.getDescripcion());
         if (dto.getSiguienteConsecutivo() != null && dto.getSiguienteConsecutivo() > 0)
             c.setSiguienteConsecutivo(dto.getSiguienteConsecutivo());
+
         if (dto.getCuentaContableId() != null) {
             CuentaContable cc = cuentaRepo.findById(dto.getCuentaContableId())
                     .orElseThrow(() -> new EntityNotFoundException("Cuenta contable no encontrada: " + dto.getCuentaContableId()));
@@ -147,12 +155,17 @@ public class ComprobanteContableService {
         }
         c.setAfectaInventario(dto.getAfectaInventario() != null ? dto.getAfectaInventario() : true);
         c.setActivo(dto.getActivo() != null ? dto.getActivo() : true);
+
+        // Reemplazar cajeros asignados con los del DTO
+        Set<Integer> nuevos = new HashSet<>(dto.getCajeroIds());
+        if (c.getCajeroIds() == null) {
+            c.setCajeroIds(nuevos);
+        } else {
+            c.getCajeroIds().clear();
+            c.getCajeroIds().addAll(nuevos);
+        }
     }
 
-    /**
-     * Verifica que el cajero exista sin depender de CajeroRepository (que generaría
-     * dependencia circular comprobantesmodule ↔ cajerosmodule).
-     */
     private boolean existeCajero(Integer cajeroId) {
         try {
             Long count = ((Number) em.createNativeQuery(
@@ -160,48 +173,15 @@ public class ComprobanteContableService {
                     .setParameter("id", cajeroId)
                     .getSingleResult()).longValue();
             return count > 0;
-        } catch (Exception ex) {
-            // Si la tabla aún no existe (primer arranque), no bloquear.
-            return true;
-        }
+        } catch (Exception ex) { return true; }
     }
 
-    /** Obtiene el nombre del cajero sin importar la entidad. */
-    private String buscarNombreCajero(Integer cajeroId) {
-        try {
-            Object name = em.createNativeQuery(
-                    "SELECT nombre FROM cajeros WHERE cajero_id = :id")
-                    .setParameter("id", cajeroId)
-                    .getSingleResult();
-            return name != null ? name.toString() : null;
-        } catch (Exception ex) {
-            return null;
-        }
-    }
-
-    /** Resuelve nombres de cajero en bloque y los inyecta en los DTOs. */
-    private List<ComprobanteContableDTO> enriquecerConNombreCajero(List<ComprobanteContable> rows) {
-        List<ComprobanteContableDTO> dtos = rows.stream().map(this::toDto).collect(Collectors.toList());
-        // Resolver todos los nombres en una sola consulta
-        List<Integer> ids = dtos.stream()
-                .map(ComprobanteContableDTO::getCajeroId)
-                .filter(java.util.Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
-        if (!ids.isEmpty()) {
-            Map<Integer, String> nombres = cargarNombresCajeros(ids);
-            for (ComprobanteContableDTO d : dtos) {
-                if (d.getCajeroId() != null) {
-                    d.setCajeroNombre(nombres.getOrDefault(d.getCajeroId(), "Cajero " + d.getCajeroId()));
-                }
-            }
-        }
-        return dtos;
-    }
+    // ─── Enriquecimiento con nombres de cajeros ─────────────────
 
     @SuppressWarnings("unchecked")
     private Map<Integer, String> cargarNombresCajeros(List<Integer> ids) {
         Map<Integer, String> result = new HashMap<>();
+        if (ids == null || ids.isEmpty()) return result;
         try {
             List<Object[]> rows = em.createNativeQuery(
                     "SELECT cajero_id, nombre FROM cajeros WHERE cajero_id IN (:ids)")
@@ -211,14 +191,45 @@ public class ComprobanteContableService {
                 Integer id = ((Number) r[0]).intValue();
                 result.put(id, r[1] != null ? r[1].toString() : null);
             }
-        } catch (Exception ignored) { /* tabla aún no existe */ }
+        } catch (Exception ignored) { }
         return result;
+    }
+
+    private List<ComprobanteContableDTO> enriquecerConNombresCajero(List<ComprobanteContable> rows) {
+        List<ComprobanteContableDTO> dtos = rows.stream().map(this::toDto).collect(Collectors.toList());
+        Set<Integer> todosIds = new HashSet<>();
+        dtos.forEach(d -> todosIds.addAll(d.getCajeroIds()));
+        Map<Integer, String> nombres = cargarNombresCajeros(new ArrayList<>(todosIds));
+        for (ComprobanteContableDTO d : dtos) inyectarNombres(d, nombres);
+        return dtos;
+    }
+
+    private void agregarNombresCajero(ComprobanteContableDTO d) {
+        if (d.getCajeroIds() == null || d.getCajeroIds().isEmpty()) return;
+        Map<Integer, String> nombres = cargarNombresCajeros(d.getCajeroIds());
+        inyectarNombres(d, nombres);
+    }
+
+    private void inyectarNombres(ComprobanteContableDTO d, Map<Integer, String> nombres) {
+        List<String> resueltos = new ArrayList<>();
+        for (Integer id : d.getCajeroIds()) {
+            resueltos.add(nombres.getOrDefault(id, "Cajero " + id));
+        }
+        d.setCajeroNombres(resueltos);
+        // Resumen para listas: "Juan, María, Pedro" o "Juan, María +3"
+        if (resueltos.size() <= 2) {
+            d.setCajerosResumen(String.join(", ", resueltos));
+        } else {
+            d.setCajerosResumen(resueltos.get(0) + ", " + resueltos.get(1) + " +" + (resueltos.size() - 2));
+        }
     }
 
     public ComprobanteContableDTO toDto(ComprobanteContable c) {
         ComprobanteContableDTO d = new ComprobanteContableDTO();
         d.setId(c.getId());
-        d.setCajeroId(c.getCajeroId());
+        d.setCajeroIds(c.getCajeroIds() != null
+                ? c.getCajeroIds().stream().sorted().collect(Collectors.toList())
+                : new ArrayList<>());
         d.setTipoMovimiento(c.getTipoMovimiento().name());
         d.setTipoMovimientoDescripcion(c.getTipoMovimiento().getDescripcion());
         d.setPrefijo(c.getPrefijo());

@@ -47,5 +47,14 @@ public class DetalleVenta {
     @Column(nullable = false)
     private BigDecimal total;
 
+    /**
+     * Número de guía/manifiesto/remisión asociado a esta línea de venta.
+     * Equivalente al "manifiesto" en compras: documento de transporte que
+     * acompaña la salida de mercancía (guía del transportador, número de
+     * remisión emitida al cliente, etc.). Texto libre, opcional.
+     */
+    @Column(name = "manifiesto", length = 255)
+    private String manifiesto;
+
     // Getters y setters generados por Lombok
 }

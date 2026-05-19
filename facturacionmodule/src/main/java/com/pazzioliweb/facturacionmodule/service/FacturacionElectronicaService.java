@@ -1,5 +1,6 @@
 package com.pazzioliweb.facturacionmodule.service;
 
+import com.pazzioliweb.commonbacken.events.FacturaAutorizadaEvent;
 import com.pazzioliweb.facturacionmodule.config.DianConfig;
 import com.pazzioliweb.facturacionmodule.dtos.*;
 import com.pazzioliweb.facturacionmodule.entity.Facturas;
@@ -18,6 +19,7 @@ import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +42,7 @@ public class FacturacionElectronicaService {
     private final MetodosPagoRepository metodosPagoRepository;
     private final EmpresaRepositori empresaRepositori;
     private final DianConfig dianConfig;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Autowired
     public FacturacionElectronicaService(FacturasRepository facturasRepository,
@@ -48,7 +51,8 @@ public class FacturacionElectronicaService {
                                           TercerosRepository tercerosRepository,
                                           MetodosPagoRepository metodosPagoRepository,
                                           EmpresaRepositori empresaRepositori,
-                                          DianConfig dianConfig) {
+                                          DianConfig dianConfig,
+                                          ApplicationEventPublisher eventPublisher) {
         this.facturasRepository = facturasRepository;
         this.proveedorDian = proveedorDian;
         this.ventaRepository = ventaRepository;
@@ -56,6 +60,7 @@ public class FacturacionElectronicaService {
         this.metodosPagoRepository = metodosPagoRepository;
         this.empresaRepositori = empresaRepositori;
         this.dianConfig = dianConfig;
+        this.eventPublisher = eventPublisher;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -158,6 +163,23 @@ public class FacturacionElectronicaService {
         factura.setMensajeDian(dianResponse.getMensajeDian());
         facturasRepository.save(factura);
 
+        // Publicar evento para que comprobantesmodule actualice el asiento contable
+        // asociado a la venta con el CUFE y estado DIAN. Es desacoplado: si el
+        // listener falla, no afecta la persistencia de la factura.
+        try {
+            eventPublisher.publishEvent(new FacturaAutorizadaEvent(
+                this,
+                factura.getVentaId(),
+                factura.getFacturaId(),
+                factura.getCufe(),
+                factura.getEstadoDian() != null ? factura.getEstadoDian().name() : null,
+                factura.getMensajeDian(),
+                LocalDateTime.now()
+            ));
+        } catch (Exception ex) {
+            log.warn("⚠️ Error publicando FacturaAutorizadaEvent (no crítico): {}", ex.getMessage());
+        }
+
         log.info("╔══════════════════════════════════════════════════════════╗");
         log.info("║  RESULTADO FACTURACIÓN ELECTRÓNICA                     ║");
         log.info("╠══════════════════════════════════════════════════════════╣");
@@ -193,6 +215,21 @@ public class FacturacionElectronicaService {
         factura.setFechaValidacionDian(dianResponse.getFechaValidacion());
         facturasRepository.save(factura);
         log.info("✅ Estado actualizado → {}: {}", factura.getEstadoDian(), factura.getMensajeDian());
+
+        // Replicar al asiento contable si el estado cambió a algo definitivo
+        try {
+            eventPublisher.publishEvent(new FacturaAutorizadaEvent(
+                this,
+                factura.getVentaId(),
+                factura.getFacturaId(),
+                factura.getCufe(),
+                factura.getEstadoDian() != null ? factura.getEstadoDian().name() : null,
+                factura.getMensajeDian(),
+                LocalDateTime.now()
+            ));
+        } catch (Exception ex) {
+            log.warn("⚠️ Error publicando FacturaAutorizadaEvent en re-consulta: {}", ex.getMessage());
+        }
 
         return mapToResponse(factura);
     }

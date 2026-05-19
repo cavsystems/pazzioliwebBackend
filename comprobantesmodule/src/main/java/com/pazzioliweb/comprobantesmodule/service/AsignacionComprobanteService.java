@@ -60,7 +60,7 @@ public class AsignacionComprobanteService {
     public ComprobanteContable obtenerOCrearLegacy(TipoMovimientoComprobante tipo) {
         return repo.findLegacyByTipo(tipo).orElseGet(() -> {
             ComprobanteContable legacy = new ComprobanteContable();
-            legacy.setCajeroId(null);
+            // Los LEGACY no tienen cajeros asignados (cajeroIds queda vacío por defecto)
             legacy.setTipoMovimiento(tipo);
             legacy.setPrefijo("LEGACY-" + tipo.name());
             legacy.setDescripcion("Comprobante LEGACY para registros previos a la migración");

@@ -69,6 +69,7 @@ public interface VentaMapper {
     @Mapping(target = "subtotal", ignore = true)
     @Mapping(target = "total", source = "total")
     @Mapping(target = "precioAjustado", ignore = true)
+    @Mapping(target = "manifiesto", source = "manifiesto")
     DetalleVentaDTO detalleToDto(DetalleVenta detalle);
 
     @Mapping(target = "id", source = "id")
@@ -81,6 +82,7 @@ public interface VentaMapper {
     @Mapping(target = "descuento", source = "descuento")
     @Mapping(target = "iva", source = "ivaPorcentaje")
     @Mapping(target = "total", source = "total")
+    @Mapping(target = "manifiesto", source = "manifiesto")
     @Mapping(target = "venta", ignore = true)
     @Mapping(target = "observacionProducto", ignore = true)
     DetalleVenta detalleToEntity(DetalleVentaDTO detalleDTO);

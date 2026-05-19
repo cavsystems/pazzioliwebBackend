@@ -8,7 +8,9 @@ import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ConceptoAbiertoRepository;
 import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
+import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
+import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -44,6 +46,8 @@ public class ReciboCajaService {
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
     private final AsignacionComprobanteService asignacionComprobante;
+    private final AsientoContableService asientoService;
+    private final ConfiguracionContableService configContable;
 
     public ReciboCajaService(ReciboCajaRepository reciboRepository,
                               CuentaPorCobrarRepository cxcRepository,
@@ -53,7 +57,9 @@ public class ReciboCajaService {
                               CuentaContableRepository cuentaContableRepository,
                               DetalleCajeroService detalleCajeroService,
                               RedisTemplate<String, DatosSesiones> redisTemplate,
-                              AsignacionComprobanteService asignacionComprobante) {
+                              AsignacionComprobanteService asignacionComprobante,
+                              AsientoContableService asientoService,
+                              ConfiguracionContableService configContable) {
         this.reciboRepository = reciboRepository;
         this.cxcRepository = cxcRepository;
         this.tercerosRepository = tercerosRepository;
@@ -63,6 +69,8 @@ public class ReciboCajaService {
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
         this.asignacionComprobante = asignacionComprobante;
+        this.asientoService = asientoService;
+        this.configContable = configContable;
     }
 
     /** Construye el nombre completo de un tercero (nombres + apellidos) o razón social. */
@@ -259,7 +267,81 @@ public class ReciboCajaService {
         // Registrar movimiento en cajero si hay sesión activa
         registrarMovimientoCajero(recibo);
 
+        // Generar asiento contable (partida doble)
+        generarAsientoContable(recibo);
+
         return toResponse(recibo);
+    }
+
+    /**
+     * Genera el asiento contable del recibo:
+     *  - DÉBITO a cada cuenta del método de pago (Bancolombia, Caja, etc.) por su monto
+     *  - CRÉDITO a CxC del cliente (1305) por el total — o a la cuenta del concepto abierto.
+     */
+    private void generarAsientoContable(ReciboCaja recibo) {
+        try {
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+
+            // Débitos por cada método de pago (entrada de dinero)
+            for (ReciboCajaMedioPago mp : recibo.getMediosPago()) {
+                MetodosPago metodo = mp.getMetodoPago();
+                CuentaContable cta = resolverCuentaMetodoPago(metodo);
+                if (cta == null) {
+                    System.out.println("[AsientoRC] Método '" + (metodo != null ? metodo.getDescripcion() : "null")
+                            + "' sin cuenta contable. Asiento se omite.");
+                    return;
+                }
+                lineas.add(AsientoContableService.LineaDTO.debito(cta.getId(), mp.getMonto(),
+                        "Ingreso por " + metodo.getDescripcion()));
+            }
+
+            // Crédito a la contrapartida
+            CuentaContable contrapartida;
+            String desc;
+            if (Boolean.TRUE.equals(recibo.getConceptoAbierto())) {
+                // Concepto abierto: usa la cuenta del concepto, o la del recibo
+                contrapartida = recibo.getCuentaContable();
+                desc = "Concepto abierto " + (recibo.getConcepto() != null ? recibo.getConcepto() : "");
+            } else {
+                // Abono a CxC: usa la cuenta de Clientes (1305) del PUC
+                contrapartida = configContable.cxcClientes().orElse(null);
+                desc = "Abono a Clientes (CxC) " + (recibo.getTerceroNombre() != null ? recibo.getTerceroNombre() : "");
+            }
+            if (contrapartida == null) {
+                System.out.println("[AsientoRC] Sin cuenta contrapartida. Asiento se omite. (configure cuenta 1305 Clientes en el PUC)");
+                return;
+            }
+            AsientoContableService.LineaDTO creditoLinea = AsientoContableService.LineaDTO
+                    .credito(contrapartida.getId(), recibo.getTotal(), desc);
+            if (recibo.getTercero() != null) {
+                creditoLinea.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
+            }
+            lineas.add(creditoLinea);
+
+            asientoService.generarAsiento(
+                    recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : ("RC-" + recibo.getConsecutivo()),
+                    recibo.getFechaRecibo() != null ? recibo.getFechaRecibo() : recibo.getFecha(),
+                    "Recibo de Caja " + (recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : recibo.getConsecutivo())
+                            + (recibo.getTerceroNombre() != null ? " - " + recibo.getTerceroNombre() : ""),
+                    "RC",
+                    recibo.getId(),
+                    recibo.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoRC] Error generando asiento (no crítico): " + ex.getMessage());
+        }
+    }
+
+    /** Resuelve la cuenta contable que afecta un método de pago: directa o vía cuenta bancaria. */
+    private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {
+        if (metodo == null) return null;
+        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
+        if (metodo.getCuentaBancaria() != null && metodo.getCuentaBancaria().getCuentaContable() != null) {
+            return metodo.getCuentaBancaria().getCuentaContable();
+        }
+        // Fallback: caja general si está configurada
+        return configContable.cajaGeneral().orElse(null);
     }
 
     private void registrarMovimientoCajero(ReciboCaja recibo) {
@@ -284,14 +366,15 @@ public class ReciboCajaService {
                 detalleCajeroService.registrarMovimiento(
                         detalleCajeroId,
                         MovimientoCajero.TipoMovimiento.RECIBO_CAJA,
-                        "RC-" + recibo.getConsecutivo(),
+                        recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : "RC-" + recibo.getConsecutivo(),
                         recibo.getId(),
                         recibo.getTotal(),
                         BigDecimal.ZERO,
                         montoEfectivo,
                         montoElectronico,
-                        "Recibo Caja #" + recibo.getConsecutivo() + " - " +
-                                (recibo.getTerceroNombre() != null ? recibo.getTerceroNombre() : recibo.getConcepto())
+                        "Recibo Caja " + (recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : recibo.getConsecutivo())
+                                + " - " + (recibo.getTerceroNombre() != null ? recibo.getTerceroNombre() : recibo.getConcepto()),
+                        recibo.getComprobante()
                 );
             }
         } catch (Exception e) {
@@ -398,13 +481,14 @@ public class ReciboCajaService {
             detalleCajeroService.registrarMovimiento(
                     detalleCajeroId,
                     MovimientoCajero.TipoMovimiento.ANULACION,
-                    "RC-" + recibo.getConsecutivo() + "-A",
+                    (recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : "RC-" + recibo.getConsecutivo()) + "-A",
                     recibo.getId(),
                     recibo.getTotal().negate(),
                     BigDecimal.ZERO,
                     montoEfectivo.negate(),
                     montoElectronico.negate(),
-                    "Anulación Recibo Caja #" + recibo.getConsecutivo()
+                    "Anulación Recibo Caja " + (recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : recibo.getConsecutivo()),
+                    recibo.getComprobante()
             );
         } catch (Exception e) {
             System.out.println("Error registrando anulación cajero recibo: " + e.getMessage());

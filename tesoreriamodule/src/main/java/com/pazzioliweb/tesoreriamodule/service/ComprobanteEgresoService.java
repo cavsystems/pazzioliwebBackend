@@ -10,7 +10,9 @@ import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ConceptoAbiertoRepository;
 import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
+import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
+import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -44,6 +46,8 @@ public class ComprobanteEgresoService {
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
     private final AsignacionComprobanteService asignacionComprobante;
+    private final AsientoContableService asientoService;
+    private final ConfiguracionContableService configContable;
 
     public ComprobanteEgresoService(ComprobanteEgresoRepository egresoRepository,
                                      CuentaPorPagarRepository cxpRepository,
@@ -53,7 +57,9 @@ public class ComprobanteEgresoService {
                                      CuentaContableRepository cuentaContableRepository,
                                      DetalleCajeroService detalleCajeroService,
                                      RedisTemplate<String, DatosSesiones> redisTemplate,
-                                     AsignacionComprobanteService asignacionComprobante) {
+                                     AsignacionComprobanteService asignacionComprobante,
+                                     AsientoContableService asientoService,
+                                     ConfiguracionContableService configContable) {
         this.egresoRepository = egresoRepository;
         this.cxpRepository = cxpRepository;
         this.tercerosRepository = tercerosRepository;
@@ -63,6 +69,8 @@ public class ComprobanteEgresoService {
         this.detalleCajeroService = detalleCajeroService;
         this.redisTemplate = redisTemplate;
         this.asignacionComprobante = asignacionComprobante;
+        this.asientoService = asientoService;
+        this.configContable = configContable;
     }
 
     /** Construye el nombre completo de un tercero (nombres + apellidos) o razón social. */
@@ -243,7 +251,77 @@ public class ComprobanteEgresoService {
         // Registrar movimiento en cajero si hay sesión activa
         registrarMovimientoCajero(egreso);
 
+        // Generar asiento contable (partida doble — egreso es lo opuesto del recibo)
+        generarAsientoContable(egreso);
+
         return toResponse(egreso);
+    }
+
+    /**
+     * Asiento del egreso:
+     *   - CRÉDITO a cada cuenta del método de pago (salida de dinero)
+     *   - DÉBITO a CxP (2205) si es pago de factura, o a la cuenta del concepto abierto.
+     */
+    private void generarAsientoContable(ComprobanteEgreso egreso) {
+        try {
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+
+            // Crédito a cada método de pago (salida)
+            for (ComprobanteEgresoMedioPago mp : egreso.getMediosPago()) {
+                MetodosPago metodo = mp.getMetodoPago();
+                CuentaContable cta = resolverCuentaMetodoPago(metodo);
+                if (cta == null) {
+                    System.out.println("[AsientoCE] Método '" + (metodo != null ? metodo.getDescripcion() : "null")
+                            + "' sin cuenta contable. Asiento se omite.");
+                    return;
+                }
+                lineas.add(AsientoContableService.LineaDTO.credito(cta.getId(), mp.getMonto(),
+                        "Egreso por " + metodo.getDescripcion()));
+            }
+
+            // Débito a la contrapartida
+            CuentaContable contrapartida;
+            String desc;
+            if (Boolean.TRUE.equals(egreso.getConceptoAbierto())) {
+                contrapartida = egreso.getCuentaContable();
+                desc = "Concepto abierto " + (egreso.getConcepto() != null ? egreso.getConcepto() : "");
+            } else {
+                contrapartida = configContable.cxpProveedores().orElse(null);
+                desc = "Pago a Proveedores (CxP) " + (egreso.getTerceroNombre() != null ? egreso.getTerceroNombre() : "");
+            }
+            if (contrapartida == null) {
+                System.out.println("[AsientoCE] Sin cuenta contrapartida. Configure 2205 Proveedores en el PUC.");
+                return;
+            }
+            AsientoContableService.LineaDTO debitoLinea = AsientoContableService.LineaDTO
+                    .debito(contrapartida.getId(), egreso.getTotal(), desc);
+            if (egreso.getTercero() != null) {
+                debitoLinea.conTercero(egreso.getTercero().getTerceroId(), egreso.getTerceroNombre());
+            }
+            lineas.add(debitoLinea);
+
+            asientoService.generarAsiento(
+                    egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : ("CE-" + egreso.getConsecutivo()),
+                    egreso.getFechaEgreso() != null ? egreso.getFechaEgreso() : egreso.getFecha(),
+                    "Comprobante Egreso " + (egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : egreso.getConsecutivo())
+                            + (egreso.getTerceroNombre() != null ? " - " + egreso.getTerceroNombre() : ""),
+                    "CE",
+                    egreso.getId(),
+                    egreso.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoCE] Error generando asiento (no crítico): " + ex.getMessage());
+        }
+    }
+
+    private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {
+        if (metodo == null) return null;
+        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
+        if (metodo.getCuentaBancaria() != null && metodo.getCuentaBancaria().getCuentaContable() != null) {
+            return metodo.getCuentaBancaria().getCuentaContable();
+        }
+        return configContable.cajaGeneral().orElse(null);
     }
 
     private void registrarMovimientoCajero(ComprobanteEgreso egreso) {
@@ -268,14 +346,15 @@ public class ComprobanteEgresoService {
                 detalleCajeroService.registrarMovimiento(
                         detalleCajeroId,
                         MovimientoCajero.TipoMovimiento.EGRESO,
-                        "CE-" + egreso.getConsecutivo(),
+                        egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : "CE-" + egreso.getConsecutivo(),
                         egreso.getId(),
                         egreso.getTotal(),
                         BigDecimal.ZERO,
                         montoEfectivo,
                         montoElectronico,
-                        "Comprobante Egreso #" + egreso.getConsecutivo() + " - " +
-                                (egreso.getTerceroNombre() != null ? egreso.getTerceroNombre() : egreso.getConcepto())
+                        "Comprobante Egreso " + (egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : egreso.getConsecutivo())
+                                + " - " + (egreso.getTerceroNombre() != null ? egreso.getTerceroNombre() : egreso.getConcepto()),
+                        egreso.getComprobante()
                 );
             }
         } catch (Exception e) {
@@ -380,13 +459,14 @@ public class ComprobanteEgresoService {
             detalleCajeroService.registrarMovimiento(
                     detalleCajeroId,
                     MovimientoCajero.TipoMovimiento.ANULACION,
-                    "CE-" + egreso.getConsecutivo() + "-A",
+                    (egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : "CE-" + egreso.getConsecutivo()) + "-A",
                     egreso.getId(),
                     egreso.getTotal(),
                     BigDecimal.ZERO,
                     montoEfectivo,
                     montoElectronico,
-                    "Anulación Comprobante Egreso #" + egreso.getConsecutivo()
+                    "Anulación Comprobante Egreso " + (egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : egreso.getConsecutivo()),
+                    egreso.getComprobante()
             );
         } catch (Exception ex) {
             System.out.println("Error registrando anulación cajero egreso: " + ex.getMessage());

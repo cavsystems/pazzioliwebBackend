@@ -3,10 +3,13 @@ package com.pazzioliweb.cajerosmodule.entity;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -100,6 +103,18 @@ public class MovimientoCajero {
     /** Fecha y hora exacta del movimiento */
     @Column(name = "fecha_movimiento", nullable = false)
     private LocalDateTime fechaMovimiento;
+
+    /**
+     * Comprobante contable que originó este movimiento (FC, VC, RC, CE, DV).
+     * Permite armar reportes contables del cuadre de caja por tipo de comprobante:
+     *   SELECT cc.tipo_movimiento, SUM(mc.monto_efectivo)
+     *   FROM movimiento_cajero mc JOIN comprobantes_contables cc ON cc.id = mc.comprobante_contable_id
+     *   GROUP BY cc.tipo_movimiento;
+     * Nullable para no romper movimientos manuales (INGRESO_EFECTIVO sin documento, etc.).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comprobante_contable_id")
+    private ComprobanteContable comprobanteContable;
 
     /**
      * 6 Tipos de documento POS + auxiliares.

@@ -1,8 +1,11 @@
 package com.pazzioliweb.ventasmodule.service.impl;
 
 import com.pazzioliweb.commonbacken.events.VentaCompletadaEvent;
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
+import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
@@ -73,6 +76,8 @@ public class VentaServiceImpl implements VentaService {
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
     private final AsignacionComprobanteService asignacionComprobante;
+    private final AsientoContableService asientoService;
+    private final ConfiguracionContableService configContable;
 
     @Autowired
     public VentaServiceImpl(VentaRepository ventaRepository, VentaMapper ventaMapper,
@@ -90,7 +95,9 @@ public class VentaServiceImpl implements VentaService {
                             CuentaPorCobrarRepository cuentaPorCobrarRepository,
                             RedisTemplate<String, DatosSesiones> redisTemplate,
                             ApplicationEventPublisher eventPublisher,
-                            AsignacionComprobanteService asignacionComprobante) {
+                            AsignacionComprobanteService asignacionComprobante,
+                            AsientoContableService asientoService,
+                            ConfiguracionContableService configContable) {
         this.ventaRepository = ventaRepository;
         this.ventaMapper = ventaMapper;
         this.productoVarianteRepository = productoVarianteRepository;
@@ -108,6 +115,8 @@ public class VentaServiceImpl implements VentaService {
         this.redisTemplate = redisTemplate;
         this.eventPublisher = eventPublisher;
         this.asignacionComprobante = asignacionComprobante;
+        this.asientoService = asientoService;
+        this.configContable = configContable;
     }
 
     /**
@@ -458,7 +467,8 @@ public class VentaServiceImpl implements VentaService {
                 ventaGuardada.getGravada(),
                 montoEfectivo,
                 montoElectronico,
-                "Venta " + ventaGuardada.getNumeroVenta()
+                "Venta " + ventaGuardada.getNumeroVenta(),
+                ventaGuardada.getComprobante()
         );
 
         if (montoCredito.compareTo(BigDecimal.ZERO) > 0) {
@@ -471,7 +481,8 @@ public class VentaServiceImpl implements VentaService {
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
-                    "CxC Venta " + ventaGuardada.getNumeroVenta()
+                    "CxC Venta " + ventaGuardada.getNumeroVenta(),
+                    ventaGuardada.getComprobante()
             );
 
             Terceros cliente = ventaGuardada.getCliente();
@@ -485,6 +496,103 @@ public class VentaServiceImpl implements VentaService {
         } catch (Exception e) {
             System.out.println("Error al publicar evento VentaCompletada (facturación): " + e.getMessage());
         }
+
+        // ✅ Generar asiento contable (partida doble) — soporta venta contado, crédito y mixta
+        generarAsientoVenta(ventaGuardada);
+    }
+
+    /**
+     * Asiento de venta:
+     *   DÉBITO  Banco/Caja por cada método de pago contado
+     *   DÉBITO  CxC (1305)             por la parte a crédito
+     *   CRÉDITO Ingresos por ventas (4135) por subtotal sin IVA
+     *   CRÉDITO IVA generado (240801)      por el IVA total
+     */
+    private void generarAsientoVenta(Venta venta) {
+        try {
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+            String nombreCliente = venta.getCliente() != null
+                    ? (venta.getCliente().getRazonSocial() != null && !venta.getCliente().getRazonSocial().isBlank()
+                        ? venta.getCliente().getRazonSocial()
+                        : (venta.getCliente().getNombre1() != null ? venta.getCliente().getNombre1() : ""))
+                    : "";
+
+            // Débitos por métodos de pago
+            for (VentaMetodoPago vmp : venta.getMetodosPago()) {
+                MetodosPago metodo = vmp.getMetodoPago();
+                if (metodo.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) {
+                    // Crédito → débito a CxC
+                    CuentaContable cxc = configContable.cxcClientes().orElse(null);
+                    if (cxc == null) {
+                        System.out.println("[AsientoVenta] Cuenta 1305 Clientes no configurada. Asiento omitido.");
+                        return;
+                    }
+                    AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                            .debito(cxc.getId(), vmp.getMonto(), "CxC venta " + venta.getNumeroVenta());
+                    if (venta.getCliente() != null) {
+                        l.conTercero(venta.getCliente().getTerceroId(), nombreCliente);
+                    }
+                    lineas.add(l);
+                } else {
+                    // Contado → débito a la cuenta del método
+                    CuentaContable cta = resolverCuentaMetodoPago(metodo);
+                    if (cta == null) {
+                        System.out.println("[AsientoVenta] Método '" + metodo.getDescripcion() + "' sin cuenta. Asiento omitido.");
+                        return;
+                    }
+                    lineas.add(AsientoContableService.LineaDTO.debito(cta.getId(), vmp.getMonto(),
+                            "Cobro contado por " + metodo.getDescripcion()));
+                }
+            }
+
+            // Créditos: Ingresos y IVA
+            BigDecimal totalIva = venta.getIva() != null ? venta.getIva() : BigDecimal.ZERO;
+            BigDecimal gravada = venta.getGravada() != null ? venta.getGravada() : BigDecimal.ZERO;
+            BigDecimal subtotalSinIva = gravada.subtract(totalIva).max(BigDecimal.ZERO);
+
+            CuentaContable ingresos = configContable.ingresosVentas().orElse(null);
+            if (ingresos == null) {
+                System.out.println("[AsientoVenta] Cuenta 4135 Ingresos no configurada. Asiento omitido.");
+                return;
+            }
+            lineas.add(AsientoContableService.LineaDTO.credito(ingresos.getId(),
+                    subtotalSinIva.compareTo(BigDecimal.ZERO) > 0 ? subtotalSinIva : venta.getTotalVenta(),
+                    "Ingreso venta " + venta.getNumeroVenta()));
+
+            if (totalIva.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable ivaGen = configContable.ivaGenerado().orElse(null);
+                if (ivaGen != null) {
+                    lineas.add(AsientoContableService.LineaDTO.credito(ivaGen.getId(), totalIva,
+                            "IVA generado venta " + venta.getNumeroVenta()));
+                }
+            }
+
+            // Tipo del documento: FC o VC según el comprobante
+            String tipo = venta.getComprobante() != null
+                    ? venta.getComprobante().getTipoMovimiento().name()
+                    : "FC";
+
+            asientoService.generarAsiento(
+                    venta.getNumeroVenta() != null ? venta.getNumeroVenta() : ("V-" + venta.getId()),
+                    venta.getFechaEmision() != null ? venta.getFechaEmision() : LocalDate.now(),
+                    "Venta " + venta.getNumeroVenta() + " - " + nombreCliente,
+                    tipo,
+                    venta.getId(),
+                    venta.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoVenta] Error generando asiento (no crítico): " + ex.getMessage());
+        }
+    }
+
+    private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {
+        if (metodo == null) return null;
+        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
+        if (metodo.getCuentaBancaria() != null && metodo.getCuentaBancaria().getCuentaContable() != null) {
+            return metodo.getCuentaBancaria().getCuentaContable();
+        }
+        return configContable.cajaGeneral().orElse(null);
     }
 
     @Override
@@ -540,7 +648,8 @@ public class VentaServiceImpl implements VentaService {
                         venta.getGravada(),
                         venta.getTotalVenta(), // devolución = todo efectivo
                         BigDecimal.ZERO,
-                        "Devolución venta " + venta.getNumeroVenta()
+                        "Devolución venta " + venta.getNumeroVenta(),
+                        venta.getComprobante()
                 );
             } catch (Exception e) {
                 System.out.println("Error al registrar devolución en cajero: " + e.getMessage());
@@ -574,7 +683,8 @@ public class VentaServiceImpl implements VentaService {
                         venta.getGravada(),
                         venta.getTotalVenta(),
                         BigDecimal.ZERO,
-                        "Anulación venta " + venta.getNumeroVenta()
+                        "Anulación venta " + venta.getNumeroVenta(),
+                        venta.getComprobante()
                 );
             } catch (Exception e) {
                 System.out.println("Error al registrar anulación en cajero: " + e.getMessage());
