@@ -12,6 +12,9 @@ import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import com.pazzioliweb.usuariosbacken.entity.Usuario;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -86,7 +89,7 @@ return ordenCreada;
             legalizacion.setTotalFactura(request.getOrdenCompraData().getOrden_compra().getTotalOrdenCompra());
             legalizacion.setProveedorId(request.getOrdenCompraData().getProvedor().getTerceroId().longValue());
             legalizacion.setEstado("LEGALIZADA");
-            legalizacion.setUsuarioCreacion("system");
+            legalizacion.setUsuarioCreacion(obtenerUsuarioAutenticado());
 
             // ─── Heredar el comprobante contable de la orden (CC o CR según el caso) ───
             if (ordenPersistida.getComprobante() != null) {
@@ -100,6 +103,23 @@ return ordenCreada;
            e.printStackTrace();
         }
 
+    }
+
+    /** Username autenticado actual; "SYSTEM" si no hay sesión válida. */
+    private String obtenerUsuarioAutenticado() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null) return "SYSTEM";
+            Object principal = auth.getPrincipal();
+            if (principal instanceof Usuario u && u.getUsuario() != null) {
+                return u.getUsuario();
+            }
+            String name = auth.getName();
+            if (name != null && !"anonymousUser".equals(name) && name.length() <= 250) {
+                return name;
+            }
+        } catch (Exception ignored) {}
+        return "SYSTEM";
     }
 
     private List<DetalleOrdenCompraDTO> crearDetallesRecibidos(List<RealizarOrdenRequestDTO.ProductoRequestPayloadDTO> productos) {

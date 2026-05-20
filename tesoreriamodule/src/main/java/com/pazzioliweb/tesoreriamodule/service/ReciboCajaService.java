@@ -333,14 +333,13 @@ public class ReciboCajaService {
         }
     }
 
-    /** Resuelve la cuenta contable que afecta un método de pago: directa o vía cuenta bancaria. */
+    /** Resuelve la cuenta contable que afecta un método de pago: cuenta bancaria gana sobre directa. */
     private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {
         if (metodo == null) return null;
-        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
         if (metodo.getCuentaBancaria() != null && metodo.getCuentaBancaria().getCuentaContable() != null) {
             return metodo.getCuentaBancaria().getCuentaContable();
         }
-        // Fallback: caja general si está configurada
+        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
         return configContable.cajaGeneral().orElse(null);
     }
 

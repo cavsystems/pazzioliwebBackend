@@ -317,10 +317,11 @@ public class ComprobanteEgresoService {
 
     private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {
         if (metodo == null) return null;
-        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
+        // Cuenta bancaria gana sobre cuenta directa (el dinero entra/sale del banco)
         if (metodo.getCuentaBancaria() != null && metodo.getCuentaBancaria().getCuentaContable() != null) {
             return metodo.getCuentaBancaria().getCuentaContable();
         }
+        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
         return configContable.cajaGeneral().orElse(null);
     }
 

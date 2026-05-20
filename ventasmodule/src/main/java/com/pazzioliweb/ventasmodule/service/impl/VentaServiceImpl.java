@@ -546,24 +546,41 @@ public class VentaServiceImpl implements VentaService {
             }
 
             // Créditos: Ingresos y IVA
+            // Cálculo robusto: tomamos como referencia el TOTAL VENTA (que ya
+            // contiene los débitos de los métodos de pago) y le restamos el IVA.
+            // Así garantizamos que débitos = créditos exactamente, sin importar
+            // cómo esté definido el campo "gravada" en distintos flujos.
             BigDecimal totalIva = venta.getIva() != null ? venta.getIva() : BigDecimal.ZERO;
-            BigDecimal gravada = venta.getGravada() != null ? venta.getGravada() : BigDecimal.ZERO;
-            BigDecimal subtotalSinIva = gravada.subtract(totalIva).max(BigDecimal.ZERO);
+            BigDecimal totalVenta = venta.getTotalVenta() != null ? venta.getTotalVenta() : BigDecimal.ZERO;
+            BigDecimal subtotalSinIva = totalVenta.subtract(totalIva).max(BigDecimal.ZERO);
 
             CuentaContable ingresos = configContable.ingresosVentas().orElse(null);
             if (ingresos == null) {
                 System.out.println("[AsientoVenta] Cuenta 4135 Ingresos no configurada. Asiento omitido.");
                 return;
             }
+
+            // Crédito a Ingresos por el subtotal sin IVA
             lineas.add(AsientoContableService.LineaDTO.credito(ingresos.getId(),
-                    subtotalSinIva.compareTo(BigDecimal.ZERO) > 0 ? subtotalSinIva : venta.getTotalVenta(),
+                    subtotalSinIva,
                     "Ingreso venta " + venta.getNumeroVenta()));
 
+            // Crédito al IVA generado si lo hay y la cuenta está configurada.
+            // Si la cuenta de IVA NO existe, agrego el IVA a Ingresos para que el asiento cuadre.
             if (totalIva.compareTo(BigDecimal.ZERO) > 0) {
                 CuentaContable ivaGen = configContable.ivaGenerado().orElse(null);
                 if (ivaGen != null) {
                     lineas.add(AsientoContableService.LineaDTO.credito(ivaGen.getId(), totalIva,
                             "IVA generado venta " + venta.getNumeroVenta()));
+                } else {
+                    // Fallback: suma el IVA a la línea de ingresos para que el asiento cuadre.
+                    System.out.println("[AsientoVenta] Cuenta IVA generado 240801 no configurada. " +
+                            "IVA $" + totalIva + " se suma a Ingresos para cuadrar el asiento.");
+                    // Reemplazar la última línea de ingresos por una con monto total
+                    lineas.remove(lineas.size() - 1);
+                    lineas.add(AsientoContableService.LineaDTO.credito(ingresos.getId(),
+                            subtotalSinIva.add(totalIva),
+                            "Ingreso + IVA venta " + venta.getNumeroVenta()));
                 }
             }
 
@@ -588,10 +605,14 @@ public class VentaServiceImpl implements VentaService {
 
     private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {
         if (metodo == null) return null;
-        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
+        // Si tiene cuenta bancaria asociada, su cuenta contable es la verdad
+        // (el dinero entra/sale del banco). Esto permite que el usuario cambie
+        // la cuenta del banco sin tener que actualizar también el método de pago.
         if (metodo.getCuentaBancaria() != null && metodo.getCuentaBancaria().getCuentaContable() != null) {
             return metodo.getCuentaBancaria().getCuentaContable();
         }
+        // Si no hay cuenta bancaria (típicamente Efectivo), usar la cuenta contable directa
+        if (metodo.getCuentaContable() != null) return metodo.getCuentaContable();
         return configContable.cajaGeneral().orElse(null);
     }
 
