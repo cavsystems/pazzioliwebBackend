@@ -13,33 +13,61 @@ import java.util.Optional;
 
 public interface ComprobanteContableRepository extends JpaRepository<ComprobanteContable, Long> {
 
-    List<ComprobanteContable> findByActivoTrueOrderByCajeroIdAscTipoMovimientoAsc();
+    List<ComprobanteContable> findByActivoTrueOrderByTipoMovimientoAsc();
 
-    @Query("SELECT c FROM ComprobanteContable c WHERE c.cajeroId IS NULL AND c.esLegacy = true")
+    @Query("SELECT c FROM ComprobanteContable c WHERE c.esLegacy = true")
     List<ComprobanteContable> findAllLegacy();
 
-    /** Busca el comprobante específico de un cajero para un tipo de movimiento. */
+    /**
+     * Busca el comprobante asignado a un cajero específico para un tipo de
+     * movimiento — con lock pesimista para evitar consecutivos duplicados.
+     * El cajero puede tener varios comprobantes asignados; devuelve el primero
+     * activo y no-LEGACY.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT c FROM ComprobanteContable c WHERE c.cajeroId = :cajeroId AND c.tipoMovimiento = :tipo AND c.activo = true AND c.esLegacy = false")
+    @Query("SELECT c FROM ComprobanteContable c " +
+           " WHERE :cajeroId MEMBER OF c.cajeroIds " +
+           "   AND c.tipoMovimiento = :tipo " +
+           "   AND c.activo = true " +
+           "   AND c.esLegacy = false")
     Optional<ComprobanteContable> findActivoByCajeroAndTipoForUpdate(
             @Param("cajeroId") Integer cajeroId,
             @Param("tipo") TipoMovimientoComprobante tipo);
 
-    @Query("SELECT c FROM ComprobanteContable c WHERE c.cajeroId = :cajeroId AND c.tipoMovimiento = :tipo AND c.activo = true AND c.esLegacy = false")
+    @Query("SELECT c FROM ComprobanteContable c " +
+           " WHERE :cajeroId MEMBER OF c.cajeroIds " +
+           "   AND c.tipoMovimiento = :tipo " +
+           "   AND c.activo = true " +
+           "   AND c.esLegacy = false")
     Optional<ComprobanteContable> findActivoByCajeroAndTipo(
             @Param("cajeroId") Integer cajeroId,
             @Param("tipo") TipoMovimientoComprobante tipo);
 
-    /** El comprobante LEGACY de un tipo (cajero null, esLegacy true). Único por tipo. */
-    @Query("SELECT c FROM ComprobanteContable c WHERE c.cajeroId IS NULL AND c.tipoMovimiento = :tipo AND c.esLegacy = true")
+    /** El comprobante LEGACY de un tipo (sin cajeros asignados). Único por tipo. */
+    @Query("SELECT c FROM ComprobanteContable c " +
+           " WHERE c.tipoMovimiento = :tipo " +
+           "   AND c.esLegacy = true")
     Optional<ComprobanteContable> findLegacyByTipo(@Param("tipo") TipoMovimientoComprobante tipo);
 
     @Query("SELECT c FROM ComprobanteContable c WHERE c.tipoMovimiento = :tipo")
     List<ComprobanteContable> findByTipo(@Param("tipo") TipoMovimientoComprobante tipo);
 
-    List<ComprobanteContable> findByCajeroId(Integer cajeroId);
+    /** Todos los comprobantes que tienen al menos a este cajero asignado. */
+    @Query("SELECT c FROM ComprobanteContable c WHERE :cajeroId MEMBER OF c.cajeroIds")
+    List<ComprobanteContable> findByCajeroId(@Param("cajeroId") Integer cajeroId);
 
-    boolean existsByPrefijoAndIdNot(String prefijo, Long id);
+    /** Verifica si un prefijo ya está usado para un tipo de movimiento dado. */
+    @Query("SELECT COUNT(c) > 0 FROM ComprobanteContable c " +
+           " WHERE LOWER(c.prefijo) = LOWER(:prefijo) " +
+           "   AND c.tipoMovimiento = :tipo")
+    boolean existsByPrefijoAndTipo(@Param("prefijo") String prefijo,
+                                    @Param("tipo") TipoMovimientoComprobante tipo);
 
-    boolean existsByPrefijo(String prefijo);
+    @Query("SELECT COUNT(c) > 0 FROM ComprobanteContable c " +
+           " WHERE LOWER(c.prefijo) = LOWER(:prefijo) " +
+           "   AND c.tipoMovimiento = :tipo " +
+           "   AND c.id <> :id")
+    boolean existsByPrefijoAndTipoAndIdNot(@Param("prefijo") String prefijo,
+                                            @Param("tipo") TipoMovimientoComprobante tipo,
+                                            @Param("id") Long id);
 }

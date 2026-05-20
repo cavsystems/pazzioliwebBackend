@@ -18,4 +18,6 @@ public class DetalleVentaDTO {
     private BigDecimal subtotal;
     private BigDecimal total;
     private boolean precioAjustado; // Flag to indicate if price was adjusted
+    /** Número de guía/manifiesto/remisión de esta línea (opcional). */
+    private String manifiesto;
 }

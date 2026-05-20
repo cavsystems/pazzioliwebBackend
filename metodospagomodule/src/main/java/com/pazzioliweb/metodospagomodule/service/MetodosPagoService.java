@@ -11,17 +11,27 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
+import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
 import com.pazzioliweb.metodospagomodule.dtos.MetodoPagoDTO;
+import com.pazzioliweb.metodospagomodule.entity.CuentaBancaria;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
+import com.pazzioliweb.metodospagomodule.repositori.CuentaBancariaRepository;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 
 @Service
 public class MetodosPagoService {
 	private final MetodosPagoRepository metodopagoRepository;
-	
+	private final CuentaBancariaRepository cuentaBancariaRepository;
+	private final CuentaContableRepository cuentaContableRepository;
+
 	@Autowired
-	public MetodosPagoService(MetodosPagoRepository metodopagoRepository) {
+	public MetodosPagoService(MetodosPagoRepository metodopagoRepository,
+							  CuentaBancariaRepository cuentaBancariaRepository,
+							  CuentaContableRepository cuentaContableRepository) {
 		this.metodopagoRepository = metodopagoRepository;
+		this.cuentaBancariaRepository = cuentaBancariaRepository;
+		this.cuentaContableRepository = cuentaContableRepository;
 	}
 	
 	public Page<MetodoPagoDTO> listar(int page, int size, String sortField, String sortDirection){
@@ -43,6 +53,15 @@ public class MetodosPagoService {
     }
 
     public MetodosPago guardar(MetodosPago metodoPago) {
+        // Si el frontend mandó solo IDs en las FK (sin objeto completo), resolverlos.
+        if (metodoPago.getCuentaBancaria() != null && metodoPago.getCuentaBancaria().getId() != null) {
+            CuentaBancaria cb = cuentaBancariaRepository.findById(metodoPago.getCuentaBancaria().getId()).orElse(null);
+            metodoPago.setCuentaBancaria(cb);
+        }
+        if (metodoPago.getCuentaContable() != null && metodoPago.getCuentaContable().getId() != null) {
+            CuentaContable cc = cuentaContableRepository.findById(metodoPago.getCuentaContable().getId()).orElse(null);
+            metodoPago.setCuentaContable(cc);
+        }
         return metodopagoRepository.save(metodoPago);
     }
 

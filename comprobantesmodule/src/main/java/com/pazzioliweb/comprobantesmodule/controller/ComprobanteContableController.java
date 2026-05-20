@@ -75,9 +75,10 @@ public class ComprobanteContableController {
             @RequestParam String tipo) {
         try {
             TipoMovimientoComprobante t = TipoMovimientoComprobante.valueOf(tipo.toUpperCase());
+            final TipoMovimientoComprobante tipoFinal = t;
             return service.listarPorCajero(cajeroId).stream()
                 .filter(c -> Boolean.TRUE.equals(c.getActivo()) && !Boolean.TRUE.equals(c.getEsLegacy())
-                          && t.name().equalsIgnoreCase(c.getTipoMovimiento()))
+                          && tipoFinal.name().equalsIgnoreCase(c.getTipoMovimiento()))
                 .findFirst()
                 .<ResponseEntity<Map<String, Object>>>map(c -> {
                     Map<String, Object> body = new java.util.HashMap<>();

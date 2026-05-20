@@ -6,4 +6,11 @@
     <version>1.0-SNAPSHOT</version>
   </parent>
   <artifactId>metodospagomodule</artifactId>
+  <dependencies>
+    <dependency>
+      <groupId>com.pazzioliweb</groupId>
+      <artifactId>comprobantesmodule</artifactId>
+      <version>1.0-SNAPSHOT</version>
+    </dependency>
+  </dependencies>
 </project>

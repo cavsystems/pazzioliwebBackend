@@ -24,6 +24,7 @@ import com.pazzioliweb.cajerosmodule.entity.DetalleCajero;
 import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
 import com.pazzioliweb.cajerosmodule.repositori.DetalleCajeroRepository;
 import com.pazzioliweb.cajerosmodule.repositori.MovimientoCajeroRepository;
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobantesRepository;
 
@@ -327,6 +328,7 @@ public class DetalleCajeroService {
      * @param descripcion          texto descriptivo
      * @return el MovimientoCajero creado
      */
+    /** Versión legacy sin comprobante contable — usada por movimientos manuales o callers antiguos. */
     @Transactional
     public MovimientoCajero registrarMovimiento(Long detalleCajeroId,
                                                 MovimientoCajero.TipoMovimiento tipoMovimiento,
@@ -337,6 +339,27 @@ public class DetalleCajeroService {
                                                 BigDecimal montoEfectivo,
                                                 BigDecimal montoElectronico,
                                                 String descripcion) {
+        return registrarMovimiento(detalleCajeroId, tipoMovimiento, numeroComprobante,
+                referenciaDocumentoId, montoTotal, montoCosto, montoEfectivo,
+                montoElectronico, descripcion, null);
+    }
+
+    /**
+     * Versión nueva: recibe el comprobante contable (FC, VC, RC, CE, DV) para amarrar
+     * el movimiento de caja con su documento contable de origen. Esto permite reportes
+     * cruzados del cuadre por tipo de comprobante sin JOINs adicionales.
+     */
+    @Transactional
+    public MovimientoCajero registrarMovimiento(Long detalleCajeroId,
+                                                MovimientoCajero.TipoMovimiento tipoMovimiento,
+                                                String numeroComprobante,
+                                                Long referenciaDocumentoId,
+                                                BigDecimal montoTotal,
+                                                BigDecimal montoCosto,
+                                                BigDecimal montoEfectivo,
+                                                BigDecimal montoElectronico,
+                                                String descripcion,
+                                                ComprobanteContable comprobanteContable) {
         DetalleCajero detalle = detalleCajeroRepository.findById(detalleCajeroId)
                 .orElseThrow(() -> new RuntimeException("Sesión de cajero no encontrada: " + detalleCajeroId));
 
@@ -359,6 +382,7 @@ public class DetalleCajeroService {
         mov.setTipoMovimiento(tipoMovimiento);
         mov.setNumeroComprobante(numeroComprobante);
         mov.setReferenciaDocumentoId(referenciaDocumentoId);
+        mov.setComprobanteContable(comprobanteContable);
         mov.setConsecutivo(siguienteGlobal);
         mov.setConsecutivoTipo(siguienteTipo);
         mov.setMonto(montoTotal);

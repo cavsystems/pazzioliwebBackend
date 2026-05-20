@@ -7,4 +7,9 @@ public interface MetodoPagoDTO {
 	String getEstado();
 	String getTipoNegociacion();
 	String getTipos();
+	Long getCuentaBancariaId();
+	String getCuentaBancariaNombre();
+	Integer getCuentaContableId();
+	String getCuentaContableCodigo();
+	String getCuentaContableNombre();
 }

@@ -69,6 +69,11 @@ public class SecurityConfig {
 						.requestMatchers("/api/conceptos-abiertos/**").permitAll()
 						.requestMatchers("/api/legalizacion/**").permitAll()
 						.requestMatchers("/api/mis-reportes/**").permitAll()
+						.requestMatchers("/api/cuentas-bancarias/**").permitAll()
+						.requestMatchers("/api/asientos-contables/**").permitAll()
+						.requestMatchers("/api/reportes-contables/**").permitAll()
+						.requestMatchers("/api/conciliacion-bancaria/**").permitAll()
+						.requestMatchers("/api/periodos-contables/**").permitAll()
 						.anyRequest().authenticated()).exceptionHandling(ex -> ex
 						.accessDeniedHandler((request, response, accessDeniedException) -> {
 							if (!response.isCommitted()) {
