@@ -23,6 +23,23 @@ public interface AsientoContableLineaRepository extends JpaRepository<AsientoCon
             @Param("desde") LocalDate desde,
             @Param("hasta") LocalDate hasta);
 
+    /**
+     * Libro mayor agregado: incluye movimientos de una cuenta padre y todas sus subcuentas
+     * (buscadas por prefijo de código). Útil para consultar "Bancos" o "Moneda nacional"
+     * y ver los movimientos consolidados de las subcuentas reales.
+     */
+    @Query("SELECT l FROM AsientoContableLinea l " +
+           "JOIN FETCH l.asiento a " +
+           "JOIN FETCH l.cuentaContable cc " +
+           "WHERE cc.codigo LIKE CONCAT(:prefijoCodigo, '%') " +
+           "  AND a.fecha BETWEEN :desde AND :hasta " +
+           "  AND a.estado = 'CONFIRMADO' " +
+           "ORDER BY a.fecha ASC, a.id ASC, l.orden ASC")
+    List<AsientoContableLinea> librodeMayorPorPrefijoCodigo(
+            @Param("prefijoCodigo") String prefijoCodigo,
+            @Param("desde") LocalDate desde,
+            @Param("hasta") LocalDate hasta);
+
     /** Saldo acumulado de una cuenta hasta una fecha (excluye fecha inclusiva). */
     @Query("SELECT COALESCE(SUM(l.debito - l.credito), 0) " +
            "FROM AsientoContableLinea l " +
@@ -31,6 +48,16 @@ public interface AsientoContableLineaRepository extends JpaRepository<AsientoCon
            "  AND a.fecha < :fecha " +
            "  AND a.estado = 'CONFIRMADO'")
     BigDecimal saldoAntesDe(@Param("cuentaId") Integer cuentaId, @Param("fecha") LocalDate fecha);
+
+    /** Saldo acumulado de una cuenta y sus subcuentas (por prefijo) hasta una fecha. */
+    @Query("SELECT COALESCE(SUM(l.debito - l.credito), 0) " +
+           "FROM AsientoContableLinea l " +
+           "JOIN l.asiento a " +
+           "JOIN l.cuentaContable cc " +
+           "WHERE cc.codigo LIKE CONCAT(:prefijoCodigo, '%') " +
+           "  AND a.fecha < :fecha " +
+           "  AND a.estado = 'CONFIRMADO'")
+    BigDecimal saldoAntesDePorPrefijo(@Param("prefijoCodigo") String prefijoCodigo, @Param("fecha") LocalDate fecha);
 
     /** Para Balance de Comprobación. */
     @Query("SELECT l.cuentaContable.id, l.cuentaContable.codigo, l.cuentaContable.nombre, " +

@@ -7,11 +7,13 @@ import com.pazzioliweb.comprasmodule.entity.OrdenCompra;
 import com.pazzioliweb.comprasmodule.exception.OrdenCompraException;
 import com.pazzioliweb.comprasmodule.mapper.OrdenCompraMapper;
 import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
+import com.pazzioliweb.comprasmodule.service.ConfiguracionComprasService;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
 import com.pazzioliweb.comprasmodule.service.OrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.ProductoService;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
@@ -20,6 +22,9 @@ import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import com.pazzioliweb.usuariosbacken.entity.Usuario;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +47,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final AsignacionComprobanteService asignacionComprobante;
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
+    private final ConfiguracionComprasService configCompras;
+    private final ComprobanteContableRepository comprobanteRepository;
 
     @Autowired
     public OrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
@@ -53,7 +60,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                                   BodegasRepository bodegasRepository,
                                   AsignacionComprobanteService asignacionComprobante,
                                   AsientoContableService asientoService,
-                                  ConfiguracionContableService configContable) {
+                                  ConfiguracionContableService configContable,
+                                  ConfiguracionComprasService configCompras,
+                                  ComprobanteContableRepository comprobanteRepository) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.ordenCompraMapper = ordenCompraMapper;
         this.productoService = productoService;
@@ -64,6 +73,49 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         this.asignacionComprobante = asignacionComprobante;
         this.asientoService = asientoService;
         this.configContable = configContable;
+        this.configCompras = configCompras;
+        this.comprobanteRepository = comprobanteRepository;
+    }
+
+    /** Username autenticado actual; "SYSTEM" si no hay sesión válida. */
+    private String obtenerUsuarioAutenticado() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null) return "SYSTEM";
+            Object principal = auth.getPrincipal();
+            if (principal instanceof Usuario u && u.getUsuario() != null) {
+                return u.getUsuario();
+            }
+            String name = auth.getName();
+            if (name != null && !"anonymousUser".equals(name) && name.length() <= 250) {
+                return name;
+            }
+        } catch (Exception ignored) {}
+        return "SYSTEM";
+    }
+
+    /**
+     * Determina qué cajero usar para asignar el comprobante de compra (CC/CR):
+     *   1. Si el usuario es cajero y su cajero tiene comprobante activo del tipo → usar ese cajero.
+     *   2. Si no → caer al cajero default configurado en ConfiguracionCompras.
+     *   3. Si tampoco hay default → error claro pidiendo configurarlo.
+     */
+    private Integer resolverCajeroParaComprobante(Integer cajeroUsuario, TipoMovimientoComprobante tipo) {
+        if (cajeroUsuario != null
+                && comprobanteRepository.findActivoByCajeroAndTipo(cajeroUsuario, tipo).isPresent()) {
+            return cajeroUsuario;
+        }
+        Integer cajeroDefault = configCompras.obtenerCajeroDefaultId();
+        if (cajeroDefault != null
+                && comprobanteRepository.findActivoByCajeroAndTipo(cajeroDefault, tipo).isPresent()) {
+            return cajeroDefault;
+        }
+        throw new OrdenCompraException(
+            "No hay cajero válido para asignar el comprobante de " + tipo.name() +
+            ". El usuario actual " + (cajeroUsuario == null ? "no es cajero" : "no tiene comprobante " + tipo.name()) +
+            " y no se ha configurado un cajero por defecto para compras. " +
+            "Configúrelo en Admin → Configuración de compras."
+        );
     }
 
     @Override
@@ -407,20 +459,20 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
 
     private OrdenCompra crearOrdenDesdeRequest(RealizarOrdenRequestDTO request) {
         OrdenCompra orden = new OrdenCompra();
-        // ─── Comprobante contable (CC contado / CR crédito) según el prefijo del cajero ───
-        if (request.getCajeroId() == null) {
-            throw new OrdenCompraException("Se requiere el cajero para asignar el comprobante de compra.");
-        }
+        // ─── Comprobante contable (CC contado / CR crédito) ───
+        // Estrategia: si el usuario es cajero y su cajero tiene comprobante CC/CR, se usa.
+        // Si no, se cae al cajero default de compras configurado a nivel de empresa.
         TipoMovimientoComprobante tipo = Boolean.TRUE.equals(request.getEsCredito())
                 ? TipoMovimientoComprobante.CR
                 : TipoMovimientoComprobante.CC;
+        Integer cajeroEfectivo = resolverCajeroParaComprobante(request.getCajeroId(), tipo);
         try {
             AsignacionComprobanteService.Resultado r =
-                    asignacionComprobante.asignar(request.getCajeroId(), tipo);
+                    asignacionComprobante.asignar(cajeroEfectivo, tipo);
             orden.setComprobante(r.getComprobante());
             orden.setConsecutivoComprobante(r.getConsecutivo());
             orden.setNumeroOrden(r.getNumeroDocumento());
-            orden.setCajeroId(request.getCajeroId());
+            orden.setCajeroId(cajeroEfectivo);
         } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
             throw new OrdenCompraException(ex.getMessage());
         }
@@ -444,7 +496,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         }
         orden.setFechaEntregaEsperada(fechaEntrega);
 
-        orden.setUsuarioCreacion("SYSTEM");
+        orden.setUsuarioCreacion(obtenerUsuarioAutenticado());
         orden.setFechaCreacion(LocalDate.now());
 
         orden.setGravada(request.getOrden_compra().getGravada());

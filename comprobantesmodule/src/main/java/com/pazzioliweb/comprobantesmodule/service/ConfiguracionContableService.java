@@ -44,13 +44,22 @@ public class ConfiguracionContableService {
     @Transactional(readOnly = true)
     public Optional<CuentaContable> buscarPorCodigo(String codigo) {
         if (codigo == null) return Optional.empty();
+        // Prioridad 1: coincidencia exacta SI es cuenta de movimiento (hoja del árbol).
         Optional<CuentaContable> exacta = cuentaRepo.findByCodigo(codigo);
-        if (exacta.isPresent()) return exacta;
-        // Fallback: buscar la cuenta padre cuya código coincida (1305 si pediste 130505)
-        // o la subcuenta más cercana si pediste 1305.
-        return cuentaRepo.findAll().stream()
-                .filter(c -> c.getCodigo() != null && c.getCodigo().startsWith(codigo))
+        if (exacta.isPresent() && Boolean.TRUE.equals(exacta.get().getEsMovimiento())) {
+            return exacta;
+        }
+        // Prioridad 2: la primera subcuenta de movimiento cuyo código empieza con el prefijo.
+        // Esto evita que asientos automáticos se hagan en cuentas padre (no permitido contablemente).
+        Optional<CuentaContable> primeraHoja = cuentaRepo.findAll().stream()
+                .filter(c -> c.getCodigo() != null
+                          && c.getCodigo().startsWith(codigo)
+                          && Boolean.TRUE.equals(c.getEsMovimiento()))
+                .sorted((a, b) -> a.getCodigo().compareTo(b.getCodigo()))
                 .findFirst();
+        if (primeraHoja.isPresent()) return primeraHoja;
+        // Prioridad 3 (último recurso): devolver la coincidencia exacta aunque sea padre.
+        return exacta;
     }
 
     public CuentaContable obtenerOError(String codigo, String descripcion) {

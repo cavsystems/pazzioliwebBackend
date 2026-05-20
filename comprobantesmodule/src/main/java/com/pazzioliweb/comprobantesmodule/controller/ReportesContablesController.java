@@ -6,7 +6,10 @@ import com.pazzioliweb.comprobantesmodule.repositori.AsientoContableLineaReposit
 import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -23,6 +26,8 @@ import java.util.*;
 @RequestMapping("/api/reportes-contables")
 @CrossOrigin(origins = "*")
 public class ReportesContablesController {
+
+    private static final Logger log = LoggerFactory.getLogger(ReportesContablesController.class);
 
     private final AsientoContableLineaRepository lineaRepo;
     private final CuentaContableRepository cuentaRepo;
@@ -42,6 +47,7 @@ public class ReportesContablesController {
      * "Movimientos por cuenta contable".
      */
     @GetMapping("/libro-mayor")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> libroMayor(
             @RequestParam Integer cuentaId,
             @RequestParam(required = false) String desde,
@@ -53,10 +59,27 @@ public class ReportesContablesController {
         CuentaContable cta = cuentaRepo.findById(cuentaId)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe: " + cuentaId));
 
-        BigDecimal saldoInicial = lineaRepo.saldoAntesDe(cuentaId, d);
-        if (saldoInicial == null) saldoInicial = BigDecimal.ZERO;
+        // Si es cuenta padre (es_movimiento = false), agregar movimientos de TODAS
+        // las subcuentas cuyos códigos empiecen con el código de esta cuenta.
+        // Si es cuenta de movimiento (hoja), solo sus propios movimientos.
+        boolean esMovimiento = Boolean.TRUE.equals(cta.getEsMovimiento());
 
-        List<AsientoContableLinea> lineas = lineaRepo.librodeMayorPorCuenta(cuentaId, d, h);
+        log.info("[LibroMayor] consulta cuentaId={} codigo={} nombre={} esMovimiento={} rango={}→{}",
+                cuentaId, cta.getCodigo(), cta.getNombre(), esMovimiento, d, h);
+
+        BigDecimal saldoInicial;
+        List<AsientoContableLinea> lineas;
+        if (esMovimiento) {
+            saldoInicial = lineaRepo.saldoAntesDe(cuentaId, d);
+            lineas = lineaRepo.librodeMayorPorCuenta(cuentaId, d, h);
+            log.info("[LibroMayor] hoja → query exacta. lineas={}, saldoInicial={}", lineas.size(), saldoInicial);
+        } else {
+            saldoInicial = lineaRepo.saldoAntesDePorPrefijo(cta.getCodigo(), d);
+            lineas = lineaRepo.librodeMayorPorPrefijoCodigo(cta.getCodigo(), d, h);
+            log.info("[LibroMayor] padre → query prefijo '{}%'. lineas={}, saldoInicial={}",
+                    cta.getCodigo(), lineas.size(), saldoInicial);
+        }
+        if (saldoInicial == null) saldoInicial = BigDecimal.ZERO;
 
         List<Map<String, Object>> movimientos = new ArrayList<>();
         BigDecimal saldoCorrido = saldoInicial;
@@ -76,8 +99,10 @@ public class ReportesContablesController {
             m.put("tercero", l.getTerceroNombre());
             m.put("tipoDocumento", l.getAsiento().getDocumentoOrigenTipo());
             m.put("descripcion", l.getDescripcion() != null ? l.getDescripcion() : l.getAsiento().getDescripcion());
-            m.put("codigoContable", cta.getCodigo());
-            m.put("cuentaContable", cta.getNombre());
+            // Para cuentas padre, mostrar el código/nombre real de la subcuenta del movimiento
+            CuentaContable cuentaMov = l.getCuentaContable();
+            m.put("codigoContable", cuentaMov != null ? cuentaMov.getCodigo() : cta.getCodigo());
+            m.put("cuentaContable", cuentaMov != null ? cuentaMov.getNombre() : cta.getNombre());
             m.put("saldoInicial", saldoAntes);
             m.put("debito", l.getDebito());
             m.put("credito", l.getCredito());
@@ -90,6 +115,7 @@ public class ReportesContablesController {
         resp.put("cuentaId", cta.getId());
         resp.put("codigoContable", cta.getCodigo());
         resp.put("cuentaContable", cta.getNombre());
+        resp.put("esCuentaPadre", !esMovimiento);
         resp.put("desde", d);
         resp.put("hasta", h);
         resp.put("saldoInicial", saldoInicial);
@@ -105,6 +131,7 @@ public class ReportesContablesController {
      * movimientos del periodo y saldo final.
      */
     @GetMapping("/balance-comprobacion")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> balanceComprobacion(
             @RequestParam(required = false) String desde,
             @RequestParam(required = false) String hasta) {
@@ -163,6 +190,7 @@ public class ReportesContablesController {
      *   = UTILIDAD NETA
      */
     @GetMapping("/estado-resultados")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> estadoResultados(
             @RequestParam(required = false) String desde,
             @RequestParam(required = false) String hasta) {
@@ -173,10 +201,14 @@ public class ReportesContablesController {
         // Saldo de cada cuenta del PUC en el periodo
         Map<String, BigDecimal> saldosPorCodigo = saldosPorCodigoEnPeriodo(d, h);
 
-        // Ingresos = créditos − débitos (naturaleza credito)
-        BigDecimal ingresosOperacionales    = sumaPorPrefijo(saldosPorCodigo, "41", true);
+        // Ingresos = créditos − débitos. La devolución (4175) viene con saldo negativo
+        // porque su naturaleza es débito, así que ya RESTA automáticamente al sumar "41".
+        // No la restamos otra vez.
+        BigDecimal ingresosOperacionalesBrutos = sumaPorPrefijo(saldosPorCodigo, "41", true)
+                                                     .subtract(sumaPorPrefijo(saldosPorCodigo, "4175", true));
+        // 4175 sale como negativo, pero el dato que el usuario quiere ver es el valor positivo.
+        BigDecimal devoluciones             = sumaPorPrefijo(saldosPorCodigo, "4175", true).negate();
         BigDecimal ingresosNoOperacionales  = sumaPorPrefijo(saldosPorCodigo, "42", true);
-        BigDecimal devoluciones             = sumaPorPrefijo(saldosPorCodigo, "4175", false); // 4175 es naturaleza débito (resta ingresos)
 
         // Gastos / costos = débitos − créditos (naturaleza débito)
         BigDecimal costoVentas              = sumaPorPrefijo(saldosPorCodigo, "6", false);
@@ -186,6 +218,7 @@ public class ReportesContablesController {
         BigDecimal impuestoRenta            = sumaPorPrefijo(saldosPorCodigo, "54", false);
 
         // Cálculos intermedios (Decreto 2649)
+        BigDecimal ingresosOperacionales = ingresosOperacionalesBrutos;
         BigDecimal totalIngresosNetos = ingresosOperacionales.subtract(devoluciones);
         BigDecimal utilidadBruta      = totalIngresosNetos.subtract(costoVentas);
         BigDecimal utilidadOperacional= utilidadBruta.subtract(gastosAdmin).subtract(gastosVentas);
@@ -235,6 +268,7 @@ public class ReportesContablesController {
      *   PATRIMONIO (3) + Utilidad del ejercicio
      */
     @GetMapping("/balance-general")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> balanceGeneral(
             @RequestParam(required = false) String fecha) {
         LocalDate corte = fecha != null ? LocalDate.parse(fecha) : LocalDate.now();
@@ -271,10 +305,11 @@ public class ReportesContablesController {
         // Patrimonio (clase 3) + Utilidad del ejercicio (P&G del año)
         BigDecimal patrimonioBase = sumaPorPrefijo(saldosPasivosPat, "3", true);
 
-        // Utilidad del ejercicio = ingresos - costos - gastos del año en curso
+        // Utilidad del ejercicio = ingresos - costos - gastos del año en curso.
+        // Suma directa "4": como 4175 (Devoluciones) tiene naturaleza débito, ya viene con
+        // saldo negativo en la suma, así que el resultado ya tiene las devoluciones descontadas.
         Map<String, BigDecimal> saldosAnioActual = saldosPorCodigoEnPeriodo(inicioAnio, corte);
-        BigDecimal ingresosAnio = sumaPorPrefijo(saldosAnioActual, "4", true)
-                .subtract(sumaPorPrefijo(saldosAnioActual, "4175", false));
+        BigDecimal ingresosAnio = sumaPorPrefijo(saldosAnioActual, "4", true);
         BigDecimal gastosCostosAnio = sumaPorPrefijo(saldosAnioActual, "5", false)
                 .add(sumaPorPrefijo(saldosAnioActual, "6", false))
                 .add(sumaPorPrefijo(saldosAnioActual, "7", false));
@@ -419,6 +454,7 @@ public class ReportesContablesController {
      * a una cuenta bancaria (FK cuentas_bancarias.cuenta_contable_id).
      */
     @GetMapping("/movimientos-banco")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> movimientosBanco(
             @RequestParam Long cuentaBancariaId,
             @RequestParam(required = false) String desde,

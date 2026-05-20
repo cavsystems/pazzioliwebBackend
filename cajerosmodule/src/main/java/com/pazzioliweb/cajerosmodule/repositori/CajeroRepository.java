@@ -50,15 +50,16 @@ este query se ejecutara si el usuario tiene rol de adminsede
 """)
     Optional<Cajero> findByUsuarioCodigoConPermisos(  @Param("codigoUsuario") int codigoUsuario);*/
     @Query("""
-           SELECT 
+           SELECT
                c.cajeroId         AS cajeroId,
-               c.usuario.codigo   AS usuarioId,
-               c.usuario.nombre   AS usuarioNombre,
+               u.codigo           AS usuarioId,
+               u.nombre           AS usuarioNombre,
                c.nombre           AS nombre,
                c.estado           AS estado,
                c.codigoUsuarioCreo AS codigoUsuarioCreo,
                c.fechacreado      AS fechacreado
            FROM Cajero c
+           LEFT JOIN c.usuario u
            """)
     Page<CajeroDTO> listarCajerosDTO(Pageable pageable);
 }

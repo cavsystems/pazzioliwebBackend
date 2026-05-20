@@ -4,6 +4,7 @@ import com.pazzioliweb.comprobantesmodule.entity.AsientoContable;
 import com.pazzioliweb.comprobantesmodule.entity.AsientoContableLinea;
 import com.pazzioliweb.comprobantesmodule.repositori.AsientoContableRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -22,6 +23,7 @@ public class AsientoContableController {
 
     /** Lista asientos filtrando por rango de fechas. Default = mes actual. */
     @GetMapping
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> listar(
             @RequestParam(required = false) String desde,
             @RequestParam(required = false) String hasta) {
@@ -36,13 +38,16 @@ public class AsientoContableController {
     }
 
     @GetMapping("/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> obtener(@PathVariable Long id) {
-        return repo.findById(id).map(a -> ResponseEntity.ok(toDetalle(a)))
+        return repo.findByIdConDetalle(id)
+                .map(a -> ResponseEntity.ok(toDetalle(a)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     /** Buscar asiento por documento origen (RC + 15, etc.). */
     @GetMapping("/por-documento")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> porDocumento(
             @RequestParam String tipo, @RequestParam Long id) {
         return repo.findByDocumentoOrigenTipoAndDocumentoOrigenId(tipo, id)

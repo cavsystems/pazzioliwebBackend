@@ -26,9 +26,11 @@ public class Cajero {
     @Column(name = "cajero_id")
     private Integer cajeroId;
 
-    // ✅ Relación directa con Usuario (one-to-one: cada cajero pertenece a un único usuario)
+    // ✅ Relación directa con Usuario (one-to-one: cada cajero pertenece a un único usuario).
+    // usuario_id puede ser NULL para cajeros "de sistema" (ej. COMPRAS) usados solo como
+    // numeradores de comprobante en flujos donde el operador no es una persona-cajero.
     @OneToOne
-    @JoinColumn(name = "usuario_id", nullable = false)
+    @JoinColumn(name = "usuario_id", nullable = true)
     private Usuario usuario;
 
     @Column(name = "nombre", nullable = false, length = 100)

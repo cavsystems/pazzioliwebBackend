@@ -12,6 +12,8 @@ import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.IngresoOrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
 import com.pazzioliweb.comprasmodule.service.ProductoService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService {
+
+    private static final Logger log = LoggerFactory.getLogger(IngresoOrdenCompraServiceImpl.class);
 
     private final OrdenCompraRepository ordenCompraRepository;
     private final ProductoService productoService;
@@ -62,43 +66,84 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
     @Override
     @Transactional
     public void ingresarOrdenCompra(Long ordenId, List<DetalleOrdenCompraDTO> detallesRecibidos, String numeroFacturaProveedor) {
+        log.info("══════ INGRESO DE ORDEN DE COMPRA ID={} ══════", ordenId);
+        log.info("Detalles recibidos del frontend: {}", detallesRecibidos != null ? detallesRecibidos.size() : 0);
+
         OrdenCompra orden = ordenCompraRepository.findById(ordenId)
                 .orElseThrow(() -> new OrdenCompraException("Orden de compra no encontrada"));
+
+        log.info("Orden encontrada: {} - Estado: {} - Items: {}",
+                orden.getNumeroOrden(), orden.getEstado(),
+                orden.getItems() != null ? orden.getItems().size() : 0);
 
         if ("RECIBIDA".equals(orden.getEstado()) || "ANULADA".equals(orden.getEstado())) {
             throw new OrdenCompraException("La orden ya ha sido recibida o anulada");
         }
 
-        // Update details with received quantities and flags
-        for (DetalleOrdenCompraDTO dto : detallesRecibidos) {
-            DetalleOrdenCompra detalle = orden.getItems().stream()
-                    .filter(d -> d.getId().equals(dto.getId()))
-                    .findFirst()
-                    .orElseThrow(() -> new OrdenCompraException("Detalle de orden no encontrado: " + dto.getId()));
-            detalle.setCantidadRecibida(dto.getCantidadRecibida());
-            detalle.setRecibido(dto.isRecibido());
-            detalle.setManifiesto(dto.getManifiesto());
+        // Paso 1: actualizar las cantidades recibidas en los detalles de la orden
+        if (detallesRecibidos != null) {
+            for (DetalleOrdenCompraDTO dto : detallesRecibidos) {
+                if (dto.getId() == null) {
+                    log.warn("⚠️ DTO recibido sin id: producto={}, cantidad={} — se omite",
+                            dto.getCodigoProducto(), dto.getCantidadRecibida());
+                    continue;
+                }
+                DetalleOrdenCompra detalle = orden.getItems().stream()
+                        .filter(d -> d.getId().equals(dto.getId()))
+                        .findFirst()
+                        .orElseThrow(() -> new OrdenCompraException("Detalle de orden no encontrado: " + dto.getId()));
+
+                Integer cantRecibida = dto.getCantidadRecibida() != null ? dto.getCantidadRecibida() : 0;
+                detalle.setCantidadRecibida(cantRecibida);
+                detalle.setRecibido(dto.isRecibido());
+                if (dto.getManifiesto() != null) {
+                    detalle.setManifiesto(dto.getManifiesto());
+                }
+                log.info("  → Detalle {} ({}/{}): pedido={}, recibido={}",
+                        detalle.getId(), detalle.getCodigoProducto(), detalle.getReferenciaVariantes(),
+                        detalle.getCantidad(), cantRecibida);
+            }
         }
 
-        // Adjust inventory: add received quantities aqui se actualiza el inventario es decir la existencia con base a
-        // la cantidad recibida
+        // Paso 2: actualizar inventario SOLO de los items que tienen cantidad recibida > 0
+        int actualizados = 0;
+        int omitidos = 0;
         for (DetalleOrdenCompra detalle : orden.getItems()) {
-            productoClient.actualizarInventario(
-                    detalle.getCodigoProducto(),
-                    detalle.getReferenciaVariantes(),
-                    detalle.getCantidadRecibida(),
-                    orden.getBodega().getCodigo()
-            );
+            Integer cant = detalle.getCantidadRecibida();
+            if (cant == null || cant <= 0) {
+                omitidos++;
+                continue;
+            }
+            try {
+                log.info("📦 Sumando inventario: producto={}, variante={}, cantidad=+{}, bodega={}",
+                        detalle.getCodigoProducto(), detalle.getReferenciaVariantes(),
+                        cant, orden.getBodega().getCodigo());
+                productoClient.actualizarInventario(
+                        detalle.getCodigoProducto(),
+                        detalle.getReferenciaVariantes(),
+                        cant,
+                        orden.getBodega().getCodigo()
+                );
+                actualizados++;
+            } catch (Exception ex) {
+                log.error("❌ Error sumando inventario del detalle {} (producto {}): {}",
+                        detalle.getId(), detalle.getCodigoProducto(), ex.getMessage());
+                throw ex;  // propagar para hacer rollback completo
+            }
         }
+        log.info("Inventario actualizado: {} items sumados, {} omitidos (cantidad recibida = 0)",
+                actualizados, omitidos);
 
-        // Determine order status: RECIBIDA if all items fully received, else RECIBIDA_PARCIAL
+        // Paso 3: definir estado
         boolean allReceived = orden.getItems().stream()
-                .allMatch(d -> d.getCantidadRecibida().equals(d.getCantidad()));
+                .allMatch(d -> d.getCantidadRecibida() != null && d.getCantidadRecibida().equals(d.getCantidad()));
         orden.setEstado(allReceived ? "RECIBIDA" : "RECIBIDA_PARCIAL");
+        log.info("Estado final: {}", orden.getEstado());
 
-        // Update numero_factura_proveedor in CuentaPorPagar
+        // Paso 4: actualizar el numero_factura_proveedor en CuentaPorPagar
         cuentaPorPagarService.actualizarNumeroFacturaProveedor(orden.getNumeroOrden(), numeroFacturaProveedor);
 
         ordenCompraRepository.save(orden);
+        log.info("══════ INGRESO COMPLETADO: {} ══════", orden.getNumeroOrden());
     }
 }

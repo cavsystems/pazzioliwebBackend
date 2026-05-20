@@ -40,6 +40,9 @@ public interface MetodosPagoRepository extends JpaRepository<MetodosPago, Intege
 
 	@Query("""
 			SELECT mp FROM MetodosPago mp
+			 LEFT JOIN FETCH mp.cuentaBancaria cb
+			 LEFT JOIN FETCH cb.cuentaContable
+			 LEFT JOIN FETCH mp.cuentaContable
 			 WHERE mp.estado = :estado
 			   AND (LOCATE(:tipo, mp.tipos) > 0)
 			 ORDER BY mp.descripcion ASC
