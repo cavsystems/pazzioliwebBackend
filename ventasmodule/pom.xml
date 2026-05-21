@@ -57,7 +57,14 @@
             <artifactId>comprobantesmodule</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
-        
+
+        <!-- Dependencia del módulo de Movimientos de Inventario (Kardex auto en ventas/devoluciones) -->
+        <dependency>
+            <groupId>com.pazzioliweb</groupId>
+            <artifactId>movimientosinventariomodule</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- Dependencia del módulo Common (DatosSesiones, Redis) -->
         <dependency>
             <groupId>com.pazzioliweb</groupId>

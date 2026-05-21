@@ -73,8 +73,8 @@ public class MovimientoInventarioMapper {
 	        MovimientoInventarioResponseDto dto = new MovimientoInventarioResponseDto();
 
 	        dto.setMovimientoId(entity.getMovimientoId());
-	        dto.setComprobanteId(entity.getComprobante().getComprobante_id());
-	        dto.setComprobanteNombre(entity.getComprobante().getNombre());
+	        dto.setComprobanteId(entity.getComprobante() != null ? entity.getComprobante().getComprobante_id() : null);
+	        dto.setComprobanteNombre(entity.getComprobante() != null ? entity.getComprobante().getNombre() : null);
 	        dto.setConsecutivo(entity.getConsecutivo());
 	        dto.setTipo(entity.getTipo().name());
 	        dto.setUsuarioId(entity.getUsuario() != null ? entity.getUsuario().getCodigo() : null);
@@ -84,6 +84,8 @@ public class MovimientoInventarioMapper {
 	        dto.setEstado(entity.getEstado().name());
 	        dto.setTotal(entity.getTotal());
 	        dto.setObservaciones(entity.getObservaciones());
+	        dto.setDocumentoOrigenTipo(entity.getDocumentoOrigenTipo());
+	        dto.setDocumentoOrigenId(entity.getDocumentoOrigenId());
 
 	        // Mapear detalles
 	        dto.setDetalles(detalles.stream()

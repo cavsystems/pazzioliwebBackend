@@ -21,7 +21,15 @@ public class MovimientoInventarioResponseDto {
     private Double total;
     private String observaciones;
 
+    private String documentoOrigenTipo;
+    private Long documentoOrigenId;
+
     private List<MovimientoInventarioDetalleResponseDto> detalles;
+
+    public String getDocumentoOrigenTipo() { return documentoOrigenTipo; }
+    public void setDocumentoOrigenTipo(String documentoOrigenTipo) { this.documentoOrigenTipo = documentoOrigenTipo; }
+    public Long getDocumentoOrigenId() { return documentoOrigenId; }
+    public void setDocumentoOrigenId(Long documentoOrigenId) { this.documentoOrigenId = documentoOrigenId; }
 
 	public Long getMovimientoId() {
 		return movimientoId;

@@ -28,10 +28,10 @@ public class MovimientoInventario {
     private Long movimientoId;
 
     @ManyToOne
-    @JoinColumn(name = "comprobante_id", nullable = false)
+    @JoinColumn(name = "comprobante_id")
     private Comprobantes comprobante;
 
-    @Column(nullable = false)
+    @Column
     private Integer consecutivo;
 
     @Enumerated(EnumType.STRING)
@@ -55,6 +55,23 @@ public class MovimientoInventario {
     private Double total;
 
     private String observaciones;
+
+    /**
+     * Tipo del documento que originó el movimiento (FC, VC, CC, CR, DV, MANUAL).
+     * Permite trazabilidad: dado un movimiento de inventario, saber de qué venta/
+     * compra/devolución viene. NULL en movimientos creados manualmente desde la UI.
+     */
+    @Column(name = "documento_origen_tipo", length = 10)
+    private String documentoOrigenTipo;
+
+    /** ID del documento de origen (venta.id, orden_compra.id, etc.). */
+    @Column(name = "documento_origen_id")
+    private Long documentoOrigenId;
+
+    public String getDocumentoOrigenTipo() { return documentoOrigenTipo; }
+    public void setDocumentoOrigenTipo(String documentoOrigenTipo) { this.documentoOrigenTipo = documentoOrigenTipo; }
+    public Long getDocumentoOrigenId() { return documentoOrigenId; }
+    public void setDocumentoOrigenId(Long documentoOrigenId) { this.documentoOrigenId = documentoOrigenId; }
 
 	public Long getMovimientoId() {
 		return movimientoId;

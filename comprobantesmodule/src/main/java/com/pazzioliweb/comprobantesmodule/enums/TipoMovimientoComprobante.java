@@ -18,7 +18,13 @@ public enum TipoMovimientoComprobante {
     /** Comprobante de egreso (pago / abono entregado) */
     CE("Comprobante de egreso"),
     /** Devolución de venta */
-    DV("Devolución de venta");
+    DV("Devolución de venta"),
+    /** Entrada manual de inventario (ajuste positivo / inicial) */
+    EI("Entrada de inventario"),
+    /** Salida manual de inventario (pérdida / daño / consumo interno) */
+    SI("Salida de inventario"),
+    /** Traslado entre bodegas — no genera asiento contable (es neto cero) */
+    TI("Traslado de inventario");
 
     private final String descripcion;
 

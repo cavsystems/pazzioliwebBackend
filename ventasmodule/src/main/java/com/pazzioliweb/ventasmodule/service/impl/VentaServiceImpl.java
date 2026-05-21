@@ -6,6 +6,7 @@ import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
+import com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
@@ -78,6 +79,7 @@ public class VentaServiceImpl implements VentaService {
     private final AsignacionComprobanteService asignacionComprobante;
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
+    private final MovimientoInventarioAutoService movimientoInventarioAutoService;
 
     @Autowired
     public VentaServiceImpl(VentaRepository ventaRepository, VentaMapper ventaMapper,
@@ -97,7 +99,8 @@ public class VentaServiceImpl implements VentaService {
                             ApplicationEventPublisher eventPublisher,
                             AsignacionComprobanteService asignacionComprobante,
                             AsientoContableService asientoService,
-                            ConfiguracionContableService configContable) {
+                            ConfiguracionContableService configContable,
+                            MovimientoInventarioAutoService movimientoInventarioAutoService) {
         this.ventaRepository = ventaRepository;
         this.ventaMapper = ventaMapper;
         this.productoVarianteRepository = productoVarianteRepository;
@@ -117,6 +120,7 @@ public class VentaServiceImpl implements VentaService {
         this.asignacionComprobante = asignacionComprobante;
         this.asientoService = asientoService;
         this.configContable = configContable;
+        this.movimientoInventarioAutoService = movimientoInventarioAutoService;
     }
 
     /**
@@ -499,6 +503,57 @@ public class VentaServiceImpl implements VentaService {
 
         // ✅ Generar asiento contable (partida doble) — soporta venta contado, crédito y mixta
         generarAsientoVenta(ventaGuardada);
+
+        // ✅ Generar movimiento de inventario SALIDA + Kardex (trazabilidad por producto)
+        generarMovimientoInventarioVenta(ventaGuardada);
+    }
+
+    /**
+     * Registra un movimiento de inventario SALIDA + Kardex desde la venta.
+     * Envuelto en try/catch para que si el inventario falla, la venta no se rompa
+     * (el cuadre de existencias ya se actualiza directo desde el flujo principal).
+     */
+    private void generarMovimientoInventarioVenta(Venta venta) {
+        try {
+            java.util.List<MovimientoInventarioAutoService.ItemMovimiento> items =
+                    MovimientoInventarioAutoService.nuevaLista();
+            for (DetalleVenta d : venta.getItems()) {
+                if (d.getCantidad() == null || d.getCantidad() <= 0) continue;
+                // Costo unitario para Kardex: usamos costo unitario del producto si está,
+                // si no, dejamos en 0 (el Kardex calculará promedio en base al saldo previo).
+                double cant = d.getCantidad().doubleValue();
+                double precio = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
+                double ivaPct = d.getIva() != null ? d.getIva().doubleValue() : 0.0;
+                // El total de la línea = total del documento (con IVA) si está disponible,
+                // sino lo calculamos: precio * cant * (1 + iva/100)
+                double totalLineaConIva = d.getTotal() != null
+                        ? d.getTotal().doubleValue()
+                        : (precio * cant * (1.0 + ivaPct / 100.0));
+                items.add(new MovimientoInventarioAutoService.ItemMovimiento(
+                        d.getCodigoProducto(),
+                        d.getReferenciaVariantes(),
+                        cant,
+                        0.0,                  // costo unitario sin IVA — kardex usa promedio existente
+                        totalLineaConIva       // total mostrado en historial
+                ));
+            }
+            if (items.isEmpty()) return;
+            // Tipo real del comprobante (FC contado / VC crédito) — si no hay comprobante, default FC.
+            String tipoComprobante = "FC";
+            if (venta.getComprobante() != null && venta.getComprobante().getTipoMovimiento() != null) {
+                tipoComprobante = venta.getComprobante().getTipoMovimiento().name();
+            }
+            movimientoInventarioAutoService.registrarSalidaPorVenta(
+                    venta.getNumeroVenta(),
+                    venta.getId(),
+                    venta.getBodega() != null ? venta.getBodega().getCodigo() : null,
+                    venta.getFechaEmision() != null ? venta.getFechaEmision() : LocalDate.now(),
+                    items,
+                    tipoComprobante
+            );
+        } catch (Exception ex) {
+            System.out.println("[MovInv-Venta] Error generando movimiento (no crítico): " + ex.getMessage());
+        }
     }
 
     /**
@@ -598,9 +653,85 @@ public class VentaServiceImpl implements VentaService {
                     venta.getComprobante(),
                     lineas
             );
+
+            // ─── Asiento del COSTO DE VENTAS (independiente del ingreso) ────────
+            // DR 6135 (Costo de Ventas) / CR 1435 (Mercancías) por el costo total
+            // de la mercancía vendida. Indispensable para que Estado de Resultados
+            // muestre utilidad bruta correcta (ventas − costo).
+            generarAsientoCostoVenta(venta, nombreCliente);
         } catch (Exception ex) {
             System.out.println("[AsientoVenta] Error generando asiento (no crítico): " + ex.getMessage());
         }
+    }
+
+    /**
+     * Genera el asiento de Costo de Ventas: DR 6135 / CR 1435 por la suma de
+     * (cantidad × costo) de cada detalle de la venta. Usa producto.costo como
+     * referencia (el costo promedio actual del producto). Try/catch defensivo.
+     */
+    private void generarAsientoCostoVenta(Venta venta, String nombreCliente) {
+        try {
+            // Calcular el costo total: sum(cantidad × precio_compra_promedio) por detalle.
+            // Buscamos el costo desde el producto vía ProductoVarianteRepository indirectamente:
+            // usamos la query SQL directa para obtener costo*cantidad por venta.
+            java.math.BigDecimal totalCosto = java.math.BigDecimal.ZERO;
+            for (DetalleVenta d : venta.getItems()) {
+                if (d.getCantidad() == null || d.getCantidad() <= 0) continue;
+                // Resolvemos costo del producto/variante a partir del repo
+                java.math.BigDecimal costoUnit = obtenerCostoVarianteParaVenta(d.getCodigoProducto(), d.getReferenciaVariantes());
+                if (costoUnit == null) continue;
+                totalCosto = totalCosto.add(costoUnit.multiply(java.math.BigDecimal.valueOf(d.getCantidad())));
+            }
+            if (totalCosto.compareTo(java.math.BigDecimal.ZERO) <= 0) return; // nada que costear
+
+            CuentaContable costoCta = configContable.costoVentas().orElse(null);
+            CuentaContable invCta   = configContable.inventarios().orElse(null);
+            if (costoCta == null || invCta == null) {
+                System.out.println("[AsientoCosto] 6135 o 1435 no configuradas, se omite.");
+                return;
+            }
+
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+            lineas.add(AsientoContableService.LineaDTO.debito(costoCta.getId(), totalCosto,
+                    "Costo de ventas " + venta.getNumeroVenta()));
+            lineas.add(AsientoContableService.LineaDTO.credito(invCta.getId(), totalCosto,
+                    "Salida de inventario por venta " + venta.getNumeroVenta()));
+
+            String tipo = venta.getComprobante() != null
+                    ? venta.getComprobante().getTipoMovimiento().name()
+                    : "FC";
+
+            asientoService.generarAsiento(
+                    "COSTO-" + (venta.getNumeroVenta() != null ? venta.getNumeroVenta() : ("V-" + venta.getId())),
+                    venta.getFechaEmision() != null ? venta.getFechaEmision() : LocalDate.now(),
+                    "Costo de venta " + venta.getNumeroVenta() + " - " + nombreCliente,
+                    tipo,
+                    venta.getId(),
+                    venta.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoCosto] Error generando asiento (no crítico): " + ex.getMessage());
+        }
+    }
+
+    /** Resuelve el costo unitario a usar para el asiento de COGS. */
+    private java.math.BigDecimal obtenerCostoVarianteParaVenta(String codigoProducto, String referenciaVariantes) {
+        try {
+            // Para ventas, codigoProducto = SKU completo. Lo buscamos directamente.
+            java.util.Optional<com.pazzioliweb.productosmodule.entity.ProductoVariante> opt =
+                    productoVarianteRepository.findBySku(codigoProducto);
+            if (opt.isEmpty() && referenciaVariantes != null) {
+                opt = productoVarianteRepository.findBySku(referenciaVariantes);
+            }
+            if (opt.isPresent() && opt.get().getProducto() != null) {
+                Double c = opt.get().getProducto().getCosto();
+                if (c != null && c > 0) return java.math.BigDecimal.valueOf(c);
+            }
+        } catch (Exception ex) {
+            System.out.println("[AsientoCosto] No se pudo resolver costo de " + codigoProducto + ": " + ex.getMessage());
+        }
+        return null;
     }
 
     private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {

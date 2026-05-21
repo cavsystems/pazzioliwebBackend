@@ -36,6 +36,13 @@
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
+        <!-- Dependencia del módulo de Movimientos de Inventario (para crear automáticamente Kardex en ingresos) -->
+        <dependency>
+            <groupId>com.pazzioliweb</groupId>
+            <artifactId>movimientosinventariomodule</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>

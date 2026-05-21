@@ -19,6 +19,7 @@ import com.pazzioliweb.ventasmodule.repository.PedidoRepository;
 import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import com.pazzioliweb.ventasmodule.service.DevolucionService;
 import com.pazzioliweb.ventasmodule.service.PedidoService;
+import com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
@@ -51,6 +52,8 @@ public class DevolucionServiceImpl implements DevolucionService {
   private PedidoService pedidoService;
 @Autowired
  private  PedidoRepository pedidoRepository;
+    @Autowired
+    private MovimientoInventarioAutoService movimientoInventarioAutoService;
     @Autowired
     public DevolucionServiceImpl(
             VentaRepository ventaRepository,
@@ -201,7 +204,47 @@ public class DevolucionServiceImpl implements DevolucionService {
         // 10. Generar asiento contable de devolución (reversa de venta)
         generarAsientoDevolucion(guardada, venta, totalNeto);
 
+        // 11. Registrar movimiento de inventario ENTRADA + Kardex (trazabilidad)
+        generarMovimientoInventarioDevolucion(guardada, venta);
+
         return toDTO(guardada);
+    }
+
+    /**
+     * Registra un MovimientoInventario tipo ENTRADA por la devolución (la mercancía
+     * vuelve a la bodega de origen). Genera Kardex para trazabilidad.
+     * Try/catch defensivo: si falla, no rompe la devolución (las existencias ya
+     * fueron restauradas vía restaurarInventario).
+     */
+    private void generarMovimientoInventarioDevolucion(Devolucion devolucion, Venta venta) {
+        try {
+            List<MovimientoInventarioAutoService.ItemMovimiento> items =
+                    MovimientoInventarioAutoService.nuevaLista();
+            for (DetalleDevolucion d : devolucion.getItems()) {
+                if (d.getCantidadDevuelta() == null || d.getCantidadDevuelta() <= 0) continue;
+                double costo = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
+                items.add(new MovimientoInventarioAutoService.ItemMovimiento(
+                        d.getDetalleVenta().getCodigoProducto(),
+                        d.getDetalleVenta().getReferenciaVariantes(),
+                        d.getCantidadDevuelta().doubleValue(),
+                        costo
+                ));
+            }
+            if (items.isEmpty()) {
+                System.out.println("[MovInv-Devolucion] Sin items con cantidad devuelta > 0 para devolución "
+                        + devolucion.getNumeroDevolucion());
+                return;
+            }
+            movimientoInventarioAutoService.registrarEntradaPorDevolucion(
+                    devolucion.getNumeroDevolucion(),
+                    devolucion.getId(),
+                    venta.getBodega().getCodigo(),
+                    devolucion.getFechaCreacion() != null ? devolucion.getFechaCreacion() : LocalDate.now(),
+                    items
+            );
+        } catch (Exception ex) {
+            System.out.println("[MovInv-Devolucion] Error generando movimiento (no crítico): " + ex.getMessage());
+        }
     }
 
     /**

@@ -6,7 +6,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 public class MovimientoInventarioCreateDto {
-	@NotNull
+    // comprobanteId es opcional: requerido para EI/SI (con asiento contable),
+    // opcional para TI (traslado entre bodegas) porque no genera asiento.
     private Integer comprobanteId;        // corresponde a Comprobantes.comprobante_id
 
     // consecutivo lo puede asignar el servidor (se puede omitir en create),

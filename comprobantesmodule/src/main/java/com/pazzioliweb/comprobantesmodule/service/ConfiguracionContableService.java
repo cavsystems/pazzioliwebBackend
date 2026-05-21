@@ -40,6 +40,7 @@ public class ConfiguracionContableService {
     public static final String COD_INGRESOS_VENTAS = "4135";   // Comercio al por mayor y menor
     public static final String COD_GASTOS_GENERALES= "5195";   // Diversos (gastos)
     public static final String COD_DEVOLUCION_VENTAS = "4175"; // Devoluciones en ventas
+    public static final String COD_COSTO_VENTAS    = "6135";   // Costo de mercancía vendida
 
     @Transactional(readOnly = true)
     public Optional<CuentaContable> buscarPorCodigo(String codigo) {
@@ -87,4 +88,5 @@ public class ConfiguracionContableService {
     public Optional<CuentaContable> ingresosVentas(){ return buscarPorCodigo(COD_INGRESOS_VENTAS); }
     public Optional<CuentaContable> gastosGenerales(){ return buscarPorCodigo(COD_GASTOS_GENERALES); }
     public Optional<CuentaContable> devolucionVentas(){ return buscarPorCodigo(COD_DEVOLUCION_VENTAS); }
+    public Optional<CuentaContable> costoVentas()  { return buscarPorCodigo(COD_COSTO_VENTAS); }
 }

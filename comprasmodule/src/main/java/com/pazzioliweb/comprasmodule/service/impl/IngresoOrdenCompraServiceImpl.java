@@ -12,6 +12,7 @@ import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.IngresoOrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
 import com.pazzioliweb.comprasmodule.service.ProductoService;
+import com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -33,14 +35,21 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
     private final ProductoClient productoClient;
     private final OrdenCompraMapper ordenCompraMapper;
     private final CuentaPorPagarService cuentaPorPagarService;
+    private final MovimientoInventarioAutoService movimientoInventarioAutoService;
 
     @Autowired
-    public IngresoOrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository, ProductoService productoService, ProductoClient productoClient, OrdenCompraMapper ordenCompraMapper, CuentaPorPagarService cuentaPorPagarService) {
+    public IngresoOrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
+                                          ProductoService productoService,
+                                          ProductoClient productoClient,
+                                          OrdenCompraMapper ordenCompraMapper,
+                                          CuentaPorPagarService cuentaPorPagarService,
+                                          MovimientoInventarioAutoService movimientoInventarioAutoService) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.productoService = productoService;
         this.productoClient = productoClient;
         this.ordenCompraMapper = ordenCompraMapper;
         this.cuentaPorPagarService = cuentaPorPagarService;
+        this.movimientoInventarioAutoService = movimientoInventarioAutoService;
     }
 
     @Override
@@ -144,6 +153,60 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
         cuentaPorPagarService.actualizarNumeroFacturaProveedor(orden.getNumeroOrden(), numeroFacturaProveedor);
 
         ordenCompraRepository.save(orden);
+
+        // Paso 5: registrar el movimiento de inventario ENTRADA + Kardex (trazabilidad)
+        generarMovimientoInventarioCompra(orden);
+
         log.info("══════ INGRESO COMPLETADO: {} ══════", orden.getNumeroOrden());
+    }
+
+    /**
+     * Registra un MovimientoInventario tipo ENTRADA con cada detalle ingresado.
+     * Genera Kardex para tener trazabilidad por producto/bodega.
+     * Try/catch defensivo: si falla, no rompe el ingreso (las existencias ya
+     * están actualizadas vía productoClient.actualizarInventario).
+     */
+    private void generarMovimientoInventarioCompra(OrdenCompra orden) {
+        try {
+            List<MovimientoInventarioAutoService.ItemMovimiento> items =
+                    MovimientoInventarioAutoService.nuevaLista();
+            for (DetalleOrdenCompra d : orden.getItems()) {
+                if (d.getCantidadRecibida() == null || d.getCantidadRecibida() <= 0) continue;
+                double costoUnit = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
+                double cant = d.getCantidadRecibida().doubleValue();
+                // IVA viene como porcentaje (p.ej. 19). Si en algún registro está como valor absoluto
+                // (mayor que 100 sería raro), lo tratamos como porcentaje igual.
+                double ivaPct = d.getIva() != null ? d.getIva().doubleValue() : 0.0;
+                double subtotalLinea = costoUnit * cant;
+                double totalLineaConIva = subtotalLinea * (1.0 + ivaPct / 100.0);
+                items.add(new MovimientoInventarioAutoService.ItemMovimiento(
+                        d.getCodigoProducto(),
+                        d.getReferenciaVariantes(),
+                        cant,
+                        costoUnit,
+                        totalLineaConIva
+                ));
+            }
+            if (items.isEmpty()) {
+                log.info("[MovInv-Compra] Sin items con cantidad recibida > 0 para orden {}", orden.getNumeroOrden());
+                return;
+            }
+            // Tipo real del comprobante (CC contado / CR crédito) para que el historial
+            // muestre el origen correcto en lugar de hardcodear "CC".
+            String tipoComprobante = "CC";
+            if (orden.getComprobante() != null && orden.getComprobante().getTipoMovimiento() != null) {
+                tipoComprobante = orden.getComprobante().getTipoMovimiento().name();
+            }
+            movimientoInventarioAutoService.registrarEntradaPorCompra(
+                    orden.getNumeroOrden(),
+                    orden.getId(),
+                    orden.getBodega().getCodigo(),
+                    orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                    items,
+                    tipoComprobante
+            );
+        } catch (Exception ex) {
+            log.error("[MovInv-Compra] Error generando movimiento (no crítico): {}", ex.getMessage());
+        }
     }
 }

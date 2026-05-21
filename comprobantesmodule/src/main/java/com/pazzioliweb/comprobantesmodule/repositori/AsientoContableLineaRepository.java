@@ -69,4 +69,18 @@ public interface AsientoContableLineaRepository extends JpaRepository<AsientoCon
            "GROUP BY l.cuentaContable.id, l.cuentaContable.codigo, l.cuentaContable.nombre " +
            "ORDER BY l.cuentaContable.codigo")
     List<Object[]> balanceComprobacion(@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
+
+    /** Cuentas con saldo inicial != 0 al final del período anterior — útil para
+     *  el Balance de Comprobación: aún sin movimientos en el período hay que mostrarlas
+     *  para mantener la partida doble en saldos finales (ej: capital aportado). */
+    @Query("SELECT l.cuentaContable.id, l.cuentaContable.codigo, l.cuentaContable.nombre, " +
+           "       SUM(l.debito - l.credito) AS saldo " +
+           "FROM AsientoContableLinea l " +
+           "JOIN l.asiento a " +
+           "WHERE a.fecha < :desde " +
+           "  AND a.estado = 'CONFIRMADO' " +
+           "GROUP BY l.cuentaContable.id, l.cuentaContable.codigo, l.cuentaContable.nombre " +
+           "HAVING ABS(SUM(l.debito - l.credito)) > 0.005 " +
+           "ORDER BY l.cuentaContable.codigo")
+    List<Object[]> cuentasConSaldoAntesDe(@Param("desde") LocalDate desde);
 }

@@ -143,8 +143,10 @@ public class ReportesContablesController {
         List<Map<String, Object>> cuentas = new ArrayList<>();
         BigDecimal totalDebitos = BigDecimal.ZERO;
         BigDecimal totalCreditos = BigDecimal.ZERO;
+        java.util.Set<Integer> idsConMovimiento = new java.util.HashSet<>();
         for (Object[] r : rows) {
             Integer ccId = (Integer) r[0];
+            idsConMovimiento.add(ccId);
             BigDecimal saldoIni = lineaRepo.saldoAntesDe(ccId, d);
             if (saldoIni == null) saldoIni = BigDecimal.ZERO;
             BigDecimal deb = (BigDecimal) r[3];
@@ -164,6 +166,27 @@ public class ReportesContablesController {
             m.put("saldoFinal", saldoFinal);
             cuentas.add(m);
         }
+
+        // Cuentas con saldo inicial pero sin movimientos en el período (ej: capital social,
+        // utilidades retenidas) — debemos incluirlas para que el balance final cuadre.
+        List<Object[]> conSaldoSinMov = lineaRepo.cuentasConSaldoAntesDe(d);
+        for (Object[] r : conSaldoSinMov) {
+            Integer ccId = (Integer) r[0];
+            if (idsConMovimiento.contains(ccId)) continue; // ya está
+            BigDecimal saldoIni = (BigDecimal) r[3];
+            if (saldoIni == null || saldoIni.abs().compareTo(new BigDecimal("0.005")) < 0) continue;
+            Map<String, Object> m = new HashMap<>();
+            m.put("cuentaId", ccId);
+            m.put("codigo", r[1]);
+            m.put("nombre", r[2]);
+            m.put("saldoInicial", saldoIni);
+            m.put("debito", BigDecimal.ZERO);
+            m.put("credito", BigDecimal.ZERO);
+            m.put("saldoFinal", saldoIni);
+            cuentas.add(m);
+        }
+        // Re-ordenar por código contable
+        cuentas.sort((a, b) -> String.valueOf(a.get("codigo")).compareTo(String.valueOf(b.get("codigo"))));
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("desde", d);
@@ -278,11 +301,18 @@ public class ReportesContablesController {
         Map<String, BigDecimal> saldosActivos = saldosPorCodigoAcumulado(corte, true);   // naturaleza débito
         Map<String, BigDecimal> saldosPasivosPat = saldosPorCodigoAcumulado(corte, false); // naturaleza crédito
 
-        // Activos (clase 1)
+        // ── Excepciones PUC: cuentas dentro de clase 2 que son naturaleza DÉBITO
+        //    (IVA descontable, anticipos de impuestos) — tratar como ACTIVO en el reporte.
+        BigDecimal ivaDescontableActivo = getOrZero(saldosActivos, "240810");      // 240810 saldo DB
+        BigDecimal ivaDescontableEnPasivos = getOrZero(saldosPasivosPat, "240810"); // -DB en pasivos
+
+        // Activos (clase 1) + IVA descontable y anticipos de impuestos (excepciones de clase 2)
         BigDecimal activosCorrientes = sumaPorPrefijo(saldosActivos, "11", true)
                 .add(sumaPorPrefijo(saldosActivos, "12", true))
                 .add(sumaPorPrefijo(saldosActivos, "13", true))
-                .add(sumaPorPrefijo(saldosActivos, "14", true));
+                .add(sumaPorPrefijo(saldosActivos, "14", true))
+                // IVA descontable a favor: debe figurar en activos corrientes
+                .add(ivaDescontableActivo);
         BigDecimal activosNoCorrientes = sumaPorPrefijo(saldosActivos, "15", true)
                 .add(sumaPorPrefijo(saldosActivos, "16", true))
                 .add(sumaPorPrefijo(saldosActivos, "17", true))
@@ -290,13 +320,16 @@ public class ReportesContablesController {
                 .add(sumaPorPrefijo(saldosActivos, "19", true));
         BigDecimal totalActivos = activosCorrientes.add(activosNoCorrientes);
 
-        // Pasivos (clase 2)
+        // Pasivos (clase 2) — descontar la contribución negativa de 240810 que se está
+        // sacando de pasivos para reubicarlo en activos
         BigDecimal pasivosCorrientes = sumaPorPrefijo(saldosPasivosPat, "21", true)
                 .add(sumaPorPrefijo(saldosPasivosPat, "22", true))
                 .add(sumaPorPrefijo(saldosPasivosPat, "23", true))
                 .add(sumaPorPrefijo(saldosPasivosPat, "24", true))
                 .add(sumaPorPrefijo(saldosPasivosPat, "25", true))
-                .add(sumaPorPrefijo(saldosPasivosPat, "26", true));
+                .add(sumaPorPrefijo(saldosPasivosPat, "26", true))
+                // Sacar 240810 de pasivos (su contribución es negativa, restarla compensa)
+                .subtract(ivaDescontableEnPasivos);
         BigDecimal pasivosNoCorrientes = sumaPorPrefijo(saldosPasivosPat, "27", true)
                 .add(sumaPorPrefijo(saldosPasivosPat, "28", true))
                 .add(sumaPorPrefijo(saldosPasivosPat, "29", true));
@@ -323,6 +356,21 @@ public class ReportesContablesController {
         List<Map<String, Object>> detalleActivos    = detalleClase(saldosActivos, "1", true);
         List<Map<String, Object>> detallePasivos    = detalleClase(saldosPasivosPat, "2", true);
         List<Map<String, Object>> detallePatrimonio = detalleClase(saldosPasivosPat, "3", true);
+
+        // Reubicar 240810 IVA descontable: sacar de pasivos, agregar a activos.
+        detallePasivos.removeIf(m -> {
+            Object cod = m.get("codigo");
+            return cod != null && cod.toString().startsWith("240810");
+        });
+        if (ivaDescontableActivo.signum() != 0) {
+            Map<String, Object> ivaAct = new HashMap<>();
+            ivaAct.put("codigo", "240810");
+            ivaAct.put("nombre", "IVA descontable (saldo a favor)");
+            ivaAct.put("valor", ivaDescontableActivo);  // mismo campo que las demás líneas
+            detalleActivos.add(ivaAct);
+            // Re-ordenar activos por código
+            detalleActivos.sort((a, b) -> String.valueOf(a.get("codigo")).compareTo(String.valueOf(b.get("codigo"))));
+        }
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("fecha", corte);
@@ -392,6 +440,12 @@ public class ReportesContablesController {
             map.put(codigo, saldo);
         }
         return map;
+    }
+
+    /** Devuelve el saldo de una cuenta del mapa, o cero si no existe. */
+    private BigDecimal getOrZero(Map<String, BigDecimal> saldos, String codigo) {
+        BigDecimal v = saldos.get(codigo);
+        return v != null ? v : BigDecimal.ZERO;
     }
 
     /** Suma valores de cuentas cuyo código empieza con un prefijo. */

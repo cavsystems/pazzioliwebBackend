@@ -15,6 +15,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface MovimientoInventarioRepository extends JpaRepository<MovimientoInventario, Long>{
 	Optional<MovimientoInventario> findTopByComprobanteOrderByConsecutivoDesc(Comprobantes comprobante);
+
+	/** Idempotencia: verifica si ya existe un movimiento generado desde un documento. */
+	Optional<MovimientoInventario> findByDocumentoOrigenTipoAndDocumentoOrigenId(String tipo, Long id);
 	
 	/**
 	 * Compara el enum tipo con el string del parámetro usando .name() para

@@ -462,7 +462,15 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // ─── Comprobante contable (CC contado / CR crédito) ───
         // Estrategia: si el usuario es cajero y su cajero tiene comprobante CC/CR, se usa.
         // Si no, se cae al cajero default de compras configurado a nivel de empresa.
-        TipoMovimientoComprobante tipo = Boolean.TRUE.equals(request.getEsCredito())
+        // Regla autoritativa: el plazo manda. plazo=0 ⇒ contado, plazo>0 ⇒ crédito.
+        // El flag esCredito es legacy y solo se respeta cuando el plazo viene en null.
+        boolean esCredito;
+        if (request.getPlazo() != null) {
+            esCredito = request.getPlazo() > 0;
+        } else {
+            esCredito = Boolean.TRUE.equals(request.getEsCredito());
+        }
+        TipoMovimientoComprobante tipo = esCredito
                 ? TipoMovimientoComprobante.CR
                 : TipoMovimientoComprobante.CC;
         Integer cajeroEfectivo = resolverCajeroParaComprobante(request.getCajeroId(), tipo);
