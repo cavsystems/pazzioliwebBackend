@@ -5,7 +5,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Component;
 
-import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleResponseDto;
@@ -23,7 +23,7 @@ import com.pazzioliweb.usuariosbacken.entity.Usuario;
 public class MovimientoInventarioMapper {
 	 public MovimientoInventario toEntity(
 	            MovimientoInventarioCreateDto dto,
-	            Comprobantes comprobante,
+	            ComprobanteContable comprobante,
 	            Usuario usuario) {
 
 	        MovimientoInventario mov = new MovimientoInventario();
@@ -35,7 +35,7 @@ public class MovimientoInventarioMapper {
 	        mov.setFechaEmision(dto.getFechaEmision());
 	        mov.setFechaCreacion(LocalDateTime.now());
 	        mov.setEstado(dto.getEstado() == null
-	                ? EstadoMovimiento.BORRADOR
+	                ? EstadoMovimiento.ACTIVO
 	                : EstadoMovimiento.valueOf(dto.getEstado()));
 	        mov.setTotal(dto.getTotal());
 	        mov.setObservaciones(dto.getObservaciones());
@@ -73,8 +73,10 @@ public class MovimientoInventarioMapper {
 	        MovimientoInventarioResponseDto dto = new MovimientoInventarioResponseDto();
 
 	        dto.setMovimientoId(entity.getMovimientoId());
-	        dto.setComprobanteId(entity.getComprobante() != null ? entity.getComprobante().getComprobante_id() : null);
-	        dto.setComprobanteNombre(entity.getComprobante() != null ? entity.getComprobante().getNombre() : null);
+	        dto.setComprobanteId(entity.getComprobante() != null ? entity.getComprobante().getId().intValue() : null);
+	        dto.setComprobanteNombre(entity.getComprobante() != null
+	                ? (entity.getComprobante().getPrefijo() + " — " + entity.getComprobante().getDescripcion())
+	                : null);
 	        dto.setConsecutivo(entity.getConsecutivo());
 	        dto.setTipo(entity.getTipo().name());
 	        dto.setUsuarioId(entity.getUsuario() != null ? entity.getUsuario().getCodigo() : null);

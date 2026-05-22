@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioUpdateDto;
@@ -15,7 +15,7 @@ import com.pazzioliweb.usuariosbacken.entity.Usuario;
 public interface MovimientoInventarioService {
 	MovimientoInventarioResponseDto crearMovimiento(
             MovimientoInventarioCreateDto createDto,
-            Comprobantes comprobante,
+            ComprobanteContable comprobante,
             Usuario usuario,
             HttpServletRequest request);
 
