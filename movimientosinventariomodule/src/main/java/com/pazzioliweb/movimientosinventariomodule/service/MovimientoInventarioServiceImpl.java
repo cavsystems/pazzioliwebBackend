@@ -21,8 +21,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
-import com.pazzioliweb.comprobantesmodule.repositori.ComprobantesRepository;
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
+import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
@@ -61,7 +61,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     private MovimientoInventarioMapper mapper;
 
     @Autowired
-    private ComprobantesRepository comprobantesRepository;
+    private ComprobanteContableRepository comprobantesRepository;
 
     @Autowired
     private ProductoVarianteRepository productoVarianteRepository;
@@ -81,13 +81,13 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     @Transactional
     public MovimientoInventarioResponseDto crearMovimiento(
             MovimientoInventarioCreateDto createDto,
-            Comprobantes comprobante,
+            ComprobanteContable comprobante,
             Usuario usuario,
             HttpServletRequest request) {
 
         // Resolver comprobante desde ID si no viene pasado
         if (comprobante == null && createDto.getComprobanteId() != null) {
-            comprobante = comprobantesRepository.findById(createDto.getComprobanteId())
+            comprobante = comprobantesRepository.findById(createDto.getComprobanteId().longValue())
                     .orElseThrow(() -> new EntityNotFoundException("Comprobante no encontrado: " + createDto.getComprobanteId()));
         }
 
@@ -253,7 +253,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         }
 
         if (updateDto.getComprobanteId() != null) {
-            Comprobantes comprobante = comprobantesRepository.findById(updateDto.getComprobanteId())
+            ComprobanteContable comprobante = comprobantesRepository.findById(updateDto.getComprobanteId().longValue())
                     .orElseThrow(() -> new EntityNotFoundException("Comprobante no encontrado: " + updateDto.getComprobanteId()));
             movimiento.setComprobante(comprobante);
         }

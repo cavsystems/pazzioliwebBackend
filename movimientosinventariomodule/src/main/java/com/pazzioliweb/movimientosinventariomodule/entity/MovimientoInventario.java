@@ -3,7 +3,7 @@ package com.pazzioliweb.movimientosinventariomodule.entity;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.movimientosinventariomodule.enums.EstadoMovimiento;
 import com.pazzioliweb.movimientosinventariomodule.enums.TipoMovimiento;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
@@ -29,7 +29,7 @@ public class MovimientoInventario {
 
     @ManyToOne
     @JoinColumn(name = "comprobante_id")
-    private Comprobantes comprobante;
+    private ComprobanteContable comprobante;
 
     @Column
     private Integer consecutivo;
@@ -81,11 +81,11 @@ public class MovimientoInventario {
 		this.movimientoId = movimientoId;
 	}
 
-	public Comprobantes getComprobante() {
+	public ComprobanteContable getComprobante() {
 		return comprobante;
 	}
 
-	public void setComprobante(Comprobantes comprobante) {
+	public void setComprobante(ComprobanteContable comprobante) {
 		this.comprobante = comprobante;
 	}
 

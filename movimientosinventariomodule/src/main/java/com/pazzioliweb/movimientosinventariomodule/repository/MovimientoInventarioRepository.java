@@ -8,13 +8,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.pazzioliweb.comprobantesmodule.entity.Comprobantes;
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventario;
 
 import org.springframework.data.repository.query.Param;
 
 public interface MovimientoInventarioRepository extends JpaRepository<MovimientoInventario, Long>{
-	Optional<MovimientoInventario> findTopByComprobanteOrderByConsecutivoDesc(Comprobantes comprobante);
+	Optional<MovimientoInventario> findTopByComprobanteOrderByConsecutivoDesc(ComprobanteContable comprobante);
 
 	/** Idempotencia: verifica si ya existe un movimiento generado desde un documento. */
 	Optional<MovimientoInventario> findByDocumentoOrigenTipoAndDocumentoOrigenId(String tipo, Long id);
