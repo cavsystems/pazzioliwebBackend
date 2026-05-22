@@ -20,4 +20,12 @@ public class BodegasService {
     public List<Bodegas> listarBodegas() {
         return bodegaRepository.findAll();
     }
+
+    public boolean tieneRelaciones(int codigoBodega) {
+
+        Integer resultado =
+                bodegaRepository.verificarRelaciones(codigoBodega);
+
+        return resultado != null && resultado == 1;
+    }
 }

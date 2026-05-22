@@ -9,12 +9,7 @@ import com.pazzioliweb.usuariosbacken.dtos.UsuarioDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.pazzioliweb.commonbacken.dtos.response.ApiResponse;
 import com.pazzioliweb.commonbacken.util.PasswordUtils;
@@ -121,9 +116,18 @@ public class BodegasController {
 		 
 		 
 	 }
-	
-	 
-	 
+
+
+	@GetMapping("/{codigo}/tiene-relaciones")
+	public ResponseEntity<Boolean> tieneRelaciones(
+			@PathVariable int codigo
+	) {
+
+		boolean resultado =
+				bodegaService.tieneRelaciones(codigo);
+
+		return ResponseEntity.ok(resultado);
+	}
 	 
 	 @Transactional
 		@PostMapping(value = "/actualizar/usuario")

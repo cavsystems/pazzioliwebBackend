@@ -46,7 +46,10 @@ public interface BodegasRepository extends JpaRepository<Bodegas, Integer>{
 			""", nativeQuery = true)
 	
 	List<UsuariobodegasidDTOS> findByUsuariobodegausuario(@Param("usuarioid") int usuarioid);
-	
+
+
+	@Query(value = "CALL verificar_relaciones_bodega(:codigoBodega)", nativeQuery = true)
+	Integer verificarRelaciones(@Param("codigoBodega") int codigoBodega);
 	
 
 }
