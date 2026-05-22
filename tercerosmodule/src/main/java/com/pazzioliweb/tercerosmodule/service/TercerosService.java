@@ -282,6 +282,21 @@ public class TercerosService {
             tercero.setCodigoPostal(dto.getCodigoPostal());
         }
 
+        // Campos opcionales: fecha nacimiento, actividad económica, matrícula mercantil
+        if (dto.getFechaNacimiento() != null && !dto.getFechaNacimiento().isBlank()) {
+            try {
+                tercero.setFechaNacimiento(java.time.LocalDate.parse(
+                        dto.getFechaNacimiento(),
+                        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+            } catch (Exception ignored) { /* fecha inválida, no se guarda */ }
+        }
+        if (dto.getActividadEconomicaId() != null && dto.getActividadEconomicaId() > 0) {
+            tercero.setActividadEconomicaId(dto.getActividadEconomicaId());
+        }
+        if (dto.getMatriculaMercantil() != null && !dto.getMatriculaMercantil().isBlank()) {
+            tercero.setMatriculaMercantil(dto.getMatriculaMercantil());
+        }
+
 
         List<Empresa> empresas = empresaRepositori.findAll();
 
@@ -412,6 +427,21 @@ public class TercerosService {
 
         if (dto.getCodigoPostal() != null) {
             tercero.setCodigoPostal(dto.getCodigoPostal());
+        }
+
+        // Campos que faltaban: fecha nacimiento, actividad económica, matrícula mercantil
+        if (dto.getFechaNacimiento() != null && !dto.getFechaNacimiento().isBlank()) {
+            try {
+                tercero.setFechaNacimiento(java.time.LocalDate.parse(
+                        dto.getFechaNacimiento(),
+                        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+            } catch (Exception ignored) { /* fecha inválida, no se modifica */ }
+        }
+        if (dto.getActividadEconomicaId() != null && dto.getActividadEconomicaId() > 0) {
+            tercero.setActividadEconomicaId(dto.getActividadEconomicaId());
+        }
+        if (dto.getMatriculaMercantil() != null) {
+            tercero.setMatriculaMercantil(dto.getMatriculaMercantil());
         }
 
         // SEDES

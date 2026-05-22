@@ -175,7 +175,19 @@ FROM (
 		        WHERE (LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%')) ||   LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%')) || LOWER(t.codigobarrasvariante) LIKE LOWER(CONCAT('%', :productodes, '%'))) AND
  t.activo=:activo   
 		        """,
-			countQuery = "SELECT COUNT(*) FROM producto_variantes",
+			countQuery = """
+				SELECT COUNT(*)
+				FROM producto_variantes pv
+				JOIN productos p ON p.producto_id = pv.producto_id
+				JOIN impuestos pi ON pi.codigo = p.impuesto_id
+				WHERE pv.activo = :activo
+				  AND (
+				    LOWER(IF(pv.predeterminada=0, CONCAT(p.descripcion, ' - ', pv.referencia_variantes), p.descripcion))
+				        LIKE LOWER(CONCAT('%', :productodes, '%'))
+				    OR LOWER(p.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+				    OR LOWER(pv.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+				  )
+			""",
 			nativeQuery = true
 	)
 	Page<ProductoInventarioDTO> listarInventario( @Param("activo") int activo,@Param("productodes") String desproduct,Pageable pageable);
