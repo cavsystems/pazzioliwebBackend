@@ -314,24 +314,25 @@ public class Empresacontroller {
 	    
 	 @RequestMapping("/traeractividadeseconomicas")
 	 public ResponseEntity<Map<String, Object>> traeractividades(@RequestParam(defaultValue ="") String descripcion, @RequestParam(defaultValue ="0") int codigo) {
-		 Object req;
-	
-		   System.out.println(descripcion);
-		
-		 
-		 /*PageRequest pageRequest = PageRequest.of(1, 15); // página 1 (empieza en 0), 15 registros
-		 List<Actividadeconomica> actividades = actividadeconomicarepositorio.findWithLimit(pageRequest);*/
-		 
-		 PageRequest pageRequest = PageRequest.of(0, 15); // página 1 (empieza en 0), 15 registros
-		 List<Actividadeconomica> actividades = actividadeconomicarepositorio.findByDescripcionActividadContainingOrCodigo(descripcion, codigo, pageRequest);
-		 
+		 List<Actividadeconomica> actividades;
+		 if (codigo > 0 && (descripcion == null || descripcion.isBlank())) {
+			 // Buscar exclusivamente por código exacto (caso edición de tercero)
+			 actividades = actividadeconomicarepositorio.findById((long) codigo)
+					 .map(List::of)
+					 .orElseGet(List::of);
+		 } else if (codigo == 0 && (descripcion == null || descripcion.isBlank())) {
+			 // Sin filtro: todas las actividades (CIIU son ~600 códigos)
+			 PageRequest pageRequest = PageRequest.of(0, 2000);
+			 actividades = actividadeconomicarepositorio.findByDescripcionActividadContainingOrCodigo(descripcion, codigo, pageRequest);
+		 } else {
+			 // Con descripcion: autocompletar hasta 50 resultados
+			 PageRequest pageRequest = PageRequest.of(0, 50);
+			 actividades = actividadeconomicarepositorio.findByDescripcionActividadContainingOrCodigo(descripcion, codigo, pageRequest);
+		 }
          response.put("datosactividad",  actividades );
          return ResponseEntity
                  .ok()
                  .body(response);
-		 
-		 
-		 
 	 }
 	 @RequestMapping("/traerimpuestos")
 	 public ResponseEntity<Map<String, Object>> traerimpuestos() {
