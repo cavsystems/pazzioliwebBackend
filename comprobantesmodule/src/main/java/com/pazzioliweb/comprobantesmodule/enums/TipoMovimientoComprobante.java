@@ -24,7 +24,15 @@ public enum TipoMovimientoComprobante {
     /** Salida manual de inventario (pérdida / daño / consumo interno) */
     SI("Salida de inventario"),
     /** Traslado entre bodegas — no genera asiento contable (es neto cero) */
-    TI("Traslado de inventario");
+    TI("Traslado de inventario"),
+    /** Nota Crédito Electrónica (DIAN) — anula/corrige factura electrónica */
+    NC("Nota Crédito Electrónica"),
+    /** Nota Débito Electrónica (DIAN) — aumenta valor de factura electrónica */
+    ND("Nota Débito Electrónica"),
+    /** Tiquete POS Electrónico (DIAN) — documento equivalente para ventas sin identificar cliente */
+    TPOS("Tiquete POS Electrónico"),
+    /** Documento Soporte (DIAN) — compras a NO obligados a facturar */
+    DS("Documento Soporte");
 
     private final String descripcion;
 

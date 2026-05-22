@@ -21,6 +21,18 @@ public class RealizarOrdenRequestDTO {
     /** true si la compra es a crédito (genera CxP), false si es contado. */
     private Boolean esCredito;
 
+    /** Métodos de pago utilizados al pagar la compra. La suma puede ser menor al total
+     *  (en cuyo caso el saldo restante va a CxP), igual al total (pago completo en métodos),
+     *  o vacía (todo a crédito).  */
+    private List<MetodoPagoCompraDTO> metodosPago;
+
+    @Data
+    public static class MetodoPagoCompraDTO {
+        private Integer metodoPagoId;
+        private BigDecimal monto;
+        private String referencia;
+    }
+
     @Data
     public static class ProveedorRequestDTO {
         private String nombre;

@@ -78,6 +78,22 @@ public class Devolucion {
 
     @Column(name = "consecutivo_comprobante")
     private Integer consecutivoComprobante;
+
+    /** ── Datos de la Nota Crédito Electrónica generada por DIAN ─── */
+    @Column(name = "numero_nc", length = 50)
+    private String numeroNc;            // Ej: NC-1
+
+    @Column(name = "cufe_nc", length = 200)
+    private String cufeNc;              // CUDE de la nota crédito
+
+    @Column(name = "estado_dian_nc", length = 20)
+    private String estadoDianNc;        // AUTORIZADA / RECHAZADA / SIMULADA / PENDIENTE
+
+    @Column(name = "mensaje_dian_nc", length = 500)
+    private String mensajeDianNc;
+
+    @Column(name = "qr_data_nc", columnDefinition = "TEXT")
+    private String qrDataNc;
 }
 
 

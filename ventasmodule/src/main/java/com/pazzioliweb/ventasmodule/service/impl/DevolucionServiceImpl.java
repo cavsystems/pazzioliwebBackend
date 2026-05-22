@@ -20,7 +20,9 @@ import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import com.pazzioliweb.ventasmodule.service.DevolucionService;
 import com.pazzioliweb.ventasmodule.service.PedidoService;
 import com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService;
+import com.pazzioliweb.commonbacken.events.DevolucionRegistradaEvent;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -54,6 +56,8 @@ public class DevolucionServiceImpl implements DevolucionService {
  private  PedidoRepository pedidoRepository;
     @Autowired
     private MovimientoInventarioAutoService movimientoInventarioAutoService;
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
     @Autowired
     public DevolucionServiceImpl(
             VentaRepository ventaRepository,
@@ -206,6 +210,17 @@ public class DevolucionServiceImpl implements DevolucionService {
 
         // 11. Registrar movimiento de inventario ENTRADA + Kardex (trazabilidad)
         generarMovimientoInventarioDevolucion(guardada, venta);
+
+        // 12. Publicar evento → facturacionmodule generará la Nota Crédito Electrónica DIAN
+        try {
+            Integer cajeroEvtId = guardada.getCajero() != null ? guardada.getCajero().getCajeroId() : null;
+            // Concepto DIAN: 1=Devolución, 2=Anulación, 3=Rebaja, 4=Descuento, 5=Otro
+            Integer concepto = 1;
+            eventPublisher.publishEvent(new DevolucionRegistradaEvent(
+                    this, guardada.getId(), venta.getId(), cajeroEvtId, concepto));
+        } catch (Exception ex) {
+            System.out.println("[Devolucion] Error publicando evento NC (no crítico): " + ex.getMessage());
+        }
 
         return toDTO(guardada);
     }
@@ -571,6 +586,13 @@ public class DevolucionServiceImpl implements DevolucionService {
         dto.setTotalDevuelto(dev.getTotalDevuelto());
         dto.setIvaDevuelto(dev.getIvaDevuelto());
         dto.setTotalNeto(dev.getTotalNeto());
+
+        // Datos Nota Crédito Electrónica
+        dto.setNumeroNc(dev.getNumeroNc());
+        dto.setCufeNc(dev.getCufeNc());
+        dto.setEstadoDianNc(dev.getEstadoDianNc());
+        dto.setMensajeDianNc(dev.getMensajeDianNc());
+        dto.setQrDataNc(dev.getQrDataNc());
 
         if (dev.getItems() != null) {
             List<DetalleDevolucionDTO> itemDTOs = dev.getItems().stream().map(d -> {

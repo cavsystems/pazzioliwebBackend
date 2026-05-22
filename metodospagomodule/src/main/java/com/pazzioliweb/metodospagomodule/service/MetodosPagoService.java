@@ -10,6 +10,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.hibernate.Hibernate;
 
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
@@ -52,6 +54,7 @@ public class MetodosPagoService {
         return metodopagoRepository.findById(id);
     }
 
+    @Transactional
     public MetodosPago guardar(MetodosPago metodoPago) {
         // Si el frontend mandó solo IDs en las FK (sin objeto completo), resolverlos.
         if (metodoPago.getCuentaBancaria() != null && metodoPago.getCuentaBancaria().getId() != null) {
@@ -62,21 +65,42 @@ public class MetodosPagoService {
             CuentaContable cc = cuentaContableRepository.findById(metodoPago.getCuentaContable().getId()).orElse(null);
             metodoPago.setCuentaContable(cc);
         }
-        return metodopagoRepository.save(metodoPago);
+        MetodosPago saved = metodopagoRepository.save(metodoPago);
+        // Forzar inicialización (incluyendo nested) para que Jackson no falle al serializar
+        if (saved.getCuentaBancaria() != null) {
+            Hibernate.initialize(saved.getCuentaBancaria());
+            Hibernate.initialize(saved.getCuentaBancaria().getCuentaContable());
+        }
+        if (saved.getCuentaContable() != null) {
+            Hibernate.initialize(saved.getCuentaContable());
+        }
+        return saved;
     }
 
     public void eliminar(Integer id) {
     	metodopagoRepository.deleteById(id);
     }
 
-    private static final Set<String> TIPOS_VALIDOS = Set.of("RECIBO", "EGRESO", "VENTA");
+    private static final Set<String> TIPOS_VALIDOS = Set.of("RECIBO", "EGRESO", "VENTA", "COMPRA");
 
+    @Transactional(readOnly = true)
     public List<MetodosPago> listarActivosPorTipo(String tipo) {
         if (tipo == null) throw new RuntimeException("Tipo es obligatorio");
         String t = tipo.toUpperCase();
         if (!TIPOS_VALIDOS.contains(t)) {
-            throw new RuntimeException("Tipo inválido. Use RECIBO, EGRESO o VENTA");
+            throw new RuntimeException("Tipo inválido. Use RECIBO, EGRESO, VENTA o COMPRA");
         }
-        return metodopagoRepository.listarPorTipo(t);
+        List<MetodosPago> resultado = metodopagoRepository.listarPorTipo(t);
+        // Inicializar relaciones lazy (incluyendo nested) para evitar errores de serialización
+        for (MetodosPago m : resultado) {
+            if (m.getCuentaBancaria() != null) {
+                Hibernate.initialize(m.getCuentaBancaria());
+                Hibernate.initialize(m.getCuentaBancaria().getCuentaContable());
+            }
+            if (m.getCuentaContable() != null) {
+                Hibernate.initialize(m.getCuentaContable());
+            }
+        }
+        return resultado;
     }
 }

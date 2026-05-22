@@ -85,6 +85,7 @@ public class CuentaContableService {
         if (dto.getNivel() != null) cc.setNivel(dto.getNivel());
         cc.setPadreId(dto.getPadreId());
         if (dto.getEsMovimiento() != null) cc.setEsMovimiento(dto.getEsMovimiento());
+        if (dto.getRequiereTercero() != null) cc.setRequiereTercero(dto.getRequiereTercero());
         if (dto.getEstado() != null) cc.setEstado(dto.getEstado());
     }
 
@@ -98,6 +99,7 @@ public class CuentaContableService {
         dto.setNivel(cc.getNivel());
         dto.setPadreId(cc.getPadreId());
         dto.setEsMovimiento(cc.getEsMovimiento());
+        dto.setRequiereTercero(cc.getRequiereTercero());
         dto.setEstado(cc.getEstado());
         return dto;
     }

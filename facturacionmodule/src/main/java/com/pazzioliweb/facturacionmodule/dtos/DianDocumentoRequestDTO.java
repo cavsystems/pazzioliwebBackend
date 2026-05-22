@@ -44,6 +44,13 @@ public class DianDocumentoRequestDTO {
     // ── Métodos de pago ──
     private List<MetodoPagoDTO> metodosPago;
 
+    // ── Referencia a documento original (solo para NC/ND, null para FC/TPOS) ──
+    private DocumentoReferenciaDTO documentoReferencia;
+    /** Código DIAN concepto NC: 1=Devolución, 2=Anulación, 3=Rebaja, 4=Descuento, 5=Otro
+     *  Código DIAN concepto ND: 1=Intereses, 2=Gastos por cobrar, 3=Cambio del valor, 4=Otros */
+    private Integer codigoConcepto;
+    private String razonConcepto;
+
     @Data
     public static class EmisorDTO {
         private String tipoIdentificacion; // "31" = NIT
@@ -89,6 +96,15 @@ public class DianDocumentoRequestDTO {
         private String medioPago;    // "10" = Efectivo, "49" = Tarjeta débito, "48" = Tarjeta crédito, "ZZZ" = Otro
         private BigDecimal monto;
         private String referencia;
+    }
+
+    /** Referencia al documento original que se está corrigiendo (NC/ND). */
+    @Data
+    public static class DocumentoReferenciaDTO {
+        private String numeroDocumento;    // Ej: FE-100
+        private String cufeOriginal;       // CUFE de la factura original
+        private LocalDate fechaEmisionOriginal;
+        private String tipoDocumentoOriginal; // "01" para factura
     }
 }
 

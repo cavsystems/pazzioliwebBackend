@@ -100,13 +100,13 @@ public class ComprobanteContableService {
             throw new IllegalArgumentException("El tipo de movimiento es obligatorio.");
         if (dto.getPrefijo() == null || dto.getPrefijo().isBlank())
             throw new IllegalArgumentException("El prefijo es obligatorio.");
-        if (dto.getCajeroIds() == null || dto.getCajeroIds().isEmpty())
-            throw new IllegalArgumentException("Asigne al menos un cajero a este comprobante.");
-
-        // Cajeros existen
-        for (Integer cajId : dto.getCajeroIds()) {
-            if (!existeCajero(cajId))
-                throw new IllegalArgumentException("El cajero " + cajId + " no existe.");
+        // Cajeros son opcionales — comprobantes de compra (CC/CR) y movimientos de inventario
+        // no requieren cajero, se vinculan a una bodega/sucursal.
+        if (dto.getCajeroIds() != null) {
+            for (Integer cajId : dto.getCajeroIds()) {
+                if (!existeCajero(cajId))
+                    throw new IllegalArgumentException("El cajero " + cajId + " no existe.");
+            }
         }
 
         TipoMovimientoComprobante tipo;
@@ -127,14 +127,16 @@ public class ComprobanteContableService {
 
         // Validar que ningún cajero asignado ya tenga OTRO comprobante activo del mismo tipo.
         // Excepción: si el otro comprobante es éste mismo (idActual), está bien.
-        for (Integer cajId : dto.getCajeroIds()) {
-            Optional<ComprobanteContable> existente = repo.findActivoByCajeroAndTipo(cajId, tipo);
-            if (existente.isPresent() && (idActual == null || !existente.get().getId().equals(idActual))) {
-                throw new IllegalArgumentException(
-                    "El cajero " + cajId + " ya tiene asignado el comprobante '"
-                    + existente.get().getPrefijo() + "' para " + tipo.name()
-                    + ". Quítalo de allí primero o usa ese mismo comprobante."
-                );
+        if (dto.getCajeroIds() != null) {
+            for (Integer cajId : dto.getCajeroIds()) {
+                Optional<ComprobanteContable> existente = repo.findActivoByCajeroAndTipo(cajId, tipo);
+                if (existente.isPresent() && (idActual == null || !existente.get().getId().equals(idActual))) {
+                    throw new IllegalArgumentException(
+                        "El cajero " + cajId + " ya tiene asignado el comprobante '"
+                        + existente.get().getPrefijo() + "' para " + tipo.name()
+                        + ". Quítalo de allí primero o usa ese mismo comprobante."
+                    );
+                }
             }
         }
     }
@@ -156,8 +158,17 @@ public class ComprobanteContableService {
         c.setAfectaInventario(dto.getAfectaInventario() != null ? dto.getAfectaInventario() : true);
         c.setActivo(dto.getActivo() != null ? dto.getActivo() : true);
 
-        // Reemplazar cajeros asignados con los del DTO
-        Set<Integer> nuevos = new HashSet<>(dto.getCajeroIds());
+        // Multi-sucursal y resolución DIAN
+        c.setBodegaId(dto.getBodegaId());
+        c.setResolucionDian(dto.getResolucionDian());
+        c.setFechaInicioResolucion(dto.getFechaInicioResolucion());
+        c.setFechaFinResolucion(dto.getFechaFinResolucion());
+        c.setConsecutivoDesde(dto.getConsecutivoDesde());
+        c.setConsecutivoHasta(dto.getConsecutivoHasta());
+        c.setClaveTecnicaDian(dto.getClaveTecnicaDian());
+
+        // Reemplazar cajeros asignados con los del DTO (puede ser vacío)
+        Set<Integer> nuevos = new HashSet<>(dto.getCajeroIds() != null ? dto.getCajeroIds() : List.of());
         if (c.getCajeroIds() == null) {
             c.setCajeroIds(nuevos);
         } else {
@@ -244,6 +255,24 @@ public class ComprobanteContableService {
         d.setActivo(c.getActivo());
         d.setEsLegacy(c.getEsLegacy());
         d.setFechaCreacion(c.getFechaCreacion());
+
+        // Multi-sucursal y resolución DIAN
+        d.setBodegaId(c.getBodegaId());
+        if (c.getBodegaId() != null) {
+            try {
+                Object nombre = em.createNativeQuery(
+                        "SELECT nombre FROM bodegas WHERE codigo = :id")
+                        .setParameter("id", c.getBodegaId())
+                        .getSingleResult();
+                d.setBodegaNombre(nombre != null ? nombre.toString() : null);
+            } catch (Exception ignored) {}
+        }
+        d.setResolucionDian(c.getResolucionDian());
+        d.setFechaInicioResolucion(c.getFechaInicioResolucion());
+        d.setFechaFinResolucion(c.getFechaFinResolucion());
+        d.setConsecutivoDesde(c.getConsecutivoDesde());
+        d.setConsecutivoHasta(c.getConsecutivoHasta());
+        d.setClaveTecnicaDian(c.getClaveTecnicaDian());
         return d;
     }
 }

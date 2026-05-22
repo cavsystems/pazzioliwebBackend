@@ -4,6 +4,7 @@ import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -80,4 +81,34 @@ public class ComprobanteContable {
     )
     @Column(name = "cajero_id")
     private Set<Integer> cajeroIds = new HashSet<>();
+
+    // ── Multi-sucursal: este comprobante pertenece a una bodega/sucursal ──
+    /** Bodega/sucursal a la que pertenece este comprobante. Null = aplica a todas (legacy). */
+    @Column(name = "bodega_id")
+    private Integer bodegaId;
+
+    // ── Resolución DIAN de facturación (aplica a FC, VC, NC, ND, TPOS, DS) ──
+    /** Número de la resolución autorizada por la DIAN. */
+    @Column(name = "resolucion_dian", length = 50)
+    private String resolucionDian;
+
+    /** Fecha de inicio de vigencia de la resolución. */
+    @Column(name = "fecha_inicio_resolucion")
+    private LocalDate fechaInicioResolucion;
+
+    /** Fecha de fin de vigencia de la resolución. */
+    @Column(name = "fecha_fin_resolucion")
+    private LocalDate fechaFinResolucion;
+
+    /** Consecutivo inicial autorizado por la resolución. */
+    @Column(name = "consecutivo_desde")
+    private Integer consecutivoDesde;
+
+    /** Consecutivo final autorizado por la resolución. */
+    @Column(name = "consecutivo_hasta")
+    private Integer consecutivoHasta;
+
+    /** Clave técnica entregada por la DIAN (para FE). */
+    @Column(name = "clave_tecnica_dian", length = 100)
+    private String claveTecnicaDian;
 }

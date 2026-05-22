@@ -34,17 +34,20 @@ public class ProveedorDianDirectoImpl implements ProveedorFacturacionElectronica
 
     private final DianConfig dianConfig;
     private final UblXmlGenerator ublXmlGenerator;
+    private final UblNotaGenerator ublNotaGenerator;
     private final CufeGenerator cufeGenerator;
     private final XmlDigitalSigner xmlDigitalSigner;
     private final DianSoapClient dianSoapClient;
 
     public ProveedorDianDirectoImpl(DianConfig dianConfig,
                                      UblXmlGenerator ublXmlGenerator,
+                                     UblNotaGenerator ublNotaGenerator,
                                      CufeGenerator cufeGenerator,
                                      XmlDigitalSigner xmlDigitalSigner,
                                      DianSoapClient dianSoapClient) {
         this.dianConfig = dianConfig;
         this.ublXmlGenerator = ublXmlGenerator;
+        this.ublNotaGenerator = ublNotaGenerator;
         this.cufeGenerator = cufeGenerator;
         this.xmlDigitalSigner = xmlDigitalSigner;
         this.dianSoapClient = dianSoapClient;
@@ -52,16 +55,29 @@ public class ProveedorDianDirectoImpl implements ProveedorFacturacionElectronica
 
     @Override
     public DianDocumentoResponseDTO enviarFactura(DianDocumentoRequestDTO request) {
-        log.info("══════ INICIO Facturación Electrónica DIAN ══════");
-        log.info("Documento: {} - {}{}", request.getTipoDocumento(), request.getPrefijo(), request.getConsecutivo());
+        String tipoDoc = request.getTipoDocumento() != null ? request.getTipoDocumento() : "01";
+        boolean esNotaCredito = "91".equals(tipoDoc);
+        boolean esNotaDebito  = "92".equals(tipoDoc);
+        boolean esTiquetePos  = "20".equals(tipoDoc); // documento equivalente POS
+        boolean esDocSoporte  = "05".equals(tipoDoc); // documento soporte de compras a no facturadores
+
+        String nombreDoc;
+        if (esNotaCredito) nombreDoc = "Nota Crédito";
+        else if (esNotaDebito) nombreDoc = "Nota Débito";
+        else if (esTiquetePos) nombreDoc = "Tiquete POS";
+        else if (esDocSoporte) nombreDoc = "Documento Soporte";
+        else nombreDoc = "Factura Electrónica";
+
+        log.info("══════ INICIO {} DIAN ══════", nombreDoc);
+        log.info("Documento: {} - {}{}", tipoDoc, request.getPrefijo(), request.getConsecutivo());
         log.info("Ambiente: {} ({})", dianConfig.getAmbiente(), dianConfig.getAmbiente() == 1 ? "PRODUCCIÓN" : "PRUEBAS");
 
         DianDocumentoResponseDTO response = new DianDocumentoResponseDTO();
         String numeroFactura = request.getPrefijo() + request.getConsecutivo();
 
         try {
-            // 1. Calcular CUFE
-            log.info("Paso 1: Calculando CUFE...");
+            // 1. Calcular CUFE/CUDE (mismo algoritmo SHA-384)
+            log.info("Paso 1: Calculando {}...", esNotaCredito || esNotaDebito ? "CUDE" : "CUFE");
             String horaEmision = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")) + "-05:00";
             String nitEmisor = request.getEmisor() != null ? request.getEmisor().getNumeroIdentificacion() : "";
             String idReceptor = request.getReceptor() != null ? request.getReceptor().getNumeroIdentificacion() : "";
@@ -76,11 +92,19 @@ public class ProveedorDianDirectoImpl implements ProveedorFacturacionElectronica
                     nitEmisor,
                     idReceptor
             );
-            log.info("CUFE generado: {}", cufe);
+            log.info("Código único generado: {}", cufe);
 
-            // 2. Generar XML UBL 2.1
-            log.info("Paso 2: Generando XML UBL 2.1...");
-            String xmlSinFirmar = ublXmlGenerator.generarXml(request, cufe);
+            // 2. Generar XML UBL 2.1 según el tipo
+            log.info("Paso 2: Generando XML UBL 2.1 para {}...", nombreDoc);
+            String xmlSinFirmar;
+            if (esNotaCredito) {
+                xmlSinFirmar = ublNotaGenerator.generarXmlNotaCredito(request, cufe);
+            } else if (esNotaDebito) {
+                xmlSinFirmar = ublNotaGenerator.generarXmlNotaDebito(request, cufe);
+            } else {
+                // FC, TPOS y DS comparten la estructura de Invoice
+                xmlSinFirmar = ublXmlGenerator.generarXml(request, cufe);
+            }
             log.info("XML generado exitosamente ({} caracteres)", xmlSinFirmar.length());
 
             // 3. Firmar digitalmente
@@ -97,11 +121,11 @@ public class ProveedorDianDirectoImpl implements ProveedorFacturacionElectronica
                     || dianConfig.getCertificado().getRuta().isBlank();
 
             if (modoSimulacion) {
-                log.warn("⚠️ MODO SIMULACIÓN: No hay certificado configurado. Se genera factura local sin enviar a DIAN.");
+                log.warn("⚠️ MODO SIMULACIÓN: No hay certificado configurado. Se genera {} local sin enviar a DIAN.", nombreDoc);
                 response.setExitoso(true);
                 response.setCufe(cufe);
                 response.setEstadoDian("SIMULADA");
-                response.setMensajeDian("Factura generada en modo simulación (sin certificado DIAN)");
+                response.setMensajeDian(nombreDoc + " generada en modo simulación (sin certificado DIAN)");
                 response.setQrData("https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=" + cufe);
                 response.setXmlFirmado(Base64.getEncoder().encodeToString(xmlFirmado.getBytes()));
                 response.setFechaValidacion(LocalDateTime.now());

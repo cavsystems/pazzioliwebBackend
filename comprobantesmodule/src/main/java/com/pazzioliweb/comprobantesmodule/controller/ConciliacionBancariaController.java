@@ -134,6 +134,96 @@ public class ConciliacionBancariaController {
         return ResponseEntity.ok(r);
     }
 
+    /**
+     * Conciliación automática: el frontend sube las filas parseadas del extracto bancario
+     * (fecha + monto + descripción + referencia) y el backend intenta hacer match con los
+     * movimientos pendientes de esa cuenta dentro de una tolerancia de ±2 días en fecha
+     * y monto exacto. Devuelve resumen: conciliados, sin-match-extracto, sin-match-libro.
+     */
+    @PostMapping("/conciliar-extracto")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> conciliarExtracto(@RequestBody Map<String, Object> body) {
+        Long cuentaBancariaId = Long.valueOf(body.get("cuentaBancariaId").toString());
+        Integer toleranciaDias = body.get("toleranciaDias") != null
+                ? Integer.parseInt(body.get("toleranciaDias").toString()) : 2;
+        String usuario = body.get("usuarioConcilio") != null ? body.get("usuarioConcilio").toString() : "extracto";
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> filas = (List<Map<String, Object>>) body.getOrDefault("filas", new ArrayList<>());
+
+        // Resolver cuenta contable de la cuenta bancaria
+        // getSingleResult() con UNA columna retorna el escalar directo, NO Object[]
+        Object res = em.createNativeQuery(
+                "SELECT cuenta_contable_id FROM cuentas_bancarias WHERE id = :id")
+                .setParameter("id", cuentaBancariaId).getSingleResult();
+        Integer cuentaContableId = ((Number) res).intValue();
+
+        // Cargar movimientos NO conciliados de los últimos 90 días
+        LocalDate desde = LocalDate.now().minusDays(90);
+        LocalDate hasta = LocalDate.now().plusDays(1);
+        List<AsientoContableLinea> candidatos = lineaRepo.librodeMayorPorCuenta(cuentaContableId, desde, hasta);
+        candidatos.removeIf(l -> Boolean.TRUE.equals(l.getConciliado()));
+
+        int conciliados = 0;
+        int sinMatchExtracto = 0;
+        List<Map<String, Object>> matchedDetail = new ArrayList<>();
+        List<Map<String, Object>> noMatchDetail = new ArrayList<>();
+
+        for (Map<String, Object> fila : filas) {
+            LocalDate fechaExtracto = LocalDate.parse(fila.get("fecha").toString());
+            BigDecimal montoExtracto = new BigDecimal(fila.get("monto").toString()).abs();
+            String referencia = fila.get("referencia") != null ? fila.get("referencia").toString() : null;
+            String descripcionExtracto = fila.get("descripcion") != null ? fila.get("descripcion").toString() : "";
+
+            // Buscar candidato que coincida: monto exacto + fecha dentro de tolerancia
+            AsientoContableLinea match = null;
+            for (AsientoContableLinea l : candidatos) {
+                BigDecimal mLinea = l.getDebito().subtract(l.getCredito()).abs();
+                if (mLinea.compareTo(montoExtracto) != 0) continue;
+                LocalDate fLinea = l.getAsiento().getFecha();
+                long diff = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(fLinea, fechaExtracto));
+                if (diff <= toleranciaDias) { match = l; break; }
+            }
+
+            if (match != null) {
+                match.setConciliado(true);
+                match.setFechaConciliacion(LocalDate.now());
+                match.setReferenciaExtracto(referencia);
+                match.setUsuarioConcilio(usuario);
+                lineaRepo.save(match);
+                candidatos.remove(match);  // no usar el mismo dos veces
+                conciliados++;
+                Map<String, Object> d = new HashMap<>();
+                d.put("lineaId", match.getId());
+                d.put("fechaLibro", match.getAsiento().getFecha());
+                d.put("fechaExtracto", fechaExtracto);
+                d.put("monto", montoExtracto);
+                d.put("descripcionExtracto", descripcionExtracto);
+                d.put("referencia", referencia);
+                matchedDetail.add(d);
+            } else {
+                sinMatchExtracto++;
+                Map<String, Object> d = new HashMap<>();
+                d.put("fecha", fechaExtracto);
+                d.put("monto", montoExtracto);
+                d.put("descripcion", descripcionExtracto);
+                d.put("referencia", referencia);
+                noMatchDetail.add(d);
+            }
+        }
+
+        // Movimientos en el libro que NO aparecieron en el extracto
+        int sinMatchLibro = candidatos.size();
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("totalExtracto", filas.size());
+        resp.put("conciliados", conciliados);
+        resp.put("sinMatchExtracto", sinMatchExtracto);
+        resp.put("sinMatchLibro", sinMatchLibro);
+        resp.put("matchedDetail", matchedDetail);
+        resp.put("noMatchDetail", noMatchDetail);
+        return ResponseEntity.ok(resp);
+    }
+
     /** Marca varios movimientos como conciliados en una sola llamada. */
     @PutMapping("/marcar-lote")
     @Transactional

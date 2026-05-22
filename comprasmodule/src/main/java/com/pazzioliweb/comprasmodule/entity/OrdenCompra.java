@@ -56,6 +56,10 @@ public class OrdenCompra {
     @OneToMany(mappedBy = "ordenCompra", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleOrdenCompra> items;
 
+    /** Métodos de pago utilizados al pagar esta compra (mixtos posibles). */
+    @OneToMany(mappedBy = "ordenCompra", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrdenCompraMetodoPago> metodosPago;
+
     @Column(name = "usuario_creacion", nullable = false)
     private String usuarioCreacion;
 

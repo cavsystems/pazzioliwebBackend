@@ -25,10 +25,47 @@ public class ComprobanteContableController {
     @GetMapping
     public ResponseEntity<List<ComprobanteContableDTO>> listar(
             @RequestParam(required = false) Boolean soloActivos,
-            @RequestParam(required = false) Integer cajeroId) {
+            @RequestParam(required = false) Integer cajeroId,
+            @RequestParam(required = false) Integer bodegaId,
+            @RequestParam(required = false) String tipo) {
         if (cajeroId != null) return ResponseEntity.ok(service.listarPorCajero(cajeroId));
-        if (Boolean.TRUE.equals(soloActivos)) return ResponseEntity.ok(service.listarActivos());
-        return ResponseEntity.ok(service.listar());
+        List<ComprobanteContableDTO> base = Boolean.TRUE.equals(soloActivos)
+                ? service.listarActivos() : service.listar();
+        // Filtros adicionales en memoria
+        return ResponseEntity.ok(base.stream()
+                .filter(c -> bodegaId == null || (c.getBodegaId() != null && c.getBodegaId().equals(bodegaId)))
+                .filter(c -> tipo == null || tipo.equalsIgnoreCase(c.getTipoMovimiento()))
+                .collect(Collectors.toList()));
+    }
+
+    /**
+     * Busca el comprobante activo para una (bodega, tipo).
+     * Usado al cambiar de bodega en una venta/compra para auto-seleccionar el comprobante.
+     */
+    @GetMapping("/por-bodega-tipo")
+    public ResponseEntity<Map<String, Object>> porBodegaYTipo(
+            @RequestParam Integer bodegaId,
+            @RequestParam String tipo) {
+        return service.listarActivos().stream()
+                .filter(c -> bodegaId.equals(c.getBodegaId())
+                          && tipo.equalsIgnoreCase(c.getTipoMovimiento()))
+                .findFirst()
+                .<ResponseEntity<Map<String, Object>>>map(c -> {
+                    Map<String, Object> body = new java.util.HashMap<>();
+                    body.put("configurado", true);
+                    body.put("id", c.getId());
+                    body.put("prefijo", c.getPrefijo());
+                    body.put("siguienteConsecutivo", c.getSiguienteConsecutivo());
+                    body.put("resolucionDian", c.getResolucionDian());
+                    body.put("numeroPreview", c.getPrefijo() + "-" + c.getSiguienteConsecutivo());
+                    return ResponseEntity.ok(body);
+                })
+                .orElseGet(() -> {
+                    Map<String, Object> body = new java.util.HashMap<>();
+                    body.put("configurado", false);
+                    body.put("mensaje", "La bodega " + bodegaId + " no tiene comprobante " + tipo + " configurado.");
+                    return ResponseEntity.ok(body);
+                });
     }
 
     @GetMapping("/{id}")

@@ -1,5 +1,6 @@
 package com.pazzioliweb.metodospagomodule.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -17,6 +18,7 @@ import lombok.Data;
 @Entity
 @Table(name = "metodos_pago")
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class MetodosPago {
 	@Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

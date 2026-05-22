@@ -2,6 +2,7 @@ package com.pazzioliweb.comprobantesmodule.dtos;
 
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -17,4 +18,15 @@ public class ComprobanteContableCreateDTO {
     private Integer cuentaContableId;
     private Boolean afectaInventario;
     private Boolean activo;
+
+    // Multi-sucursal
+    private Integer bodegaId;
+
+    // Resolución DIAN
+    private String resolucionDian;
+    private LocalDate fechaInicioResolucion;
+    private LocalDate fechaFinResolucion;
+    private Integer consecutivoDesde;
+    private Integer consecutivoHasta;
+    private String claveTecnicaDian;
 }

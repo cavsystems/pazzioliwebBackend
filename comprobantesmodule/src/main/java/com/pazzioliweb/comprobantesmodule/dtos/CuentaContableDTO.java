@@ -12,5 +12,6 @@ public class CuentaContableDTO {
     private Integer nivel;
     private Integer padreId;
     private Boolean esMovimiento;
+    private Boolean requiereTercero;
     private String estado;
 }

@@ -43,5 +43,9 @@ public interface ProveedorMapper {
     @Mapping(target = "matriculaMercantil", ignore = true)
     @Mapping(target = "actividadEconomicaId", ignore = true)
     @Mapping(target = "tipoPersona", ignore = true)
+    @Mapping(target = "departamento", ignore = true)
+    @Mapping(target = "ciudad", ignore = true)
+    @Mapping(target = "codigoPostal", ignore = true)
+    @Mapping(target = "correo", ignore = true)
     Terceros toEntity(ProveedorDTO proveedorDTO);
 }

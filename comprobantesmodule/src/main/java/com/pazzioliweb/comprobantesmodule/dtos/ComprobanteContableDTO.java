@@ -2,6 +2,7 @@ package com.pazzioliweb.comprobantesmodule.dtos;
 
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,4 +29,16 @@ public class ComprobanteContableDTO {
     private Boolean activo;
     private Boolean esLegacy;
     private LocalDateTime fechaCreacion;
+
+    // Multi-sucursal
+    private Integer bodegaId;
+    private String bodegaNombre;
+
+    // Resolución DIAN
+    private String resolucionDian;
+    private LocalDate fechaInicioResolucion;
+    private LocalDate fechaFinResolucion;
+    private Integer consecutivoDesde;
+    private Integer consecutivoHasta;
+    private String claveTecnicaDian;
 }

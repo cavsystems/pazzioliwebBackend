@@ -3,9 +3,14 @@ package com.pazzioliweb.facturacionmodule.service;
 import com.pazzioliweb.commonbacken.events.FacturaAutorizadaEvent;
 import com.pazzioliweb.facturacionmodule.config.DianConfig;
 import com.pazzioliweb.facturacionmodule.dtos.*;
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
+import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
+import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
+import com.pazzioliweb.facturacionmodule.entity.DocumentoElectronico;
 import com.pazzioliweb.facturacionmodule.entity.Facturas;
 import com.pazzioliweb.facturacionmodule.entity.MetodosPagoFacturas;
 import com.pazzioliweb.facturacionmodule.entity.TipoTotalesFacturas;
+import com.pazzioliweb.facturacionmodule.repositori.DocumentoElectronicoRepository;
 import com.pazzioliweb.facturacionmodule.repositori.FacturasRepository;
 import com.pazzioliweb.empresasback.entity.Empresa;
 import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
@@ -43,6 +48,9 @@ public class FacturacionElectronicaService {
     private final EmpresaRepositori empresaRepositori;
     private final DianConfig dianConfig;
     private final ApplicationEventPublisher eventPublisher;
+    private final DocumentoElectronicoRepository documentoElectronicoRepository;
+    @Autowired private AsientoContableService asientoService;
+    @Autowired private ConfiguracionContableService configContable;
 
     @Autowired
     public FacturacionElectronicaService(FacturasRepository facturasRepository,
@@ -52,7 +60,8 @@ public class FacturacionElectronicaService {
                                           MetodosPagoRepository metodosPagoRepository,
                                           EmpresaRepositori empresaRepositori,
                                           DianConfig dianConfig,
-                                          ApplicationEventPublisher eventPublisher) {
+                                          ApplicationEventPublisher eventPublisher,
+                                          DocumentoElectronicoRepository documentoElectronicoRepository) {
         this.facturasRepository = facturasRepository;
         this.proveedorDian = proveedorDian;
         this.ventaRepository = ventaRepository;
@@ -61,6 +70,7 @@ public class FacturacionElectronicaService {
         this.empresaRepositori = empresaRepositori;
         this.dianConfig = dianConfig;
         this.eventPublisher = eventPublisher;
+        this.documentoElectronicoRepository = documentoElectronicoRepository;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -299,8 +309,13 @@ public class FacturacionElectronicaService {
         Facturas factura = new Facturas();
 
         // Datos del comprobante
+        // Heredamos el comprobante de la venta (FC contado o VC crédito) en lugar
+        // del que llegue en el request, para que la factura siempre refleje el tipo real.
         factura.setConsecutivo(consecutivo);
-        factura.setComprobanteId(request.getComprobanteId());
+        Integer comprobanteIdVenta = (venta.getComprobante() != null && venta.getComprobante().getId() != null)
+                ? venta.getComprobante().getId().intValue()
+                : request.getComprobanteId();
+        factura.setComprobanteId(comprobanteIdVenta);
         factura.setPrefijo(prefijo);
         factura.setNumeroFactura(numeroFactura);
 
@@ -527,6 +542,519 @@ public class FacturacionElectronicaService {
         resp.setQrData(factura.getQrData());
         resp.setTienePdf(factura.getPdfBase64() != null && !factura.getPdfBase64().isEmpty());
         return resp;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  PASO 4: Tiquete POS Electrónico (TPOS) — documento equivalente
+    //          para ventas a clientes NO identificados / consumidor final
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Genera un Tiquete POS Electrónico a partir de una venta.
+     * A diferencia de la FE, no requiere datos completos del cliente.
+     */
+    @Transactional
+    public DianDocumentoResponseDTO generarTiquetePOS(Long ventaId) {
+        log.info("══════ Generando Tiquete POS Electrónico (TPOS) ═══════");
+        log.info("Venta ID: {}", ventaId);
+
+        Venta venta = ventaRepository.findById(ventaId)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada: " + ventaId));
+
+        DianDocumentoRequestDTO req = construirRequestDianBase(venta);
+        req.setTipoDocumento("20");  // 20 = Documento equivalente Tiquete POS
+        req.setPrefijo("TPOS");
+        int consec = siguienteNumeroTpos();
+        req.setConsecutivo(consec);
+
+        DianDocumentoResponseDTO resp = proveedorDian.enviarFactura(req);
+
+        // Persistir
+        try {
+            DocumentoElectronico doc = new DocumentoElectronico();
+            doc.setTipo("TPOS");
+            doc.setNumero("TPOS-" + consec);
+            doc.setCufe(resp.getCufe());
+            doc.setFechaEmision(req.getFechaEmision());
+            doc.setTerceroIdentificacion(req.getReceptor() != null ? req.getReceptor().getNumeroIdentificacion() : null);
+            doc.setTerceroNombre(req.getReceptor() != null ? req.getReceptor().getNombre() : null);
+            doc.setDocumentoReferenciaId(venta.getId());
+            doc.setDocumentoReferenciaTipo("VENTA");
+            doc.setBaseGravable(req.getBaseGravable());
+            doc.setIva(req.getTotalIva());
+            doc.setTotal(req.getTotalFactura());
+            doc.setConcepto("Tiquete POS — Venta " + venta.getNumeroVenta());
+            doc.setEstadoDian(resp.getEstadoDian());
+            doc.setMensajeDian(resp.getMensajeDian());
+            doc.setQrData(resp.getQrData());
+            doc.setXmlFirmado(resp.getXmlFirmado());
+            doc.setFechaValidacionDian(resp.getFechaValidacion());
+            documentoElectronicoRepository.save(doc);
+            log.info("TPOS persistido: {}", doc.getNumero());
+            // Generar asiento contable asociado
+            Long aId = generarAsientoTPOS(doc, venta);
+            if (aId != null) {
+                doc.setAsientoId(aId);
+                documentoElectronicoRepository.save(doc);
+            }
+        } catch (Exception ex) {
+            log.warn("[TPOS] Error persistiendo (no crítico): {}", ex.getMessage());
+        }
+
+        return resp;
+    }
+
+    /**
+     * Genera una Nota Débito Electrónica a partir de una factura existente
+     * (cobro adicional, intereses de mora, ajuste al alza, etc).
+     */
+    @Transactional
+    public DianDocumentoResponseDTO generarNotaDebito(Integer facturaId, Integer codigoConcepto,
+                                                       String razon, BigDecimal monto, BigDecimal ivaMonto) {
+        log.info("══════ Generando Nota Débito Electrónica (ND) ═══════");
+        log.info("Factura ID: {}, Concepto: {}, Monto: {}", facturaId, codigoConcepto, monto);
+
+        Facturas factura = facturasRepository.findById(facturaId)
+                .orElseThrow(() -> new RuntimeException("Factura no encontrada: " + facturaId));
+        Venta venta = ventaRepository.findById(factura.getVentaId())
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada: " + factura.getVentaId()));
+
+        DianDocumentoRequestDTO req = construirRequestDianBase(venta);
+        req.setTipoDocumento("92");  // 92 = Nota Débito
+        req.setPrefijo("ND");
+        req.setConsecutivo(siguienteNumeroNd());
+        req.setCodigoConcepto(codigoConcepto != null ? codigoConcepto : 4);
+        req.setRazonConcepto(razon);
+
+        // Referencia a la factura original
+        DianDocumentoRequestDTO.DocumentoReferenciaDTO ref = new DianDocumentoRequestDTO.DocumentoReferenciaDTO();
+        ref.setNumeroDocumento(factura.getNumeroFactura());
+        ref.setCufeOriginal(factura.getCufe());
+        ref.setFechaEmisionOriginal(factura.getFechaEmision());
+        ref.setTipoDocumentoOriginal("01");
+        req.setDocumentoReferencia(ref);
+
+        // Sobrescribir totales con monto del cargo extra
+        BigDecimal m = monto != null ? monto : BigDecimal.ZERO;
+        BigDecimal i = ivaMonto != null ? ivaMonto : BigDecimal.ZERO;
+        req.setBaseGravable(m.subtract(i).max(BigDecimal.ZERO));
+        req.setTotalIva(i);
+        req.setTotalFactura(m);
+        req.setTotalDescuento(BigDecimal.ZERO);
+
+        // Una sola línea con el concepto
+        java.util.List<DianDocumentoRequestDTO.LineaDTO> lineas = new ArrayList<>();
+        DianDocumentoRequestDTO.LineaDTO l = new DianDocumentoRequestDTO.LineaDTO();
+        l.setNumero(1);
+        l.setCodigoProducto("ND");
+        l.setDescripcion(razon != null ? razon : "Cargo adicional");
+        l.setCantidad(1);
+        l.setPrecioUnitario(m.subtract(i));
+        l.setDescuento(BigDecimal.ZERO);
+        l.setValorIva(i);
+        l.setTotalLinea(m);
+        lineas.add(l);
+        req.setLineas(lineas);
+
+        int consec = req.getConsecutivo();
+        DianDocumentoResponseDTO resp = proveedorDian.enviarFactura(req);
+
+        // Persistir
+        try {
+            DocumentoElectronico doc = new DocumentoElectronico();
+            doc.setTipo("ND");
+            doc.setNumero("ND-" + consec);
+            doc.setCufe(resp.getCufe());
+            doc.setFechaEmision(req.getFechaEmision());
+            doc.setTerceroIdentificacion(req.getReceptor() != null ? req.getReceptor().getNumeroIdentificacion() : null);
+            doc.setTerceroNombre(req.getReceptor() != null ? req.getReceptor().getNombre() : null);
+            doc.setDocumentoReferenciaId(Long.valueOf(facturaId));
+            doc.setDocumentoReferenciaTipo("FACTURA");
+            doc.setBaseGravable(req.getBaseGravable());
+            doc.setIva(req.getTotalIva());
+            doc.setTotal(req.getTotalFactura());
+            doc.setConcepto(razon);
+            doc.setCodigoConceptoDian(codigoConcepto);
+            doc.setEstadoDian(resp.getEstadoDian());
+            doc.setMensajeDian(resp.getMensajeDian());
+            doc.setQrData(resp.getQrData());
+            doc.setXmlFirmado(resp.getXmlFirmado());
+            doc.setFechaValidacionDian(resp.getFechaValidacion());
+            documentoElectronicoRepository.save(doc);
+            log.info("ND persistido: {}", doc.getNumero());
+            // Generar asiento contable
+            Long aId = generarAsientoND(doc, factura);
+            if (aId != null) {
+                doc.setAsientoId(aId);
+                documentoElectronicoRepository.save(doc);
+            }
+        } catch (Exception ex) {
+            log.warn("[ND] Error persistiendo (no crítico): {}", ex.getMessage());
+        }
+
+        return resp;
+    }
+
+    /**
+     * Genera un Documento Soporte de compras a NO obligados a facturar.
+     * El proveedor en este caso es típicamente persona natural / régimen simplificado.
+     */
+    @Transactional
+    public DianDocumentoResponseDTO generarDocumentoSoporte(String proveedorIdentificacion,
+                                                             String proveedorNombre,
+                                                             BigDecimal base,
+                                                             BigDecimal iva,
+                                                             BigDecimal total,
+                                                             String concepto) {
+        return generarDocumentoSoporte(proveedorIdentificacion, proveedorNombre, base, iva, total, concepto,
+                "SERVICIOS", BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    /**
+     * Versión completa con retenciones y tipo de compra (productos/servicios).
+     */
+    @Transactional
+    public DianDocumentoResponseDTO generarDocumentoSoporte(String proveedorIdentificacion,
+                                                             String proveedorNombre,
+                                                             BigDecimal base,
+                                                             BigDecimal iva,
+                                                             BigDecimal total,
+                                                             String concepto,
+                                                             String tipoCompra,
+                                                             BigDecimal retencionFuente,
+                                                             BigDecimal retencionIva,
+                                                             BigDecimal retencionIca) {
+        log.info("══════ Generando Documento Soporte (DS) ═══════");
+        log.info("Proveedor: {} - {}, Total: {}", proveedorIdentificacion, proveedorNombre, total);
+
+        DianDocumentoRequestDTO req = new DianDocumentoRequestDTO();
+        req.setTipoDocumento("05");  // 05 = Documento Soporte
+        req.setPrefijo("DS");
+        req.setConsecutivo(siguienteNumeroDs());
+        req.setFechaEmision(LocalDate.now());
+        req.setFormaPago("1");
+
+        // Emisor = MI empresa (igual que en FE)
+        req.setEmisor(armarEmisorDesdeEmpresa());
+
+        // Receptor = proveedor NO obligado a facturar
+        DianDocumentoRequestDTO.ReceptorDTO rec = new DianDocumentoRequestDTO.ReceptorDTO();
+        rec.setTipoIdentificacion("13");  // 13 = CC (típico de persona natural)
+        rec.setNumeroIdentificacion(proveedorIdentificacion);
+        rec.setNombre(proveedorNombre);
+        req.setReceptor(rec);
+
+        req.setBaseGravable(base != null ? base : BigDecimal.ZERO);
+        req.setTotalIva(iva != null ? iva : BigDecimal.ZERO);
+        req.setTotalFactura(total != null ? total : BigDecimal.ZERO);
+        req.setTotalDescuento(BigDecimal.ZERO);
+
+        // Una línea con el concepto
+        java.util.List<DianDocumentoRequestDTO.LineaDTO> lineas = new ArrayList<>();
+        DianDocumentoRequestDTO.LineaDTO l = new DianDocumentoRequestDTO.LineaDTO();
+        l.setNumero(1);
+        l.setCodigoProducto("DS");
+        l.setDescripcion(concepto != null ? concepto : "Compra a no facturador");
+        l.setCantidad(1);
+        l.setPrecioUnitario(req.getBaseGravable());
+        l.setDescuento(BigDecimal.ZERO);
+        l.setValorIva(req.getTotalIva());
+        l.setTotalLinea(req.getTotalFactura());
+        lineas.add(l);
+        req.setLineas(lineas);
+
+        int consec = req.getConsecutivo();
+        DianDocumentoResponseDTO resp = proveedorDian.enviarFactura(req);
+
+        // Persistir
+        try {
+            DocumentoElectronico doc = new DocumentoElectronico();
+            doc.setTipo("DS");
+            doc.setNumero("DS-" + consec);
+            doc.setCufe(resp.getCufe());
+            doc.setFechaEmision(req.getFechaEmision());
+            doc.setTerceroIdentificacion(proveedorIdentificacion);
+            doc.setTerceroNombre(proveedorNombre);
+            doc.setBaseGravable(req.getBaseGravable());
+            doc.setIva(req.getTotalIva());
+            doc.setTotal(req.getTotalFactura());
+            doc.setConcepto(concepto);
+            doc.setEstadoDian(resp.getEstadoDian());
+            doc.setMensajeDian(resp.getMensajeDian());
+            doc.setQrData(resp.getQrData());
+            doc.setXmlFirmado(resp.getXmlFirmado());
+            doc.setFechaValidacionDian(resp.getFechaValidacion());
+            // Tipo de compra y retenciones
+            doc.setTipoCompra(tipoCompra != null ? tipoCompra : "SERVICIOS");
+            BigDecimal rf = retencionFuente != null ? retencionFuente : BigDecimal.ZERO;
+            BigDecimal ri = retencionIva != null ? retencionIva : BigDecimal.ZERO;
+            BigDecimal rc = retencionIca != null ? retencionIca : BigDecimal.ZERO;
+            BigDecimal totalRet = rf.add(ri).add(rc);
+            doc.setRetencionFuente(rf);
+            doc.setRetencionIva(ri);
+            doc.setRetencionIca(rc);
+            doc.setTotalRetenciones(totalRet);
+            doc.setTotalPagar(req.getTotalFactura().subtract(totalRet));
+            documentoElectronicoRepository.save(doc);
+            log.info("DS persistido: {} - Retenciones: ${}, Neto: ${}",
+                    doc.getNumero(), totalRet, doc.getTotalPagar());
+            // Generar asiento contable
+            Long aId = generarAsientoDS(doc);
+            if (aId != null) {
+                doc.setAsientoId(aId);
+                documentoElectronicoRepository.save(doc);
+            }
+        } catch (Exception ex) {
+            log.warn("[DS] Error persistiendo (no crítico): {}", ex.getMessage());
+        }
+
+        return resp;
+    }
+
+    /** Construye el request base con datos del emisor + receptor desde una venta. */
+    private DianDocumentoRequestDTO construirRequestDianBase(Venta venta) {
+        DianDocumentoRequestDTO req = new DianDocumentoRequestDTO();
+        req.setFechaEmision(venta.getFechaEmision());
+        req.setFormaPago("1");
+
+        // Emisor
+        req.setEmisor(armarEmisorDesdeEmpresa());
+
+        // Receptor (cliente de la venta o consumidor final)
+        DianDocumentoRequestDTO.ReceptorDTO receptor = new DianDocumentoRequestDTO.ReceptorDTO();
+        Terceros cliente = venta.getCliente();
+        if (cliente != null) {
+            if (cliente.getTipoIdentificacion() != null) {
+                receptor.setTipoIdentificacion(String.valueOf(cliente.getTipoIdentificacion().getCodigo()));
+            }
+            receptor.setNumeroIdentificacion(cliente.getIdentificacion());
+            receptor.setDigitoVerificacion(cliente.getDv());
+            receptor.setNombre(cliente.getRazonSocial() != null && !cliente.getRazonSocial().isBlank()
+                    ? cliente.getRazonSocial()
+                    : cliente.getNombre1());
+            receptor.setDireccion(cliente.getDireccion());
+            receptor.setCorreo(cliente.getCorreo());
+        } else {
+            // Consumidor final (para TPOS sin cliente identificado)
+            receptor.setTipoIdentificacion("13");
+            receptor.setNumeroIdentificacion("222222222222");
+            receptor.setNombre("CONSUMIDOR FINAL");
+        }
+        req.setReceptor(receptor);
+
+        // Líneas
+        java.util.List<DianDocumentoRequestDTO.LineaDTO> lineas = new ArrayList<>();
+        AtomicInteger num = new AtomicInteger(1);
+        for (DetalleVenta d : venta.getItems()) {
+            DianDocumentoRequestDTO.LineaDTO l = new DianDocumentoRequestDTO.LineaDTO();
+            l.setNumero(num.getAndIncrement());
+            l.setCodigoProducto(d.getCodigoProducto());
+            l.setDescripcion(d.getDescripcionProducto());
+            l.setCantidad(d.getCantidad());
+            l.setPrecioUnitario(d.getPrecioUnitario());
+            l.setDescuento(d.getDescuento() != null ? d.getDescuento() : BigDecimal.ZERO);
+            l.setValorIva(d.getIva() != null ? d.getIva() : BigDecimal.ZERO);
+            l.setTotalLinea(d.getTotal() != null ? d.getTotal() : BigDecimal.ZERO);
+            lineas.add(l);
+        }
+        req.setLineas(lineas);
+
+        BigDecimal totalVenta = venta.getTotalVenta() != null ? venta.getTotalVenta() : BigDecimal.ZERO;
+        BigDecimal totalIva = venta.getIva() != null ? venta.getIva() : BigDecimal.ZERO;
+        req.setBaseGravable(totalVenta.subtract(totalIva).max(BigDecimal.ZERO));
+        req.setTotalIva(totalIva);
+        req.setTotalFactura(totalVenta);
+        req.setTotalDescuento(BigDecimal.ZERO);
+        req.setResolucionDian(dianConfig.getResolucion().getNumero());
+
+        return req;
+    }
+
+    private DianDocumentoRequestDTO.EmisorDTO armarEmisorDesdeEmpresa() {
+        DianDocumentoRequestDTO.EmisorDTO emisor = new DianDocumentoRequestDTO.EmisorDTO();
+        try {
+            Empresa empresa = empresaRepositori.findById((long) dianConfig.getEmpresaId()).orElse(null);
+            if (empresa != null) {
+                emisor.setTipoIdentificacion(empresa.getCodigotipoidentificacion() != null
+                        ? String.valueOf(empresa.getCodigotipoidentificacion().getCodigoTipoIdentificacion())
+                        : "31");
+                emisor.setNumeroIdentificacion(empresa.getNumeroidentificacion());
+                emisor.setDigitoVerificacion(empresa.getDigitoverificacion());
+                emisor.setRazonSocial(empresa.getRazonsocial() != null ? empresa.getRazonsocial() : empresa.getNombrecomercial());
+                emisor.setTelefono(empresa.getCelularempresa());
+                emisor.setCorreo(empresa.getCorreoempresa());
+                emisor.setPais("CO");
+            } else {
+                emisor.setTipoIdentificacion("31");
+                emisor.setRazonSocial("EMPRESA NO CONFIGURADA");
+            }
+        } catch (Exception e) {
+            log.warn("Error cargando empresa: {}", e.getMessage());
+        }
+        return emisor;
+    }
+
+    // Contadores simples en memoria + persistencia en archivo no — usamos system time como
+    // consecutivo fallback. En producción esto debe persistirse en comprobantes_contables.
+    private static final AtomicInteger TPOS_COUNTER = new AtomicInteger((int)(System.currentTimeMillis() / 10000) % 100000);
+    private static final AtomicInteger ND_COUNTER   = new AtomicInteger((int)(System.currentTimeMillis() / 10000) % 100000);
+    private static final AtomicInteger DS_COUNTER   = new AtomicInteger((int)(System.currentTimeMillis() / 10000) % 100000);
+    private Integer siguienteNumeroTpos() { return TPOS_COUNTER.incrementAndGet(); }
+    private Integer siguienteNumeroNd()   { return ND_COUNTER.incrementAndGet(); }
+    private Integer siguienteNumeroDs()   { return DS_COUNTER.incrementAndGet(); }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Asientos contables automáticos para TPOS / ND / DS
+    //  Try/catch defensivo: si falla, no rompe la persistencia del documento.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Asiento Tiquete POS (igual que una factura contado):
+     *   DR  1105 Caja general            por el total
+     *   CR  4135 Ingresos por ventas     por la base sin IVA
+     *   CR  240801 IVA generado          por el IVA
+     *   + asiento de costo: DR 6135 / CR 1435 por costo promedio
+     */
+    private Long generarAsientoTPOS(DocumentoElectronico doc, Venta venta) {
+        try {
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+            BigDecimal total = doc.getTotal();
+            BigDecimal iva = doc.getIva() != null ? doc.getIva() : BigDecimal.ZERO;
+            BigDecimal base = total.subtract(iva).max(BigDecimal.ZERO);
+
+            CuentaContable caja = configContable.cajaGeneral().orElse(null);
+            CuentaContable ingresos = configContable.ingresosVentas().orElse(null);
+            if (caja == null || ingresos == null) {
+                log.warn("[AsientoTPOS] Cuentas no configuradas (1105/4135). Asiento omitido.");
+                return null;
+            }
+            lineas.add(AsientoContableService.LineaDTO.debito(caja.getId(), total, "TPOS " + doc.getNumero()));
+            lineas.add(AsientoContableService.LineaDTO.credito(ingresos.getId(), base, "Ingreso TPOS " + doc.getNumero()));
+            if (iva.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable ivaGen = configContable.ivaGenerado().orElse(null);
+                if (ivaGen != null) {
+                    lineas.add(AsientoContableService.LineaDTO.credito(ivaGen.getId(), iva, "IVA TPOS " + doc.getNumero()));
+                }
+            }
+            var asiento = asientoService.generarAsiento(
+                    doc.getNumero(),
+                    doc.getFechaEmision(),
+                    "Tiquete POS " + doc.getNumero(),
+                    "TPOS",
+                    venta != null ? venta.getId() : null,
+                    null,
+                    lineas
+            );
+            return asiento != null ? asiento.getId() : null;
+        } catch (Exception e) {
+            log.warn("[AsientoTPOS] Error generando asiento (no crítico): {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Asiento Nota Débito (cargo adicional al cliente):
+     *   DR  1305 Clientes (CxC)         por el total
+     *   CR  4135 Ingresos               por la base
+     *   CR  240801 IVA generado         por el IVA
+     */
+    private Long generarAsientoND(DocumentoElectronico doc, Facturas facturaOriginal) {
+        try {
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+            BigDecimal total = doc.getTotal();
+            BigDecimal iva = doc.getIva() != null ? doc.getIva() : BigDecimal.ZERO;
+            BigDecimal base = total.subtract(iva).max(BigDecimal.ZERO);
+
+            CuentaContable cxc = configContable.cxcClientes().orElse(null);
+            CuentaContable ingresos = configContable.ingresosVentas().orElse(null);
+            if (cxc == null || ingresos == null) {
+                log.warn("[AsientoND] Cuentas no configuradas (1305/4135). Asiento omitido.");
+                return null;
+            }
+            lineas.add(AsientoContableService.LineaDTO.debito(cxc.getId(), total, "ND " + doc.getNumero()));
+            lineas.add(AsientoContableService.LineaDTO.credito(ingresos.getId(), base, "Cargo " + doc.getConcepto()));
+            if (iva.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable ivaGen = configContable.ivaGenerado().orElse(null);
+                if (ivaGen != null) {
+                    lineas.add(AsientoContableService.LineaDTO.credito(ivaGen.getId(), iva, "IVA ND " + doc.getNumero()));
+                }
+            }
+            var asiento = asientoService.generarAsiento(
+                    doc.getNumero(),
+                    doc.getFechaEmision(),
+                    "Nota Débito " + doc.getNumero() + (doc.getConcepto() != null ? " - " + doc.getConcepto() : ""),
+                    "ND",
+                    facturaOriginal != null ? Long.valueOf(facturaOriginal.getFacturaId()) : null,
+                    null,
+                    lineas
+            );
+            return asiento != null ? asiento.getId() : null;
+        } catch (Exception e) {
+            log.warn("[AsientoND] Error generando asiento (no crítico): {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Asiento Documento Soporte (compra a no facturador):
+     *   DR  5135 Gastos varios (o 1435 si es inventario)   por el total sin IVA
+     *   DR  240810 IVA descontable                          por el IVA (si aplica)
+     *   CR  1105 Caja general                               por el total
+     */
+    private Long generarAsientoDS(DocumentoElectronico doc) {
+        try {
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+            BigDecimal total = doc.getTotal();
+            BigDecimal iva = doc.getIva() != null ? doc.getIva() : BigDecimal.ZERO;
+            BigDecimal base = total.subtract(iva).max(BigDecimal.ZERO);
+
+            // Heurística: si el concepto menciona "compra", "mercancía", "inventario" → 1435; sino 5135
+            String conceptoLower = (doc.getConcepto() != null ? doc.getConcepto().toLowerCase() : "");
+            boolean esInventario = conceptoLower.contains("mercanc") || conceptoLower.contains("inventario")
+                                || conceptoLower.contains("producto");
+
+            CuentaContable destino = esInventario
+                    ? configContable.inventarios().orElse(null)
+                    : configContable.gastosGenerales().orElse(null);
+            CuentaContable caja = configContable.cajaGeneral().orElse(null);
+            if (destino == null || caja == null) {
+                log.warn("[AsientoDS] Cuentas no configuradas. Asiento omitido.");
+                return null;
+            }
+            AsientoContableService.LineaDTO debitoLinea = AsientoContableService.LineaDTO
+                    .debito(destino.getId(), base, "DS " + doc.getNumero() + " - " + (doc.getConcepto() != null ? doc.getConcepto() : ""));
+            if (doc.getTerceroIdentificacion() != null) {
+                try {
+                    debitoLinea.conTercero(Integer.parseInt(doc.getTerceroIdentificacion()), doc.getTerceroNombre());
+                } catch (NumberFormatException nfe) {
+                    // ID no numérico, ignoramos terceroId
+                }
+            }
+            lineas.add(debitoLinea);
+            if (iva.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable ivaDesc = configContable.ivaDescontable().orElse(null);
+                if (ivaDesc != null) {
+                    lineas.add(AsientoContableService.LineaDTO.debito(ivaDesc.getId(), iva, "IVA DS " + doc.getNumero()));
+                }
+            }
+            AsientoContableService.LineaDTO creditoLinea = AsientoContableService.LineaDTO
+                    .credito(caja.getId(), total, "Pago DS " + doc.getNumero());
+            lineas.add(creditoLinea);
+
+            var asiento = asientoService.generarAsiento(
+                    doc.getNumero(),
+                    doc.getFechaEmision(),
+                    "Documento Soporte " + doc.getNumero() + " - " + (doc.getTerceroNombre() != null ? doc.getTerceroNombre() : ""),
+                    "DS",
+                    doc.getId(),
+                    null,
+                    lineas
+            );
+            return asiento != null ? asiento.getId() : null;
+        } catch (Exception e) {
+            log.warn("[AsientoDS] Error generando asiento (no crítico): {}", e.getMessage());
+            return null;
+        }
     }
 }
 

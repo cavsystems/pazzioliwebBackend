@@ -30,6 +30,13 @@ public class DevolucionDTO {
     private BigDecimal totalNeto;
 
     private List<DetalleDevolucionDTO> items;
+
+    /** ── Datos de la Nota Crédito Electrónica generada ante DIAN ── */
+    private String numeroNc;        // ej NC-1
+    private String cufeNc;          // CUDE
+    private String estadoDianNc;    // AUTORIZADA / RECHAZADA / SIMULADA / null
+    private String mensajeDianNc;
+    private String qrDataNc;
 }
 
 

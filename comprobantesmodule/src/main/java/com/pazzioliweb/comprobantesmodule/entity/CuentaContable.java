@@ -1,5 +1,6 @@
 package com.pazzioliweb.comprobantesmodule.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -8,6 +9,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "cuentas_contables")
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class CuentaContable {
 
     @Id
@@ -33,6 +35,12 @@ public class CuentaContable {
 
     @Column(name = "es_movimiento")
     private Boolean esMovimiento = true;
+
+    /** Indica si los asientos contra esta cuenta deben llevar un tercero asignado
+     *  (CxC, CxP, anticipos, retenciones). Si es true, el formulario de asiento
+     *  manual exige seleccionar tercero al usar esta cuenta. */
+    @Column(name = "requiere_tercero", nullable = false)
+    private Boolean requiereTercero = false;
 
     @Column(nullable = false, length = 15)
     private String estado = "ACTIVO";

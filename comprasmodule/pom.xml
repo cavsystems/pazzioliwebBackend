@@ -43,6 +43,13 @@
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
+        <!-- Dependencia del módulo de Métodos de Pago (para procesar pagos en órdenes de compra) -->
+        <dependency>
+            <groupId>com.pazzioliweb</groupId>
+            <artifactId>metodospagomodule</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>

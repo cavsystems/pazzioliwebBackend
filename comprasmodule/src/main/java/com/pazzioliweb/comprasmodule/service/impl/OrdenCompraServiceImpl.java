@@ -4,6 +4,7 @@ import com.pazzioliweb.comprasmodule.client.ProductoClient;
 import com.pazzioliweb.comprasmodule.dtos.*;
 import com.pazzioliweb.comprasmodule.entity.DetalleOrdenCompra;
 import com.pazzioliweb.comprasmodule.entity.OrdenCompra;
+import com.pazzioliweb.comprasmodule.entity.OrdenCompraMetodoPago;
 import com.pazzioliweb.comprasmodule.exception.OrdenCompraException;
 import com.pazzioliweb.comprasmodule.mapper.OrdenCompraMapper;
 import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
@@ -49,6 +50,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final ConfiguracionContableService configContable;
     private final ConfiguracionComprasService configCompras;
     private final ComprobanteContableRepository comprobanteRepository;
+    private final com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository metodosPagoRepository;
 
     @Autowired
     public OrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
@@ -62,7 +64,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                                   AsientoContableService asientoService,
                                   ConfiguracionContableService configContable,
                                   ConfiguracionComprasService configCompras,
-                                  ComprobanteContableRepository comprobanteRepository) {
+                                  ComprobanteContableRepository comprobanteRepository,
+                                  com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository metodosPagoRepository) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.ordenCompraMapper = ordenCompraMapper;
         this.productoService = productoService;
@@ -75,6 +78,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         this.configContable = configContable;
         this.configCompras = configCompras;
         this.comprobanteRepository = comprobanteRepository;
+        this.metodosPagoRepository = metodosPagoRepository;
     }
 
     /** Username autenticado actual; "SYSTEM" si no hay sesión válida. */
@@ -303,10 +307,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // 4. Guardar la orden
         OrdenCompra ordenGuardada = ordenCompraRepository.save(ordenCompra);
 
-        // 5. Crear cuenta por pagar
-        crearCuentaPorPagarDesdeRequest(ordenGuardada, request);
+        // 5. Procesar métodos de pago (si vienen) — pueden ser parciales
+        BigDecimal totalPagado = procesarMetodosPago(ordenGuardada, request);
 
-        // 6. Generar asiento contable
+        // 6. Crear cuenta por pagar (solo por el saldo no pagado)
+        crearCuentaPorPagarDesdeRequest(ordenGuardada, request, totalPagado);
+
+        // 7. Generar asiento contable (toma en cuenta los métodos de pago para los créditos)
         generarAsientoCompra(ordenGuardada, request);
 
         return ordenCompraMapper.toDto(ordenGuardada);
@@ -349,18 +356,40 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 }
             }
 
-            // CRÉDITO CxP
-            CuentaContable cxp = configContable.cxpProveedores().orElse(null);
-            if (cxp == null) {
-                System.out.println("[AsientoCompra] Cuenta 2205 Proveedores no configurada. Asiento omitido.");
-                return;
+            // CRÉDITO — divide entre métodos de pago (lo pagado) y CxP (saldo a crédito)
+            BigDecimal totalPagado = BigDecimal.ZERO;
+            if (orden.getMetodosPago() != null) {
+                for (OrdenCompraMetodoPago mp : orden.getMetodosPago()) {
+                    BigDecimal monto = mp.getMonto() != null ? mp.getMonto() : BigDecimal.ZERO;
+                    if (monto.compareTo(BigDecimal.ZERO) <= 0) continue;
+                    // Resolver cuenta del método (banco si tiene cuenta bancaria, sino cuenta directa, sino caja)
+                    CuentaContable ctaMetodo = resolverCuentaMetodoPagoCompra(mp.getMetodoPago());
+                    if (ctaMetodo == null) {
+                        System.out.println("[AsientoCompra] Método '" + mp.getMetodoPago().getDescripcion() + "' sin cuenta. Se asume caja.");
+                        ctaMetodo = configContable.cajaGeneral().orElse(null);
+                        if (ctaMetodo == null) continue;
+                    }
+                    lineas.add(AsientoContableService.LineaDTO.credito(ctaMetodo.getId(), monto,
+                            "Pago " + mp.getMetodoPago().getDescripcion() + " compra " + orden.getNumeroOrden()));
+                    totalPagado = totalPagado.add(monto);
+                }
             }
-            AsientoContableService.LineaDTO creditoLinea = AsientoContableService.LineaDTO
-                    .credito(cxp.getId(), total, "CxP compra " + orden.getNumeroOrden());
-            if (request.getProvedor() != null && request.getProvedor().getTerceroId() != null) {
-                creditoLinea.conTercero(request.getProvedor().getTerceroId(), request.getProvedor().getNombre());
+
+            // CRÉDITO CxP solo por el saldo pendiente
+            BigDecimal saldoCxP = total.subtract(totalPagado);
+            if (saldoCxP.compareTo(new BigDecimal("0.01")) > 0) {
+                CuentaContable cxp = configContable.cxpProveedores().orElse(null);
+                if (cxp == null) {
+                    System.out.println("[AsientoCompra] Cuenta 2205 Proveedores no configurada. Asiento omitido.");
+                    return;
+                }
+                AsientoContableService.LineaDTO creditoLinea = AsientoContableService.LineaDTO
+                        .credito(cxp.getId(), saldoCxP, "CxP compra " + orden.getNumeroOrden());
+                if (request.getProvedor() != null && request.getProvedor().getTerceroId() != null) {
+                    creditoLinea.conTercero(request.getProvedor().getTerceroId(), request.getProvedor().getNombre());
+                }
+                lineas.add(creditoLinea);
             }
-            lineas.add(creditoLinea);
 
             String tipo = orden.getComprobante() != null
                     ? orden.getComprobante().getTipoMovimiento().name()
@@ -378,6 +407,25 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         } catch (Exception ex) {
             System.out.println("[AsientoCompra] Error generando asiento (no crítico): " + ex.getMessage());
         }
+    }
+
+    /**
+     * Resuelve la cuenta contable de un método de pago en una compra.
+     * Prioridad: cuenta bancaria → cuenta del método → caja como fallback.
+     */
+    private CuentaContable resolverCuentaMetodoPagoCompra(com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo) {
+        if (metodo == null) return null;
+        try {
+            if (metodo.getCuentaBancaria() != null && metodo.getCuentaBancaria().getCuentaContable() != null) {
+                return metodo.getCuentaBancaria().getCuentaContable();
+            }
+            if (metodo.getCuentaContable() != null) {
+                return metodo.getCuentaContable();
+            }
+        } catch (Exception ex) {
+            System.out.println("[Compra] Error resolviendo cuenta de método de pago: " + ex.getMessage());
+        }
+        return null;
     }
 
     private void procesarProductosDesdeRequest(List<RealizarOrdenRequestDTO.ProductoRequestPayloadDTO> products) {
@@ -573,13 +621,58 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         return detalles;
     }
 
-    private void crearCuentaPorPagarDesdeRequest(OrdenCompra orden, RealizarOrdenRequestDTO request) {
+    /**
+     * Persiste los métodos de pago de la orden (si vienen en el request).
+     * Devuelve la suma total pagada, que se usa para calcular el saldo pendiente de CxP.
+     */
+    private BigDecimal procesarMetodosPago(OrdenCompra orden, RealizarOrdenRequestDTO request) {
+        BigDecimal totalPagado = BigDecimal.ZERO;
+        if (request.getMetodosPago() == null || request.getMetodosPago().isEmpty()) {
+            return totalPagado;
+        }
+        java.util.List<OrdenCompraMetodoPago> persistidos = new java.util.ArrayList<>();
+        for (RealizarOrdenRequestDTO.MetodoPagoCompraDTO mpDto : request.getMetodosPago()) {
+            if (mpDto.getMetodoPagoId() == null || mpDto.getMonto() == null) continue;
+            if (mpDto.getMonto().compareTo(BigDecimal.ZERO) <= 0) continue;
+            try {
+                com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo =
+                        metodosPagoRepository.findById(mpDto.getMetodoPagoId()).orElse(null);
+                if (metodo == null) continue;
+                OrdenCompraMetodoPago mp = new OrdenCompraMetodoPago();
+                mp.setOrdenCompra(orden);
+                mp.setMetodoPago(metodo);
+                mp.setMonto(mpDto.getMonto());
+                mp.setReferencia(mpDto.getReferencia());
+                persistidos.add(mp);
+                totalPagado = totalPagado.add(mpDto.getMonto());
+            } catch (Exception ex) {
+                System.out.println("[OrdenCompra] Error procesando método de pago: " + ex.getMessage());
+            }
+        }
+        orden.setMetodosPago(persistidos);
+        ordenCompraRepository.save(orden);
+        return totalPagado;
+    }
+
+    /**
+     * Crea la CxP solo por el saldo NO pagado (totalOrden − totalPagado).
+     * Si totalPagado >= totalOrden, NO se crea CxP (todo pagado de contado).
+     */
+    private void crearCuentaPorPagarDesdeRequest(OrdenCompra orden, RealizarOrdenRequestDTO request,
+                                                  BigDecimal totalPagado) {
+        BigDecimal saldoPendiente = orden.getTotalOrdenCompra()
+                .subtract(totalPagado != null ? totalPagado : BigDecimal.ZERO);
+        if (saldoPendiente.compareTo(new BigDecimal("0.01")) <= 0) {
+            // Pagado completo de contado, no se crea CxP
+            return;
+        }
+
         CuentaPorPagarDTO cuenta = new CuentaPorPagarDTO();
         cuenta.setNit(request.getProvedor().getIdentificacion());
         cuenta.setNombre(request.getProvedor().getNombre());
         cuenta.setNumeroFactura(orden.getNumeroOrden());
         cuenta.setFechaVencimiento(orden.getFechaEntregaEsperada());
-        cuenta.setValorNeto(orden.getTotalOrdenCompra());
+        cuenta.setValorNeto(saldoPendiente);  // solo el saldo no pagado
         cuenta.setEstado("PENDIENTE");
         cuenta.setProveedorId(request.getProvedor().getTerceroId());
 

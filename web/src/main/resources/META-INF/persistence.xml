@@ -81,9 +81,11 @@
         <class>com.pazzioliweb.facturacionmodule.entity.Facturas</class>
         <class>com.pazzioliweb.facturacionmodule.entity.TipoTotalesFacturas</class>
         <class>com.pazzioliweb.facturacionmodule.entity.MetodosPagoFacturas</class>
+        <class>com.pazzioliweb.facturacionmodule.entity.DocumentoElectronico</class>
         <!-- Compras -->
         <class>com.pazzioliweb.comprasmodule.entity.OrdenCompra</class>
         <class>com.pazzioliweb.comprasmodule.entity.DetalleOrdenCompra</class>
+        <class>com.pazzioliweb.comprasmodule.entity.OrdenCompraMetodoPago</class>
         <class>com.pazzioliweb.comprasmodule.entity.CuentaPorPagar</class>
         <class>com.pazzioliweb.comprasmodule.entity.Legalizacion</class>
         <class>com.pazzioliweb.comprasmodule.entity.ConfiguracionCompras</class>

@@ -81,5 +81,56 @@ public class FacturacionElectronicaController {
                 .header("Content-Disposition", "attachment; filename=factura-" + facturaId + ".xml")
                 .body(new byte[0]); // Se completará cuando se tenga el XML
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Documentos equivalentes DIAN
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Genera un Tiquete POS Electrónico (TPOS) para una venta.
+     * POST /api/facturacion-electronica/tiquete-pos/{ventaId}
+     */
+    @PostMapping("/tiquete-pos/{ventaId}")
+    public ResponseEntity<com.pazzioliweb.facturacionmodule.dtos.DianDocumentoResponseDTO> generarTPOS(@PathVariable Long ventaId) {
+        return ResponseEntity.ok(facturacionService.generarTiquetePOS(ventaId));
+    }
+
+    /**
+     * Genera una Nota Débito Electrónica (ND) para una factura existente.
+     * POST /api/facturacion-electronica/nota-debito
+     * Body: { facturaId, codigoConcepto, razon, monto, ivaMonto }
+     */
+    @PostMapping("/nota-debito")
+    public ResponseEntity<com.pazzioliweb.facturacionmodule.dtos.DianDocumentoResponseDTO> generarND(@RequestBody Map<String, Object> body) {
+        Integer facturaId = ((Number) body.get("facturaId")).intValue();
+        Integer concepto = body.get("codigoConcepto") != null ? ((Number) body.get("codigoConcepto")).intValue() : 4;
+        String razon = body.get("razon") != null ? body.get("razon").toString() : "Cargo adicional";
+        java.math.BigDecimal monto = new java.math.BigDecimal(body.get("monto").toString());
+        java.math.BigDecimal iva = body.get("ivaMonto") != null
+                ? new java.math.BigDecimal(body.get("ivaMonto").toString())
+                : java.math.BigDecimal.ZERO;
+        return ResponseEntity.ok(facturacionService.generarNotaDebito(facturaId, concepto, razon, monto, iva));
+    }
+
+    /**
+     * Genera un Documento Soporte (DS) para una compra a no facturador.
+     * POST /api/facturacion-electronica/documento-soporte
+     * Body: { proveedorIdentificacion, proveedorNombre, base, iva, total, concepto }
+     */
+    @PostMapping("/documento-soporte")
+    public ResponseEntity<com.pazzioliweb.facturacionmodule.dtos.DianDocumentoResponseDTO> generarDS(@RequestBody Map<String, Object> body) {
+        String id = (String) body.get("proveedorIdentificacion");
+        String nom = (String) body.get("proveedorNombre");
+        java.math.BigDecimal base = new java.math.BigDecimal(body.getOrDefault("base", "0").toString());
+        java.math.BigDecimal iva = new java.math.BigDecimal(body.getOrDefault("iva", "0").toString());
+        java.math.BigDecimal total = new java.math.BigDecimal(body.getOrDefault("total", "0").toString());
+        String concepto = (String) body.getOrDefault("concepto", "Compra a no facturador");
+        String tipoCompra = (String) body.getOrDefault("tipoCompra", "SERVICIOS");
+        java.math.BigDecimal retFte = new java.math.BigDecimal(body.getOrDefault("retencionFuente", "0").toString());
+        java.math.BigDecimal retIva = new java.math.BigDecimal(body.getOrDefault("retencionIva", "0").toString());
+        java.math.BigDecimal retIca = new java.math.BigDecimal(body.getOrDefault("retencionIca", "0").toString());
+        return ResponseEntity.ok(facturacionService.generarDocumentoSoporte(
+                id, nom, base, iva, total, concepto, tipoCompra, retFte, retIva, retIca));
+    }
 }
 

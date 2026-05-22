@@ -1,5 +1,6 @@
 package com.pazzioliweb.metodospagomodule.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "cuentas_bancarias")
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class CuentaBancaria {
 
     @Id
