@@ -95,7 +95,17 @@ public class SecurityConfig {
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		config.addAllowedOriginPattern("http://localhost:5173");      // O usa "*" con cuidado
+		// Desarrollo
+		config.addAllowedOriginPattern("http://localhost:5173");
+		config.addAllowedOriginPattern("http://localhost:8080");
+		config.addAllowedOriginPattern("http://localhost");
+		// Producción — red local de la oficina (intranet 192.168.x.x y 10.x.x.x)
+		config.addAllowedOriginPattern("http://192.168.*.*:8080");
+		config.addAllowedOriginPattern("http://192.168.*.*");
+		config.addAllowedOriginPattern("http://10.*.*.*:8080");
+		config.addAllowedOriginPattern("http://10.*.*.*");
+		// Si usas un dominio o nombre de host específico, agrégalo aquí:
+		// config.addAllowedOriginPattern("http://servidor-pazzioli:8080");
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
 		config.setAllowedHeaders(List.of("*"));
 		config.setAllowCredentials(true);
