@@ -11,8 +11,11 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
   @Override
   public void registerStompEndpoints(StompEndpointRegistry registry) {
+    // "*" en setAllowedOriginPatterns permite cualquier origen y mantiene
+    // soporte para credenciales (cookies). Suficiente para intranet.
+    // Si en el futuro lo expones a internet, restringe a dominios específicos.
     registry.addEndpoint("/ws")
-            .setAllowedOrigins("http://localhost:5173")
+            .setAllowedOriginPatterns("*")
             .withSockJS();
   }
 
