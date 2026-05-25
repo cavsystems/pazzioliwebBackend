@@ -82,23 +82,22 @@ public class AuthController {
 
                 Usuario usuario = optional.get();
                 System.out.println("Usuario encontrado: " + usuario.getUsuario());
-                System.out.println("Contraseña ingresada: " + request.password);
-                System.out.println("Contraseña guardada en BD: " + usuario.getContrasena());
-                
+
                 boolean contrasenaValida = verificarContrasena(request.password, usuario.getContrasena());
-                System.out.println("¿Contraseña válida?: " + contrasenaValida);
                 
                 if (contrasenaValida) {
                     Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
 
-                    Sesiones sesion = optionalsession.get();
-                    sesion.setEstado("INACTIVO");
-                    sessionRepository.save(sesion);
+                    if (optionalsession.isPresent()) {
+                        Sesiones sesion = optionalsession.get();
+                        sesion.setEstado("INACTIVO");
+                        sessionRepository.save(sesion);
+                    }
 
                     Optional<Sesiones> sesioncodigo = sessionRepository.findTopByOrderByCodigoDesc();
-                    String token = jwtUtil.generateToken(usuario, request.db.trim(), sesioncodigo.get().getCodigo() + 1);
+                    long siguienteCodigo = sesioncodigo.isPresent() ? sesioncodigo.get().getCodigo() + 1 : 1;
+                    String token = jwtUtil.generateToken(usuario, request.db.trim(), siguienteCodigo);
                     crearSesion(usuario.getCodigo(), token);
-                    System.out.println("TOKEN => [" + token + "]");
                     Claims claims = jwtUtil.extraerClaims(token);
                     System.out.println("token creado obtener claims2");
                     DatosSesiones datos = redisTemplate.opsForValue().get(claims.get("idsecion", String.class));
@@ -112,7 +111,6 @@ public class AuthController {
                     jwtCookie.setSecure(false);
                     jwtCookie.setPath("/");
                     jwtCookie.setMaxAge(24 * 60 * 60);
-                    jwtCookie.setDomain("localhost");
                     servletResponse.addCookie(jwtCookie);
                     response.put("success", true);
                     response.put("sesion", datos);
@@ -133,10 +131,12 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             }
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "Error interno: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
         }
-
-return  null;
     }
 
 
@@ -154,27 +154,35 @@ return  null;
 
             Usuario usuario = optional.get();
             System.out.println("Usuario encontrado: " + usuario.getUsuario());
-            System.out.println("Contraseña ingresada: " + request.password);
-            System.out.println("Contraseña guardada en BD: " + usuario.getContrasena());
-            
+
             boolean contrasenaValida = verificarContrasena(request.password, usuario.getContrasena());
-            System.out.println("¿Contraseña válida?: " + contrasenaValida);
             
             if (contrasenaValida) {
                 Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
 
                 if (optionalsession.isPresent()) {
-                    System.out.println("sesion activa");
                     Sesiones sesion = optionalsession.get();
-                    LocalDateTime fechaFin = sesion.getFechainicio();
-                    DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-                    System.out.println("Fecha y hora de fin: " + fechaFin.format(fmt));
+                    boolean sesionViva = false;
+                    try {
+                        if (sesion.getToken() != null && jwtUtil.validarToken(sesion.getToken())) {
+                            String idsecionPrev = jwtUtil.extraerClaims(sesion.getToken()).get("idsecion", String.class);
+                            sesionViva = idsecionPrev != null && redisTemplate.hasKey(idsecionPrev);
+                        }
+                    } catch (Exception ignored) {
+                        sesionViva = false;
+                    }
 
-                    response.put("success", false);
-                    response.put("Mensaje", "Hay una sesión activa desea serrala");
-                    response.put("Activa", true);
+                    if (sesionViva) {
+                        System.out.println("sesion activa");
+                        response.put("success", false);
+                        response.put("Mensaje", "Hay una sesión activa desea cerrarla");
+                        response.put("Activa", true);
+                        return ResponseEntity.ok().body(response);
+                    }
 
-                    return ResponseEntity.ok().body(response);
+                    // Sesión huérfana en BD (token expirado o Redis sin la clave): la cerramos silenciosamente.
+                    sesion.setEstado("INACTIVO");
+                    sessionRepository.save(sesion);
                 }
 
                 Optional<Sesiones> sesioncodigo = sessionRepository.findTopByOrderByCodigoDesc();
@@ -192,7 +200,6 @@ return  null;
                 jwtCookie.setSecure(false);
                 jwtCookie.setPath("/");
                 jwtCookie.setMaxAge(24 * 60 * 60);
-                jwtCookie.setDomain("localhost");
                 servletResponse.addCookie(jwtCookie);
                 response.put("success", true);
                 response.put("sesion", datos);
@@ -326,7 +333,6 @@ return  null;
                     jwtCookie.setSecure(false);
                     jwtCookie.setPath("/");
                     jwtCookie.setMaxAge(0);
-                    jwtCookie.setDomain("localhost");
                     servletResponse.addCookie(jwtCookie);
                 }
 
