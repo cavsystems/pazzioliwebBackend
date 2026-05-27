@@ -211,17 +211,28 @@ public class UblNotaGenerator {
             customerParty.appendChild(crearPartyReceptor(doc, request.getReceptor()));
             root.appendChild(customerParty);
 
-            // ── TaxTotal ──
+            // ── TaxTotal: tasa IVA dinámica (no hardcoded 19%) ──
             Element taxTotal = doc.createElementNS(NS_CAC, "cac:TaxTotal");
             addAmountElement(doc, taxTotal, "cbc:TaxAmount", request.getTotalIva());
             Element taxSubtotal = doc.createElementNS(NS_CAC, "cac:TaxSubtotal");
             addAmountElement(doc, taxSubtotal, "cbc:TaxableAmount", request.getBaseGravable());
             addAmountElement(doc, taxSubtotal, "cbc:TaxAmount", request.getTotalIva());
             Element taxCategory = doc.createElementNS(NS_CAC, "cac:TaxCategory");
-            addCbcElement(doc, taxCategory, "cbc:Percent", "19.00");
+            BigDecimal baseIva = request.getBaseGravable() != null ? request.getBaseGravable() : BigDecimal.ZERO;
+            BigDecimal montoIva = request.getTotalIva() != null ? request.getTotalIva() : BigDecimal.ZERO;
+            String tasaIvaNota = "0.00";
+            if (baseIva.compareTo(BigDecimal.ZERO) > 0) {
+                tasaIvaNota = montoIva.multiply(BigDecimal.valueOf(100))
+                        .divide(baseIva, 2, java.math.RoundingMode.HALF_UP).toPlainString();
+            }
+            addCbcElement(doc, taxCategory, "cbc:Percent", tasaIvaNota);
             Element taxScheme = doc.createElementNS(NS_CAC, "cac:TaxScheme");
-            addCbcElement(doc, taxScheme, "cbc:ID", "01");
-            addCbcElement(doc, taxScheme, "cbc:Name", "IVA");
+            // Régimen: si la empresa no es responsable de IVA → schemeID "ZZ".
+            boolean respIva = request.getEmisor() == null
+                    || request.getEmisor().getResponsableIva() == null
+                    || Boolean.TRUE.equals(request.getEmisor().getResponsableIva());
+            addCbcElement(doc, taxScheme, "cbc:ID", respIva ? "01" : "ZZ");
+            addCbcElement(doc, taxScheme, "cbc:Name", respIva ? "IVA" : "No aplica");
             taxCategory.appendChild(taxScheme);
             taxSubtotal.appendChild(taxCategory);
             taxTotal.appendChild(taxSubtotal);
@@ -251,9 +262,8 @@ public class UblNotaGenerator {
     private Element crearLineaNota(Document doc, DianDocumentoRequestDTO.LineaDTO linea, String tagLine) {
         Element l = doc.createElementNS(NS_CAC, "cac:" + tagLine);
         addCbcElement(doc, l, "cbc:ID", String.valueOf(linea.getNumero()));
-        Element qty = doc.createElementNS(NS_CBC, "cbc:CreditedQuantity".equals(tagLine + "dQuantity")
-                ? "cbc:CreditedQuantity"
-                : (tagLine.equals("CreditNoteLine") ? "cbc:CreditedQuantity" : "cbc:DebitedQuantity"));
+        String qtyTag = "CreditNoteLine".equals(tagLine) ? "cbc:CreditedQuantity" : "cbc:DebitedQuantity";
+        Element qty = doc.createElementNS(NS_CBC, qtyTag);
         qty.setAttribute("unitCode", "94");
         qty.setTextContent(String.valueOf(linea.getCantidad()));
         l.appendChild(qty);
@@ -290,6 +300,10 @@ public class UblNotaGenerator {
         Element pls = doc.createElementNS(NS_CAC, "cac:PartyLegalEntity");
         addCbcElement(doc, pls, "cbc:RegistrationName", em != null ? safe(em.getRazonSocial()) : "");
         addCbcElement(doc, pls, "cbc:CompanyID", em != null ? safe(em.getNumeroIdentificacion()) : "");
+        // cbc:TaxLevelCode obligatorio DIAN.
+        String emRespFiscal = em != null && em.getResponsabilidadFiscal() != null && !em.getResponsabilidadFiscal().isBlank()
+                ? em.getResponsabilidadFiscal() : "R-99-PN";
+        addCbcElement(doc, pls, "cbc:TaxLevelCode", emRespFiscal);
         party.appendChild(pls);
         return party;
     }
@@ -303,6 +317,9 @@ public class UblNotaGenerator {
         Element pls = doc.createElementNS(NS_CAC, "cac:PartyLegalEntity");
         addCbcElement(doc, pls, "cbc:RegistrationName", rc != null ? safe(rc.getNombre()) : "");
         addCbcElement(doc, pls, "cbc:CompanyID", rc != null ? safe(rc.getNumeroIdentificacion()) : "");
+        String rcRespFiscal = rc != null && rc.getResponsabilidadFiscal() != null && !rc.getResponsabilidadFiscal().isBlank()
+                ? rc.getResponsabilidadFiscal() : "R-99-PN";
+        addCbcElement(doc, pls, "cbc:TaxLevelCode", rcRespFiscal);
         party.appendChild(pls);
         return party;
     }

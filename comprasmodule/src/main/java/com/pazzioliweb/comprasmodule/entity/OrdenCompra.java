@@ -53,6 +53,19 @@ public class OrdenCompra {
     @Column(name = "total_orden_compra", nullable = false)
     private BigDecimal totalOrdenCompra = BigDecimal.ZERO;
 
+    // ── Retenciones aplicadas al proveedor (cuando la empresa es agente retenedor) ──
+    /** Retención en la fuente (cuenta PUC 236505). */
+    @Column(name = "retefuente", nullable = false)
+    private BigDecimal retefuente = BigDecimal.ZERO;
+
+    /** Retención de IVA (cuenta PUC 236540). */
+    @Column(name = "reteiva", nullable = false)
+    private BigDecimal reteiva = BigDecimal.ZERO;
+
+    /** Retención de ICA (cuenta PUC 236570). */
+    @Column(name = "reteica", nullable = false)
+    private BigDecimal reteica = BigDecimal.ZERO;
+
     @OneToMany(mappedBy = "ordenCompra", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleOrdenCompra> items;
 

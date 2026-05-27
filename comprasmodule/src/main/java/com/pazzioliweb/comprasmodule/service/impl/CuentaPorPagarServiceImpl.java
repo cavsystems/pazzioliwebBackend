@@ -81,6 +81,24 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
         }
     }
 
+    /**
+     * Anula la CxP en lugar de borrarla — preserva trazabilidad para auditoría.
+     * Usar este método cuando se anula una orden de compra: la CxP queda con
+     * saldo 0 y estado ANULADA, manteniendo el histórico para reportes DIAN.
+     */
+    @Override
+    @Transactional
+    public void anularPorNumeroFactura(String numeroFactura, String motivo) {
+        List<CuentaPorPagar> cuentas = cuentaPorPagarRepository.findByNumeroFactura(numeroFactura);
+        for (CuentaPorPagar cuenta : cuentas) {
+            if (!"ANULADA".equals(cuenta.getEstado())) {
+                cuenta.setEstado("ANULADA");
+                cuenta.setSaldo(java.math.BigDecimal.ZERO);
+                cuentaPorPagarRepository.save(cuenta);
+            }
+        }
+    }
+
     @Override
     @Transactional
     public void actualizarNumeroFacturaProveedor(String numeroFactura, String numeroFacturaProveedor) {

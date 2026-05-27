@@ -3,7 +3,9 @@ package com.pazzioliweb.comprobantesmodule.controller;
 import com.pazzioliweb.comprobantesmodule.dtos.ComprobanteContableCreateDTO;
 import com.pazzioliweb.comprobantesmodule.dtos.ComprobanteContableDTO;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.comprobantesmodule.service.ComprobanteContableService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,9 +19,29 @@ import java.util.stream.Collectors;
 public class ComprobanteContableController {
 
     private final ComprobanteContableService service;
+    @Autowired
+    private AsignacionComprobanteService asignacionService;
 
     public ComprobanteContableController(ComprobanteContableService service) {
         this.service = service;
+    }
+
+    /**
+     * Devuelve alertas de salud de la resolución DIAN para los comprobantes activos
+     * de tipos DIAN (FC, VC, NC, ND, TPOS, DS). Permite al frontend mostrar avisos
+     * de "vence en X días" o "consecutivos restantes" sin tener que emitir un doc.
+     */
+    @GetMapping("/alertas-resolucion")
+    public ResponseEntity<List<AsignacionComprobanteService.AlertaResolucion>> alertasResolucion() {
+        List<AsignacionComprobanteService.AlertaResolucion> alertas = service.listarActivos().stream()
+                .map(c -> asignacionService.inspeccionarResolucion(c.getId()))
+                .filter(java.util.Objects::nonNull)
+                .filter(a -> Boolean.TRUE.equals(a.vencida)
+                          || Boolean.TRUE.equals(a.rangoAgotado)
+                          || (a.diasParaVencer != null && a.diasParaVencer <= 30)
+                          || (a.consecutivosRestantes != null && a.consecutivosRestantes <= 500))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(alertas);
     }
 
     @GetMapping
@@ -39,13 +61,19 @@ public class ComprobanteContableController {
     }
 
     /**
-     * Busca el comprobante activo para una (bodega, tipo).
-     * Usado al cambiar de bodega en una venta/compra para auto-seleccionar el comprobante.
+     * Busca el comprobante activo para una (bodega, tipo). Si se pasa cajeroId,
+     * además valida que ese cajero esté asignado al comprobante encontrado.
+     * Estados posibles:
+     *   - configurado: false  → no hay comprobante para la bodega+tipo
+     *   - configurado: true, cajeroAsignado: false → el comprobante existe pero el cajero
+     *     que está operando no está en su lista. La venta fallará al guardarse.
+     *   - configurado: true, cajeroAsignado: true → todo en orden.
      */
     @GetMapping("/por-bodega-tipo")
     public ResponseEntity<Map<String, Object>> porBodegaYTipo(
             @RequestParam Integer bodegaId,
-            @RequestParam String tipo) {
+            @RequestParam String tipo,
+            @RequestParam(required = false) Integer cajeroId) {
         return service.listarActivos().stream()
                 .filter(c -> bodegaId.equals(c.getBodegaId())
                           && tipo.equalsIgnoreCase(c.getTipoMovimiento()))
@@ -58,6 +86,18 @@ public class ComprobanteContableController {
                     body.put("siguienteConsecutivo", c.getSiguienteConsecutivo());
                     body.put("resolucionDian", c.getResolucionDian());
                     body.put("numeroPreview", c.getPrefijo() + "-" + c.getSiguienteConsecutivo());
+
+                    // Validación de cajero (si el frontend mandó el id)
+                    if (cajeroId != null) {
+                        boolean asignado = c.getCajeroIds() != null
+                                && c.getCajeroIds().contains(cajeroId);
+                        body.put("cajeroAsignado", asignado);
+                        if (!asignado) {
+                            body.put("warningCajero", "Tu usuario/cajero no está asignado a este comprobante. " +
+                                    "La venta no podrá generar consecutivo. " +
+                                    "Pídele al administrador que te agregue al comprobante '" + c.getPrefijo() + "'.");
+                        }
+                    }
                     return ResponseEntity.ok(body);
                 })
                 .orElseGet(() -> {

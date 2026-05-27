@@ -20,6 +20,14 @@ public class DianDocumentoRequestDTO {
     private Integer consecutivo;
     private String resolucionDian;
 
+    // ── Resolución DIAN del comprobante (debe coincidir con la asignada) ──
+    /** Clave técnica DIAN específica del comprobante (no la global de DianConfig). */
+    private String claveTecnicaDian;
+    private LocalDate fechaInicioResolucion;
+    private LocalDate fechaFinResolucion;
+    private Integer consecutivoDesde;
+    private Integer consecutivoHasta;
+
     // ── Fechas ──
     private LocalDate fechaEmision;
     private LocalDate fechaVencimiento;
@@ -38,6 +46,8 @@ public class DianDocumentoRequestDTO {
     // ── Totales ──
     private BigDecimal baseGravable;
     private BigDecimal totalIva;
+    private BigDecimal totalIca;     // Impuesto de Industria y Comercio (CodImp2=04)
+    private BigDecimal totalInc;     // Impuesto Nacional al Consumo (CodImp3=03)
     private BigDecimal totalDescuento;
     private BigDecimal totalFactura;
 
@@ -63,6 +73,16 @@ public class DianDocumentoRequestDTO {
         private String pais;
         private String telefono;
         private String correo;
+        // ── Datos fiscales DIAN (obligatorios en UBL TaxLevelCode) ──
+        /** Responsabilidad fiscal: códigos DIAN separados por ";" (ej. "O-13;O-15"). */
+        private String responsabilidadFiscal;
+        /** PERSONA_NATURAL / PERSONA_JURIDICA */
+        private String tipoContribuyente;
+        private Boolean granContribuyente;
+        private Boolean autorretenedor;
+        private Boolean responsableIva;
+        /** Código del régimen tributario (TaxScheme): "01"=IVA, "ZZ"=No aplica. */
+        private String codigoRegimen;
     }
 
     @Data
@@ -76,6 +96,10 @@ public class DianDocumentoRequestDTO {
         private String departamento;
         private String correo;
         private String telefono;
+        /** Responsabilidad fiscal del receptor (códigos DIAN). "R-99-PN" si no aplica. */
+        private String responsabilidadFiscal;
+        private String tipoContribuyente;
+        private Boolean responsableIva;
     }
 
     @Data

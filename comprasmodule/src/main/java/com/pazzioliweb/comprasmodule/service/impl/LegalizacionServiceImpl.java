@@ -41,6 +41,8 @@ public class LegalizacionServiceImpl implements LegalizacionService {
     private OrdenCompraRepository ordenCompraRepository;
   @Autowired
   private TercerosRepository terrepo;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
     public LegalizacionServiceImpl(ProductoService productoService, ProductoClient productoClient, CuentaPorPagarService cuentaPorPagarService, OrdenCompraService ordenCompraService, IngresoOrdenCompraService ingresoOrdenCompraService, LegalizacionRepository legalizacionRepository) {
         this.productoService = productoService;
         this.productoClient = productoClient;
@@ -53,7 +55,13 @@ public class LegalizacionServiceImpl implements LegalizacionService {
     @Override
     @Transactional
     public   OrdenCompraDTO  legalizarCompra(LegalizacionRequestDTO request) {
-       
+
+            // Validar periodo contable abierto (la fecha de la factura define el periodo de afectación).
+            try {
+                LocalDate fechaFact = LocalDate.parse(request.getFechaFactura(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                periodoContableService.validarPeriodoAbierto(fechaFact);
+            } catch (java.time.format.DateTimeParseException ignored) { /* dejar validar por realizarOrden */ }
+
             RealizarOrdenRequestDTO realizarRequest = request.getOrdenCompraData();
             // 1. Realizar la orden de compra (crea orden, productos, cuenta por pagar)
             OrdenCompraDTO ordenCreada = ordenCompraService.realizarOrden(realizarRequest);

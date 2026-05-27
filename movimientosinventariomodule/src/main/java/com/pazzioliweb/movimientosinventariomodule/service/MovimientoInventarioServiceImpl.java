@@ -22,7 +22,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
+import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
+import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
+import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
@@ -75,6 +78,14 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     private RedisTemplate<String, DatosSesiones> redisTemplate;
     @Autowired
     private Jwcommon jwcommon;
+    @Autowired
+    private AsientoContableService asientoService;
+    @Autowired
+    private ConfiguracionContableService configContable;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
     @PersistenceContext
     private EntityManager entityManager;
     @Override
@@ -84,6 +95,11 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             ComprobanteContable comprobante,
             Usuario usuario,
             HttpServletRequest request) {
+
+        // Validar periodo contable abierto antes de mover inventario (afecta kardex y asientos).
+        java.time.LocalDate fechaMov = createDto.getFechaEmision() != null
+                ? createDto.getFechaEmision() : LocalDate.now();
+        periodoContableService.validarPeriodoAbierto(fechaMov);
 
         // Resolver comprobante desde ID si no viene pasado
         if (comprobante == null && createDto.getComprobanteId() != null) {
@@ -205,7 +221,94 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         movimiento.setTotal(total);
         movimientoRepository.save(movimiento);
 
+        // ── Asiento contable para entrada/salida manual de inventario ──
+        // Traslado entre bodegas (TRASLADO) no genera asiento (neto cero).
+        generarAsientoMovimientoInventario(movimiento, total);
+
         return mapper.toResponse(movimiento, detalles);
+    }
+
+    /**
+     * Asiento contable para movimientos manuales de inventario:
+     *  - ENTRADA (EI): DR Inventarios (1435) / CR Sobrantes-Ingresos no op. (4295)
+     *  - SALIDA  (SI): DR Pérdidas en inventario (5295) / CR Inventarios (1435)
+     *  - TRASLADO (TI): no genera asiento (mismo dueño, neto cero)
+     *
+     * El monto se toma del total del movimiento (cantidad × costo unitario).
+     * Try/catch defensivo para no romper la persistencia del movimiento si
+     * el PUC no tiene alguna de las cuentas configuradas.
+     */
+    private void generarAsientoMovimientoInventario(MovimientoInventario mov, double totalMov) {
+        try {
+            if (mov.getTipo() == TipoMovimiento.TRASLADO) return; // neto cero
+            if (totalMov <= 0) return; // nada que registrar
+
+            java.math.BigDecimal total = java.math.BigDecimal.valueOf(totalMov);
+            CuentaContable inventarios = configContable.inventarios().orElse(null);
+            if (inventarios == null) {
+                System.out.println("[AsientoMovInv] Cuenta 1435 Inventarios no configurada. Asiento omitido.");
+                return;
+            }
+
+            java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+            String descripcion;
+            String tipoOrigen;
+
+            if (mov.getTipo() == TipoMovimiento.ENTRADA) {
+                CuentaContable contra = configContable.ajusteEntradaInventario().orElse(null);
+                if (contra == null) {
+                    System.out.println("[AsientoMovInv] Cuenta 4295 (sobrantes) no configurada. Asiento omitido.");
+                    return;
+                }
+                lineas.add(AsientoContableService.LineaDTO.debito(inventarios.getId(), total,
+                        "Entrada manual de inventario"));
+                lineas.add(AsientoContableService.LineaDTO.credito(contra.getId(), total,
+                        "Sobrantes / ajuste positivo de inventario"));
+                descripcion = "Entrada manual inventario";
+                tipoOrigen = "EI";
+            } else if (mov.getTipo() == TipoMovimiento.SALIDA) {
+                CuentaContable contra = configContable.ajusteSalidaInventario().orElse(null);
+                if (contra == null) {
+                    System.out.println("[AsientoMovInv] Cuenta 5295 (pérdidas) no configurada. Asiento omitido.");
+                    return;
+                }
+                lineas.add(AsientoContableService.LineaDTO.debito(contra.getId(), total,
+                        "Pérdidas/dañados/consumo interno"));
+                lineas.add(AsientoContableService.LineaDTO.credito(inventarios.getId(), total,
+                        "Salida manual de inventario"));
+                descripcion = "Salida manual inventario";
+                tipoOrigen = "SI";
+            } else {
+                return; // tipo desconocido
+            }
+
+            String numeroAsiento;
+            if (mov.getComprobante() != null && mov.getConsecutivo() != null) {
+                numeroAsiento = mov.getComprobante().getPrefijo() + "-" + mov.getConsecutivo();
+            } else {
+                numeroAsiento = tipoOrigen + "-" + mov.getMovimientoId();
+            }
+
+            asientoService.generarAsiento(
+                    numeroAsiento,
+                    mov.getFechaEmision() != null ? mov.getFechaEmision() : LocalDate.now(),
+                    descripcion + " #" + (mov.getMovimientoId() != null ? mov.getMovimientoId() : "?"),
+                    tipoOrigen,
+                    mov.getMovimientoId(),
+                    mov.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoMovInv] Error generando asiento (no crítico): " + ex.getMessage());
+            String tipoOrig = mov.getTipo() == TipoMovimiento.ENTRADA ? "EI"
+                            : mov.getTipo() == TipoMovimiento.SALIDA ? "SI" : "TI";
+            String numero = (mov.getComprobante() != null && mov.getConsecutivo() != null)
+                    ? mov.getComprobante().getPrefijo() + "-" + mov.getConsecutivo()
+                    : tipoOrig + "-" + mov.getMovimientoId();
+            asientoFallidoService.registrar("INVENTARIO_MANUAL", tipoOrig,
+                    mov.getMovimientoId(), numero,
+                    "Error generando asiento de movimiento de inventario: " + ex.getMessage(), ex);
+        }
     }
 
     private void crearKardexEntry(MovimientoInventario movimiento,
@@ -217,12 +320,42 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                                    double costoUnitario,
                                    TipoMovimiento tipo) {
 
-        double saldoAnterior = kardexRepository
+        // ── Saldo y costo promedio previos ──
+        Kardex ultimo = kardexRepository
                 .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodega)
-                .map(Kardex::getSaldo)
-                .orElse(0.0);
+                .orElse(null);
+        double saldoAnterior = ultimo != null ? ultimo.getSaldo() : 0.0;
+        double costoPromedioAnterior = ultimo != null && ultimo.getCostoPromedio() != null
+                ? ultimo.getCostoPromedio() : 0.0;
 
         double nuevoSaldo = saldoAnterior + entrada - salida;
+
+        // ── Bloqueo de existencias negativas para SALIDA/TRASLADO ──
+        // Solo aplica a salidas reales (no entradas). Si quedan negativas,
+        // se distorsiona el COGS y rompe el costo promedio.
+        if (salida > 0 && nuevoSaldo < 0) {
+            throw new IllegalStateException(
+                "Existencias insuficientes para el producto " + variante.getReferenciaVariantes() +
+                " en la bodega " + bodega.getNombre() +
+                ". Saldo actual: " + saldoAnterior + ", se intenta salir: " + salida +
+                ". Operación bloqueada para no dejar inventario negativo."
+            );
+        }
+
+        // ── Costo promedio ponderado real (NIIF Sec.13 / NIC 2) ──
+        //   nuevoCostoProm = (saldoAnterior × costoPromAnt + entrada × costoNuevo) / nuevoSaldo
+        // Solo aplica recálculo en ENTRADAS. En SALIDAS, el costo promedio
+        // permanece igual al anterior (se usa para valorar la salida).
+        double nuevoCostoPromedio;
+        if (entrada > 0) {
+            double valorSaldoPrevio = saldoAnterior * costoPromedioAnterior;
+            double valorEntrada = entrada * costoUnitario;
+            nuevoCostoPromedio = nuevoSaldo > 0
+                    ? (valorSaldoPrevio + valorEntrada) / nuevoSaldo
+                    : costoUnitario;
+        } else {
+            nuevoCostoPromedio = costoPromedioAnterior;
+        }
 
         Kardex kardex = new Kardex();
         kardex.setMovimiento(movimiento);
@@ -235,8 +368,12 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         kardex.setSalida(salida);
         kardex.setSaldo(nuevoSaldo);
         kardex.setCostoUnitario(costoUnitario);
-        kardex.setCostoPromedio(costoUnitario);
-        kardex.setTotalCosto(costoUnitario * (entrada + salida));
+        kardex.setCostoPromedio(nuevoCostoPromedio);
+        // Total del movimiento valorado al costo promedio cuando es SALIDA,
+        // al costo unitario cuando es ENTRADA.
+        kardex.setTotalCosto(salida > 0
+                ? salida * nuevoCostoPromedio
+                : entrada * costoUnitario);
         kardex.setTipo(tipo);
         kardex.setEstado(movimiento.getEstado());
         kardex.setObservaciones(movimiento.getObservaciones());
@@ -279,6 +416,14 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         MovimientoInventario movimiento = movimientoRepository.findById(movimientoId)
                 .orElseThrow(() -> new RuntimeException("Movimiento no encontrado"));
 
+        // Validar que el periodo de la fecha original esté abierto.
+        // La reversa escribe Kardex con la fecha del movimiento original — si está cerrado,
+        // mutaríamos el saldo contable de un periodo congelado.
+        java.time.LocalDate fechaOrig = movimiento.getFechaEmision();
+        if (fechaOrig != null) {
+            periodoContableService.validarPeriodoAbierto(fechaOrig);
+        }
+
         movimiento.setEstado(EstadoMovimiento.ANULADO);
         movimientoRepository.save(movimiento);
 
@@ -312,16 +457,76 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         return mapper.toResponse(movimiento, detalles);
     }
 
+    /**
+     * Reversa el kardex de un movimiento anulado.
+     *
+     * Estrategia: crea ENTRADAS COMPENSATORIAS por cada salida del movimiento
+     * original (y salidas compensatorias por cada entrada), preservando la
+     * trazabilidad histórica. No borra ni pone en 0 los registros previos —
+     * eso corromperia la corrida histórica y el costo promedio.
+     *
+     * Cada registro de reversa va con observación "Reversa por anulación
+     * de movimiento #N" y tipo ANULADO para que el filtro de reportes lo
+     * pueda excluir si se requiere mostrar solo movimientos vigentes.
+     */
     @Override
     @Transactional
     public void reversarKardex(Long movimientoId) {
         List<Kardex> kardexList = kardexRepository.findByMovimiento_MovimientoId(movimientoId);
-        for (Kardex kardex : kardexList) {
-            kardex.setEntrada(0.0);
-            kardex.setSalida(0.0);
-            kardex.setSaldo(0.0);
-            kardex.setEstado(EstadoMovimiento.ANULADO);
-            kardexRepository.save(kardex);
+        for (Kardex original : kardexList) {
+            // Saltar si ya fue reversado (idempotencia básica)
+            if (original.getEstado() == EstadoMovimiento.ANULADO) continue;
+
+            // Saldo actual previo a la reversa
+            double saldoActual = kardexRepository
+                    .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(
+                            original.getProductoVariante(), original.getBodega())
+                    .map(Kardex::getSaldo)
+                    .orElse(0.0);
+            double costoPromedioActual = kardexRepository
+                    .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(
+                            original.getProductoVariante(), original.getBodega())
+                    .map(Kardex::getCostoPromedio)
+                    .orElse(0.0);
+
+            // Compensación: si el original fue ENTRADA, reversa = SALIDA; viceversa.
+            double entradaRev = original.getSalida() != null ? original.getSalida() : 0.0;
+            double salidaRev  = original.getEntrada() != null ? original.getEntrada() : 0.0;
+            double nuevoSaldo = saldoActual + entradaRev - salidaRev;
+
+            // Bloquear reversa que dejaría existencias negativas (la mercancía ya se vendió).
+            if (nuevoSaldo < 0) {
+                throw new IllegalStateException(
+                    "No se puede reversar el movimiento " + movimientoId + " para el producto " +
+                    original.getProductoVariante().getReferenciaVariantes() + " en bodega " +
+                    original.getBodega().getNombre() +
+                    ": saldo actual " + saldoActual + ", salida a reversar " + salidaRev +
+                    " dejaría el inventario en " + nuevoSaldo + ". Esa mercancía ya se vendió/usó. " +
+                    "Ajuste manualmente con un movimiento de entrada antes de reversar."
+                );
+            }
+
+            Kardex reversa = new Kardex();
+            reversa.setMovimiento(original.getMovimiento());
+            reversa.setDetalle(original.getDetalle());
+            reversa.setProductoVariante(original.getProductoVariante());
+            reversa.setBodega(original.getBodega());
+            reversa.setFechaEmision(original.getFechaEmision());
+            reversa.setFechaCreacion(LocalDateTime.now());
+            reversa.setEntrada(entradaRev);
+            reversa.setSalida(salidaRev);
+            reversa.setSaldo(nuevoSaldo);
+            reversa.setCostoUnitario(original.getCostoUnitario());
+            reversa.setCostoPromedio(costoPromedioActual); // mantiene el promedio histórico
+            reversa.setTotalCosto((entradaRev + salidaRev) * (original.getCostoUnitario() != null ? original.getCostoUnitario() : 0.0));
+            reversa.setTipo(original.getTipo());
+            reversa.setEstado(EstadoMovimiento.ANULADO);
+            reversa.setObservaciones("Reversa por anulación de movimiento #" + movimientoId);
+            kardexRepository.save(reversa);
+
+            // NO se sobrescribe el estado del original — eso destruye trazabilidad
+            // del registro histórico (auditoría debe ver que estuvo ACTIVO antes).
+            // La reversa queda con estado ANULADO + observación que la liga al original.
         }
     }
 }

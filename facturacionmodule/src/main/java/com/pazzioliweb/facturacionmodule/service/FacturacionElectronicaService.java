@@ -51,6 +51,7 @@ public class FacturacionElectronicaService {
     private final DocumentoElectronicoRepository documentoElectronicoRepository;
     @Autowired private AsientoContableService asientoService;
     @Autowired private ConfiguracionContableService configContable;
+    @Autowired private com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante;
 
     @Autowired
     public FacturacionElectronicaService(FacturasRepository facturasRepository,
@@ -400,41 +401,36 @@ public class FacturacionElectronicaService {
         req.setFormaPago("1"); // Contado
         req.setPlazo(factura.getPlazo());
 
-        // Resolución DIAN desde configuración
-        req.setResolucionDian(dianConfig.getResolucion().getNumero());
+        // ── Resolución DIAN: priorizar la del ComprobanteContable usado por la venta ──
+        // (la global de DianConfig queda como fallback). Esto evita inconsistencia
+        // entre la resolución validada al asignar consecutivo y la reportada en el XML.
+        com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable comp = venta != null
+                ? venta.getComprobante() : null;
+        if (comp != null && comp.getResolucionDian() != null && !comp.getResolucionDian().isBlank()) {
+            req.setResolucionDian(comp.getResolucionDian());
+            req.setClaveTecnicaDian(comp.getClaveTecnicaDian());
+            req.setFechaInicioResolucion(comp.getFechaInicioResolucion());
+            req.setFechaFinResolucion(comp.getFechaFinResolucion());
+            req.setConsecutivoDesde(comp.getConsecutivoDesde());
+            req.setConsecutivoHasta(comp.getConsecutivoHasta());
+        } else {
+            req.setResolucionDian(dianConfig.getResolucion().getNumero());
+        }
 
         // ── Emisor: datos de la empresa desde BD ──
-        DianDocumentoRequestDTO.EmisorDTO emisor = new DianDocumentoRequestDTO.EmisorDTO();
+        DianDocumentoRequestDTO.EmisorDTO emisor = armarEmisorDesdeEmpresa();
         try {
             Empresa empresa = empresaRepositori.findById((long) dianConfig.getEmpresaId())
                     .orElse(null);
             if (empresa != null) {
-                emisor.setTipoIdentificacion(
-                        empresa.getCodigotipoidentificacion() != null
-                                ? String.valueOf(empresa.getCodigotipoidentificacion().getCodigoTipoIdentificacion())
-                                : "31");
-                emisor.setNumeroIdentificacion(empresa.getNumeroidentificacion());
-                emisor.setDigitoVerificacion(empresa.getDigitoverificacion());
-                emisor.setRazonSocial(empresa.getRazonsocial() != null
-                        ? empresa.getRazonsocial()
-                        : empresa.getNombrecomercial());
-                emisor.setTelefono(empresa.getCelularempresa());
-                emisor.setCorreo(empresa.getCorreoempresa());
                 if (empresa.getCodigomunicipio() != null) {
                     emisor.setMunicipio(empresa.getCodigomunicipio().getMunicipio());
                 }
                 if (empresa.getCodigodepartamento() != null) {
                     emisor.setDepartamento(empresa.getCodigodepartamento().getDepartamento());
                 }
-                emisor.setPais("CO");
-            } else {
-                emisor.setTipoIdentificacion("31");
-                emisor.setRazonSocial("EMPRESA NO CONFIGURADA");
             }
-        } catch (Exception e) {
-            emisor.setTipoIdentificacion("31");
-            emisor.setRazonSocial("ERROR CARGANDO EMPRESA");
-        }
+        } catch (Exception ignored) {}
         req.setEmisor(emisor);
 
         // ── Receptor: datos del cliente (tercero de la venta) ──
@@ -563,9 +559,24 @@ public class FacturacionElectronicaService {
 
         DianDocumentoRequestDTO req = construirRequestDianBase(venta);
         req.setTipoDocumento("20");  // 20 = Documento equivalente Tiquete POS
-        req.setPrefijo("TPOS");
-        int consec = siguienteNumeroTpos();
+        // Numeración PERSISTENTE via AsignacionComprobanteService (no contador en memoria).
+        Integer cajeroIdTpos = (venta != null && venta.getCajero() != null) ? venta.getCajero().getCajeroId() : null;
+        com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado rTpos =
+                asignarComprobanteAuto(cajeroIdTpos,
+                        com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.TPOS);
+        req.setPrefijo(rTpos.getComprobante().getPrefijo());
+        int consec = rTpos.getConsecutivo();
         req.setConsecutivo(consec);
+        // Propagar resolución del comprobante TPOS al request
+        com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable compTpos = rTpos.getComprobante();
+        if (compTpos.getResolucionDian() != null) {
+            req.setResolucionDian(compTpos.getResolucionDian());
+            req.setClaveTecnicaDian(compTpos.getClaveTecnicaDian());
+            req.setFechaInicioResolucion(compTpos.getFechaInicioResolucion());
+            req.setFechaFinResolucion(compTpos.getFechaFinResolucion());
+            req.setConsecutivoDesde(compTpos.getConsecutivoDesde());
+            req.setConsecutivoHasta(compTpos.getConsecutivoHasta());
+        }
 
         DianDocumentoResponseDTO resp = proveedorDian.enviarFactura(req);
 
@@ -621,8 +632,21 @@ public class FacturacionElectronicaService {
 
         DianDocumentoRequestDTO req = construirRequestDianBase(venta);
         req.setTipoDocumento("92");  // 92 = Nota Débito
-        req.setPrefijo("ND");
-        req.setConsecutivo(siguienteNumeroNd());
+        Integer cajeroIdNd = (venta != null && venta.getCajero() != null) ? venta.getCajero().getCajeroId() : null;
+        com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado rNd =
+                asignarComprobanteAuto(cajeroIdNd,
+                        com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.ND);
+        req.setPrefijo(rNd.getComprobante().getPrefijo());
+        req.setConsecutivo(rNd.getConsecutivo());
+        com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable compNd = rNd.getComprobante();
+        if (compNd.getResolucionDian() != null) {
+            req.setResolucionDian(compNd.getResolucionDian());
+            req.setClaveTecnicaDian(compNd.getClaveTecnicaDian());
+            req.setFechaInicioResolucion(compNd.getFechaInicioResolucion());
+            req.setFechaFinResolucion(compNd.getFechaFinResolucion());
+            req.setConsecutivoDesde(compNd.getConsecutivoDesde());
+            req.setConsecutivoHasta(compNd.getConsecutivoHasta());
+        }
         req.setCodigoConcepto(codigoConcepto != null ? codigoConcepto : 4);
         req.setRazonConcepto(razon);
 
@@ -729,8 +753,21 @@ public class FacturacionElectronicaService {
 
         DianDocumentoRequestDTO req = new DianDocumentoRequestDTO();
         req.setTipoDocumento("05");  // 05 = Documento Soporte
-        req.setPrefijo("DS");
-        req.setConsecutivo(siguienteNumeroDs());
+        // Numeración persistente del comprobante DS configurado (no contador en memoria).
+        com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado rDs =
+                asignacionComprobante.asignarSinCajero(
+                        com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.DS);
+        req.setPrefijo(rDs.getComprobante().getPrefijo());
+        req.setConsecutivo(rDs.getConsecutivo());
+        com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable compDs = rDs.getComprobante();
+        if (compDs.getResolucionDian() != null) {
+            req.setResolucionDian(compDs.getResolucionDian());
+            req.setClaveTecnicaDian(compDs.getClaveTecnicaDian());
+            req.setFechaInicioResolucion(compDs.getFechaInicioResolucion());
+            req.setFechaFinResolucion(compDs.getFechaFinResolucion());
+            req.setConsecutivoDesde(compDs.getConsecutivoDesde());
+            req.setConsecutivoHasta(compDs.getConsecutivoHasta());
+        }
         req.setFechaEmision(LocalDate.now());
         req.setFormaPago("1");
 
@@ -884,6 +921,14 @@ public class FacturacionElectronicaService {
                 emisor.setTelefono(empresa.getCelularempresa());
                 emisor.setCorreo(empresa.getCorreoempresa());
                 emisor.setPais("CO");
+                // Datos fiscales DIAN (TaxLevelCode)
+                emisor.setResponsabilidadFiscal(empresa.getResponsabilidadFiscal());
+                emisor.setTipoContribuyente(empresa.getTipoContribuyente());
+                emisor.setGranContribuyente(empresa.getGranContribuyente());
+                emisor.setAutorretenedor(empresa.getAutorretenedor());
+                emisor.setResponsableIva(empresa.getResponsableIva());
+                // Régimen IVA (TaxScheme.ID): "01"=IVA general, "ZZ"=No aplica.
+                emisor.setCodigoRegimen(Boolean.TRUE.equals(empresa.getResponsableIva()) ? "01" : "ZZ");
             } else {
                 emisor.setTipoIdentificacion("31");
                 emisor.setRazonSocial("EMPRESA NO CONFIGURADA");
@@ -894,14 +939,26 @@ public class FacturacionElectronicaService {
         return emisor;
     }
 
-    // Contadores simples en memoria + persistencia en archivo no — usamos system time como
-    // consecutivo fallback. En producción esto debe persistirse en comprobantes_contables.
-    private static final AtomicInteger TPOS_COUNTER = new AtomicInteger((int)(System.currentTimeMillis() / 10000) % 100000);
-    private static final AtomicInteger ND_COUNTER   = new AtomicInteger((int)(System.currentTimeMillis() / 10000) % 100000);
-    private static final AtomicInteger DS_COUNTER   = new AtomicInteger((int)(System.currentTimeMillis() / 10000) % 100000);
-    private Integer siguienteNumeroTpos() { return TPOS_COUNTER.incrementAndGet(); }
-    private Integer siguienteNumeroNd()   { return ND_COUNTER.incrementAndGet(); }
-    private Integer siguienteNumeroDs()   { return DS_COUNTER.incrementAndGet(); }
+    /**
+     * Asigna prefijo + consecutivo PERSISTENTE para TPOS/ND/DS usando AsignacionComprobanteService.
+     * Si el cajero no tiene comprobante del tipo dado, lanza ComprobanteNoConfiguradoException.
+     * Esto reemplaza los contadores en memoria que se reseteaban al reiniciar la app.
+     */
+    private com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado
+            asignarComprobanteAuto(Integer cajeroId,
+                                    com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante tipo) {
+        if (cajeroId == null) {
+            // Para tipos auto-generados (TPOS/ND/DS) que no traen cajero explícito,
+            // fallar con mensaje claro — el operador debe configurar un comprobante
+            // o atar la venta/compra origen a un cajero.
+            throw new com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.ComprobanteNoConfiguradoException(
+                "No hay cajeroId disponible para asignar consecutivo de " + tipo.getDescripcion() +
+                ". Asegure que la venta/compra origen tenga cajero asignado o configure un comprobante " +
+                "del tipo " + tipo.name() + " con un cajero default."
+            );
+        }
+        return asignacionComprobante.asignar(cajeroId, tipo);
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     //  Asientos contables automáticos para TPOS / ND / DS

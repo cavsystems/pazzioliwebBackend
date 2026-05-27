@@ -37,11 +37,14 @@ public class UnidadesMedidaServiceImpl implements UnidadesMedidaService {
     @Override
     public List<UnidadMedidaResponseDTO> crear(List<UnidadMedidaCreateDTO> dtos) {
     	List<UnidadMedidaResponseDTO> respuestas = new ArrayList<>();
-    	
+
     	for(UnidadMedidaCreateDTO dto : dtos) {
     		UnidadesMedida entity;
     		entity = mapper.toEntity(dto);
-    		
+    		// Asignar primer hueco disponible (códigos secuenciales sin saltos)
+    		Integer nextId = repo.findPrimerHueco();
+    		entity.setUnidadMedidaId(nextId != null ? nextId : 1);
+
     		repo.save(entity);
     		respuestas.add(mapper.toResponse(entity));
     	}

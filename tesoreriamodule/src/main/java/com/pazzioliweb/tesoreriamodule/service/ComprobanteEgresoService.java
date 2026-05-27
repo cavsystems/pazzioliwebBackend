@@ -13,6 +13,7 @@ import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
+import com.pazzioliweb.comprobantesmodule.service.PeriodoContableService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -48,6 +49,9 @@ public class ComprobanteEgresoService {
     private final AsignacionComprobanteService asignacionComprobante;
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
+    private final PeriodoContableService periodoContableService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
 
     public ComprobanteEgresoService(ComprobanteEgresoRepository egresoRepository,
                                      CuentaPorPagarRepository cxpRepository,
@@ -59,7 +63,8 @@ public class ComprobanteEgresoService {
                                      RedisTemplate<String, DatosSesiones> redisTemplate,
                                      AsignacionComprobanteService asignacionComprobante,
                                      AsientoContableService asientoService,
-                                     ConfiguracionContableService configContable) {
+                                     ConfiguracionContableService configContable,
+                                     PeriodoContableService periodoContableService) {
         this.egresoRepository = egresoRepository;
         this.cxpRepository = cxpRepository;
         this.tercerosRepository = tercerosRepository;
@@ -71,6 +76,7 @@ public class ComprobanteEgresoService {
         this.asignacionComprobante = asignacionComprobante;
         this.asientoService = asientoService;
         this.configContable = configContable;
+        this.periodoContableService = periodoContableService;
     }
 
     /** Construye el nombre completo de un tercero (nombres + apellidos) o razón social. */
@@ -146,6 +152,9 @@ public class ComprobanteEgresoService {
         egreso.setFecha(LocalDate.now());
         egreso.setFechaEgreso(dto.getFechaEgreso() != null && !dto.getFechaEgreso().isBlank()
                 ? LocalDate.parse(dto.getFechaEgreso()) : LocalDate.now());
+
+        // Validar periodo contable abierto en la fecha del egreso.
+        periodoContableService.validarPeriodoAbierto(egreso.getFechaEgreso());
         egreso.setRetefuente(dto.getRetefuente() != null ? dto.getRetefuente() : BigDecimal.ZERO);
         egreso.setReteica(dto.getReteica() != null ? dto.getReteica() : BigDecimal.ZERO);
         egreso.setReteiva(dto.getReteiva() != null ? dto.getReteiva() : BigDecimal.ZERO);
@@ -312,6 +321,9 @@ public class ComprobanteEgresoService {
             );
         } catch (Exception ex) {
             System.out.println("[AsientoCE] Error generando asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("COMPROBANTES_EGRESO", "CE",
+                    egreso.getId(), egreso.getNumeroDocumento(),
+                    "Error generando asiento de comprobante de egreso: " + ex.getMessage(), ex);
         }
     }
 
@@ -412,6 +424,10 @@ public class ComprobanteEgresoService {
         if (motivo == null || motivo.isBlank()) {
             throw new RuntimeException("El motivo de anulación es obligatorio");
         }
+
+        // Bloquear anulación si el periodo del documento está cerrado.
+        periodoContableService.validarPeriodoAbierto(
+                egreso.getFechaEgreso() != null ? egreso.getFechaEgreso() : egreso.getFecha());
 
         if (egreso.getDetalles() != null) {
             for (DetalleComprobanteEgreso det : egreso.getDetalles()) {

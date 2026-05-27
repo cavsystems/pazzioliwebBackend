@@ -40,6 +40,12 @@ private final GruposServiceImpl service;
     ) {
         return ResponseEntity.ok(service.actualizar(id, grupo));
     }
+
+	@DeleteMapping("/{id}")
+	public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
+		service.eliminar(id);
+		return ResponseEntity.noContent().build();
+	}
 	
 	@GetMapping("/id/{nombre}")
     public ResponseEntity<Integer> getIdByNombre(@PathVariable String nombre) {

@@ -225,6 +225,14 @@ public class EmpresaService {
 		empresa.setFechainiciolicencia(empre.getFechainiciolicencia());
 		empresa.setFechafinallicencia(empre.getFechafinallicencia());
 		empresa.setEstado(Estado.ACTIVA);
+
+		// Datos fiscales DIAN (obligatorios para XML UBL TaxLevelCode)
+		empresa.setResponsabilidadFiscal(empre.getResponsabilidadFiscal());
+		empresa.setTipoContribuyente(empre.getTipoContribuyente());
+		empresa.setGranContribuyente(empre.getGranContribuyente() != null ? empre.getGranContribuyente() : false);
+		empresa.setAutorretenedor(empre.getAutorretenedor() != null ? empre.getAutorretenedor() : false);
+		empresa.setResponsableIva(empre.getResponsableIva() != null ? empre.getResponsableIva() : true);
+
 		if (archivo != null && !archivo.isEmpty()) {
 			empresa.setImagenEmpresa(archivo.getBytes());
 		    empresa.setTipoImagen(archivo.getContentType()); // Guardamos el tipo MIME
@@ -375,7 +383,14 @@ public class EmpresaService {
 		empresa.setSegundoapellido(empre.getSegundoapellido());
 		empresa.setRazonsocial(empre.getRazonsocial());
 		empresa.setTelfonofijo(empre.getTelefonofijo());
-		
+
+		// Datos fiscales DIAN (TaxLevelCode UBL). Solo actualiza si vienen en el request.
+		if (empre.getResponsabilidadFiscal() != null) empresa.setResponsabilidadFiscal(empre.getResponsabilidadFiscal());
+		if (empre.getTipoContribuyente() != null)    empresa.setTipoContribuyente(empre.getTipoContribuyente());
+		if (empre.getGranContribuyente() != null)    empresa.setGranContribuyente(empre.getGranContribuyente());
+		if (empre.getAutorretenedor() != null)       empresa.setAutorretenedor(empre.getAutorretenedor());
+		if (empre.getResponsableIva() != null)       empresa.setResponsableIva(empre.getResponsableIva());
+
 		// Actualizar estado si se proporciona
 		if (empre.getEstado() != null && !empre.getEstado().trim().isEmpty()) {
 			try {

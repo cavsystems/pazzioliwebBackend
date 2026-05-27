@@ -82,16 +82,36 @@ public class ProveedorDianDirectoImpl implements ProveedorFacturacionElectronica
             String nitEmisor = request.getEmisor() != null ? request.getEmisor().getNumeroIdentificacion() : "";
             String idReceptor = request.getReceptor() != null ? request.getReceptor().getNumeroIdentificacion() : "";
 
-            String cufe = cufeGenerator.generarCufe(
+            // CUFE para FC/TPOS/DS o CUDE para NC/ND — la firma del hash es la
+            // misma; la diferencia está en el XML referenciando el documento original.
+            // Usar la claveTecnicaDian del COMPROBANTE (no la global de DianConfig)
+            // para que el CUFE/CUDE coincida con la resolución vigente.
+            String claveTecnicaComprobante = request.getClaveTecnicaDian();
+            String cufe = (esNotaCredito || esNotaDebito)
+                ? cufeGenerator.generarCude(
                     numeroFactura,
                     request.getFechaEmision(),
                     horaEmision,
                     request.getTotalFactura(),
                     request.getBaseGravable(),
                     request.getTotalIva(),
+                    request.getTotalIca(),
+                    request.getTotalInc(),
                     nitEmisor,
-                    idReceptor
-            );
+                    idReceptor,
+                    claveTecnicaComprobante)
+                : cufeGenerator.generarCufe(
+                    numeroFactura,
+                    request.getFechaEmision(),
+                    horaEmision,
+                    request.getTotalFactura(),
+                    request.getBaseGravable(),
+                    request.getTotalIva(),
+                    request.getTotalIca(),
+                    request.getTotalInc(),
+                    nitEmisor,
+                    idReceptor,
+                    claveTecnicaComprobante);
             log.info("Código único generado: {}", cufe);
 
             // 2. Generar XML UBL 2.1 según el tipo

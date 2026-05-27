@@ -11,6 +11,7 @@ import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
+import com.pazzioliweb.comprobantesmodule.service.PeriodoContableService;
 import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -48,6 +49,9 @@ public class ReciboCajaService {
     private final AsignacionComprobanteService asignacionComprobante;
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
+    private final PeriodoContableService periodoContableService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
 
     public ReciboCajaService(ReciboCajaRepository reciboRepository,
                               CuentaPorCobrarRepository cxcRepository,
@@ -59,7 +63,8 @@ public class ReciboCajaService {
                               RedisTemplate<String, DatosSesiones> redisTemplate,
                               AsignacionComprobanteService asignacionComprobante,
                               AsientoContableService asientoService,
-                              ConfiguracionContableService configContable) {
+                              ConfiguracionContableService configContable,
+                              PeriodoContableService periodoContableService) {
         this.reciboRepository = reciboRepository;
         this.cxcRepository = cxcRepository;
         this.tercerosRepository = tercerosRepository;
@@ -71,6 +76,7 @@ public class ReciboCajaService {
         this.asignacionComprobante = asignacionComprobante;
         this.asientoService = asientoService;
         this.configContable = configContable;
+        this.periodoContableService = periodoContableService;
     }
 
     /** Construye el nombre completo de un tercero (nombres + apellidos) o razón social. */
@@ -105,6 +111,10 @@ public class ReciboCajaService {
         if (dto.getFechaRecibo() == null || dto.getFechaRecibo().isBlank()) {
             throw new RuntimeException("La fecha del recibo es obligatoria");
         }
+
+        // Validar periodo contable abierto en la fecha del recibo (NIIF / control fiscal).
+        LocalDate fechaReciboParsed = LocalDate.parse(dto.getFechaRecibo());
+        periodoContableService.validarPeriodoAbierto(fechaReciboParsed);
 
         boolean esConceptoAbierto = Boolean.TRUE.equals(dto.getConceptoAbierto());
 
@@ -295,24 +305,71 @@ public class ReciboCajaService {
                         "Ingreso por " + metodo.getDescripcion()));
             }
 
-            // Crédito a la contrapartida
+            // ── DÉBITO por retenciones SUFRIDAS (el cliente nos retuvo) ──
+            // El cliente pagó (total - retenciones) y emitió certificado por las retenciones.
+            // Contabilizamos las retenciones como anticipo de impuestos (clase 1355xx).
+            // El CRÉDITO a CxC debe ser por el VALOR BRUTO (no neto), para cancelar
+            // completamente la factura original.
+            java.math.BigDecimal retf = recibo.getRetefuente() != null ? recibo.getRetefuente() : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal reti = recibo.getReteiva()    != null ? recibo.getReteiva()    : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal retc = recibo.getReteica()    != null ? recibo.getReteica()    : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal totalRetenciones = retf.add(reti).add(retc);
+
+            if (retf.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                CuentaContable ctaRetf = configContable.anticipoRetefuente().orElse(null);
+                if (ctaRetf != null) {
+                    AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                            .debito(ctaRetf.getId(), retf, "Retefuente que nos practicaron");
+                    if (recibo.getTercero() != null) l.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
+                    lineas.add(l);
+                } else {
+                    System.out.println("[AsientoRC] Cuenta 135515 (anticipo retefuente) no configurada. Retención no se contabiliza por separado.");
+                }
+            }
+            if (reti.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                CuentaContable ctaReti = configContable.anticipoReteiva().orElse(null);
+                if (ctaReti != null) {
+                    AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                            .debito(ctaReti.getId(), reti, "ReteIVA que nos practicaron");
+                    if (recibo.getTercero() != null) l.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
+                    lineas.add(l);
+                } else {
+                    System.out.println("[AsientoRC] Cuenta 135517 (anticipo reteIVA) no configurada.");
+                }
+            }
+            if (retc.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                CuentaContable ctaRetc = configContable.anticipoReteica().orElse(null);
+                if (ctaRetc != null) {
+                    AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                            .debito(ctaRetc.getId(), retc, "ReteICA que nos practicaron");
+                    if (recibo.getTercero() != null) l.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
+                    lineas.add(l);
+                } else {
+                    System.out.println("[AsientoRC] Cuenta 135518 (anticipo reteICA) no configurada.");
+                }
+            }
+
+            // Crédito a la contrapartida (CxC se cancela por valor BRUTO = total + retenciones).
             CuentaContable contrapartida;
             String desc;
+            java.math.BigDecimal montoCredito;
             if (Boolean.TRUE.equals(recibo.getConceptoAbierto())) {
-                // Concepto abierto: usa la cuenta del concepto, o la del recibo
+                // Concepto abierto: usa la cuenta del concepto, o la del recibo. Sin retenciones aplicables.
                 contrapartida = recibo.getCuentaContable();
                 desc = "Concepto abierto " + (recibo.getConcepto() != null ? recibo.getConcepto() : "");
+                montoCredito = recibo.getTotal();
             } else {
-                // Abono a CxC: usa la cuenta de Clientes (1305) del PUC
+                // Abono a CxC: usa la cuenta de Clientes (1305) del PUC. CxC bruta = total + retenciones sufridas.
                 contrapartida = configContable.cxcClientes().orElse(null);
                 desc = "Abono a Clientes (CxC) " + (recibo.getTerceroNombre() != null ? recibo.getTerceroNombre() : "");
+                montoCredito = recibo.getTotal().add(totalRetenciones);
             }
             if (contrapartida == null) {
                 System.out.println("[AsientoRC] Sin cuenta contrapartida. Asiento se omite. (configure cuenta 1305 Clientes en el PUC)");
                 return;
             }
             AsientoContableService.LineaDTO creditoLinea = AsientoContableService.LineaDTO
-                    .credito(contrapartida.getId(), recibo.getTotal(), desc);
+                    .credito(contrapartida.getId(), montoCredito, desc);
             if (recibo.getTercero() != null) {
                 creditoLinea.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
             }
@@ -330,6 +387,9 @@ public class ReciboCajaService {
             );
         } catch (Exception ex) {
             System.out.println("[AsientoRC] Error generando asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("RECIBOS_CAJA", "RC",
+                    recibo.getId(), recibo.getNumeroDocumento(),
+                    "Error generando asiento de recibo de caja: " + ex.getMessage(), ex);
         }
     }
 
@@ -430,6 +490,10 @@ public class ReciboCajaService {
         if (motivo == null || motivo.isBlank()) {
             throw new RuntimeException("El motivo de anulación es obligatorio");
         }
+
+        // Bloquear anulación si el periodo del documento está cerrado.
+        periodoContableService.validarPeriodoAbierto(
+                recibo.getFechaRecibo() != null ? recibo.getFechaRecibo() : recibo.getFecha());
 
         // Revertir saldos en CxC
         if (recibo.getDetalles() != null) {

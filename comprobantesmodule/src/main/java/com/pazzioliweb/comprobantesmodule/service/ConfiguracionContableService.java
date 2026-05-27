@@ -41,6 +41,34 @@ public class ConfiguracionContableService {
     public static final String COD_GASTOS_GENERALES= "5195";   // Diversos (gastos)
     public static final String COD_DEVOLUCION_VENTAS = "4175"; // Devoluciones en ventas
     public static final String COD_COSTO_VENTAS    = "6135";   // Costo de mercancía vendida
+    // ── Ajustes de inventario (EI/SI manuales) ─────────────────────────
+    // Sobrantes/donaciones recibidas (entrada manual de inventario):
+    //   Contrapartida típica → 4295 (Ingresos no operacionales — recuperaciones)
+    //   Alternativamente 3105 (Capital), 4295 o cuenta de "ajuste de inventario"
+    public static final String COD_AJUSTE_ENTRADA_INV = "4295"; // Ingreso no operacional / sobrantes
+    // Pérdidas/dañados/consumo interno (salida manual de inventario):
+    //   Contrapartida típica → 5195 o 5295 (Gastos diversos / pérdidas)
+    public static final String COD_AJUSTE_SALIDA_INV  = "5295"; // Pérdidas en inventario
+
+    // ── Retenciones por pagar (cuando la empresa es agente retenedor) ──
+    /** Retención en la fuente por pagar (compras): 236505 */
+    public static final String COD_RETEFUENTE_PAGAR = "236505";
+    /** Retención de IVA por pagar (compras): 236540 */
+    public static final String COD_RETEIVA_PAGAR    = "236540";
+    /** Retención de ICA por pagar (compras): 236570 */
+    public static final String COD_RETEICA_PAGAR    = "236570";
+
+    // ── Cuentas de cierre anual ──
+    /** Ganancia/pérdida del ejercicio (resultado del ejercicio): 3605 */
+    public static final String COD_RESULTADO_EJERCICIO = "3605";
+
+    // ── Anticipo de impuestos (retenciones SUFRIDAS — el cliente nos retuvo) ──
+    /** ReteFuente que NOS practicaron — anticipo de renta: 135515 */
+    public static final String COD_ANTICIPO_RETEFUENTE = "135515";
+    /** ReteIVA que NOS practicaron — anticipo de IVA: 135517 */
+    public static final String COD_ANTICIPO_RETEIVA    = "135517";
+    /** ReteICA que NOS practicaron — anticipo de ICA: 135518 */
+    public static final String COD_ANTICIPO_RETEICA    = "135518";
 
     @Transactional(readOnly = true)
     public Optional<CuentaContable> buscarPorCodigo(String codigo) {
@@ -89,4 +117,13 @@ public class ConfiguracionContableService {
     public Optional<CuentaContable> gastosGenerales(){ return buscarPorCodigo(COD_GASTOS_GENERALES); }
     public Optional<CuentaContable> devolucionVentas(){ return buscarPorCodigo(COD_DEVOLUCION_VENTAS); }
     public Optional<CuentaContable> costoVentas()  { return buscarPorCodigo(COD_COSTO_VENTAS); }
+    public Optional<CuentaContable> ajusteEntradaInventario(){ return buscarPorCodigo(COD_AJUSTE_ENTRADA_INV); }
+    public Optional<CuentaContable> ajusteSalidaInventario() { return buscarPorCodigo(COD_AJUSTE_SALIDA_INV); }
+    public Optional<CuentaContable> retefuentePagar() { return buscarPorCodigo(COD_RETEFUENTE_PAGAR); }
+    public Optional<CuentaContable> reteivaPagar()    { return buscarPorCodigo(COD_RETEIVA_PAGAR); }
+    public Optional<CuentaContable> reteicaPagar()    { return buscarPorCodigo(COD_RETEICA_PAGAR); }
+    public Optional<CuentaContable> resultadoEjercicio() { return buscarPorCodigo(COD_RESULTADO_EJERCICIO); }
+    public Optional<CuentaContable> anticipoRetefuente() { return buscarPorCodigo(COD_ANTICIPO_RETEFUENTE); }
+    public Optional<CuentaContable> anticipoReteiva()    { return buscarPorCodigo(COD_ANTICIPO_RETEIVA); }
+    public Optional<CuentaContable> anticipoReteica()    { return buscarPorCodigo(COD_ANTICIPO_RETEICA); }
 }

@@ -50,6 +50,10 @@ public class DevolucionServiceImpl implements DevolucionService {
     private com.pazzioliweb.comprobantesmodule.service.AsientoContableService asientoService;
     @Autowired
     private com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService configContable;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
   @Autowired
   private PedidoService pedidoService;
 @Autowired
@@ -81,6 +85,9 @@ public class DevolucionServiceImpl implements DevolucionService {
     @Override
     @Transactional
     public DevolucionDTO registrarDevolucion(DevolucionRequestDTO request) {
+
+        // 0. Validar periodo contable abierto antes de cualquier movimiento.
+        periodoContableService.validarPeriodoAbierto(LocalDate.now());
 
         // 1. Obtener la venta
         Venta venta = ventaRepository.findById(request.getVentaId())
@@ -263,10 +270,13 @@ public class DevolucionServiceImpl implements DevolucionService {
     }
 
     /**
-     * Asiento de devolución (DV) — reverso parcial/total de la venta original:
-     *   DÉBITO Devolución en ventas (4175)  por subtotal devuelto sin IVA
-     *   DÉBITO IVA generado (240801) [revierte]  por IVA devuelto
-     *   CRÉDITO Caja/CxC                   por el total devuelto
+     * Asiento de devolución (DV) — reverso parcial/total de la venta original.
+     * Lógica de contrapartida (CRÉDITO):
+     *   - Venta CONTADO (FC) → CR Caja general (reembolso real al cliente)
+     *   - Venta CRÉDITO (VC) → CR CxC Clientes (revierte la deuda del cliente)
+     * Lógica del DÉBITO:
+     *   DR Devolución en ventas (4175) por subtotal devuelto sin IVA
+     *   DR IVA generado (240801) [reversa] por IVA devuelto
      */
     private void generarAsientoDevolucion(Devolucion devolucion, Venta venta, BigDecimal totalDevuelto) {
         try {
@@ -295,15 +305,33 @@ public class DevolucionServiceImpl implements DevolucionService {
                 }
             }
 
-            // CRÉDITO Caja general (reembolso al cliente)
-            com.pazzioliweb.comprobantesmodule.entity.CuentaContable caja = configContable.cajaGeneral().orElse(null);
-            if (caja == null) {
-                System.out.println("[AsientoDevolucion] Cuenta 1105 Caja no configurada. Asiento omitido.");
-                return;
+            // CRÉDITO: contrapartida según si la venta fue contado o crédito
+            boolean ventaFueCredito = venta.getComprobante() != null
+                    && venta.getComprobante().getTipoMovimiento() != null
+                    && "VC".equals(venta.getComprobante().getTipoMovimiento().name());
+
+            com.pazzioliweb.comprobantesmodule.entity.CuentaContable contrapartida;
+            String descContrapartida;
+            if (ventaFueCredito) {
+                // Venta a crédito → revertir CxC del cliente (no toca caja)
+                contrapartida = configContable.cxcClientes().orElse(null);
+                descContrapartida = "Reversa CxC por devolución " + devolucion.getNumeroDevolucion();
+                if (contrapartida == null) {
+                    System.out.println("[AsientoDevolucion] Cuenta 1305 CxC no configurada. Asiento omitido.");
+                    return;
+                }
+            } else {
+                // Venta contado → reembolso real de caja
+                contrapartida = configContable.cajaGeneral().orElse(null);
+                descContrapartida = "Reembolso devolución " + devolucion.getNumeroDevolucion();
+                if (contrapartida == null) {
+                    System.out.println("[AsientoDevolucion] Cuenta 1105 Caja no configurada. Asiento omitido.");
+                    return;
+                }
             }
             com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO creditoLinea =
                     com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(
-                            caja.getId(), totalDevuelto, "Reembolso devolución " + devolucion.getNumeroDevolucion());
+                            contrapartida.getId(), totalDevuelto, descContrapartida);
             if (venta.getCliente() != null) {
                 creditoLinea.conTercero(venta.getCliente().getTerceroId(),
                         venta.getCliente().getRazonSocial() != null && !venta.getCliente().getRazonSocial().isBlank()
@@ -321,9 +349,87 @@ public class DevolucionServiceImpl implements DevolucionService {
                     devolucion.getComprobante(),
                     lineas
             );
+
+            // ─── Reversa de Costo de Ventas: DR Inventarios / CR Costo Ventas ───
+            // Los productos vuelven al stock, así que el COGS y el inventario
+            // deben revertirse en proporción a la cantidad devuelta.
+            generarAsientoReversaCostoDevolucion(devolucion, venta);
         } catch (Exception ex) {
             System.out.println("[AsientoDevolucion] Error generando asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("DEVOLUCIONES", "DV",
+                    devolucion.getId(), devolucion.getNumeroDevolucion(),
+                    "Error generando asiento de devolución: " + ex.getMessage(), ex);
         }
+    }
+
+    /**
+     * Reversa del Costo de Ventas para la devolución:
+     *   DR Inventarios (1435)        — los productos vuelven al stock
+     *   CR Costo de Ventas (6135)    — se revierte el COGS por la cantidad devuelta
+     * El monto se calcula con el costo promedio actual del producto/variante
+     * multiplicado por la cantidad devuelta.
+     */
+    private void generarAsientoReversaCostoDevolucion(Devolucion devolucion, Venta venta) {
+        try {
+            BigDecimal totalCosto = BigDecimal.ZERO;
+            for (DetalleDevolucion d : devolucion.getItems()) {
+                if (d.getCantidadDevuelta() == null || d.getCantidadDevuelta() <= 0) continue;
+                if (d.getDetalleVenta() == null) continue;
+                BigDecimal costoUnit = obtenerCostoVarianteParaDevolucion(
+                        d.getDetalleVenta().getCodigoProducto(),
+                        d.getDetalleVenta().getReferenciaVariantes());
+                if (costoUnit == null) continue;
+                totalCosto = totalCosto.add(costoUnit.multiply(BigDecimal.valueOf(d.getCantidadDevuelta())));
+            }
+            if (totalCosto.compareTo(BigDecimal.ZERO) <= 0) return;
+
+            com.pazzioliweb.comprobantesmodule.entity.CuentaContable costo = configContable.costoVentas().orElse(null);
+            com.pazzioliweb.comprobantesmodule.entity.CuentaContable inv   = configContable.inventarios().orElse(null);
+            if (costo == null || inv == null) {
+                System.out.println("[AsientoReversaCostoDevolucion] 6135 o 1435 no configuradas, se omite.");
+                return;
+            }
+
+            java.util.List<com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+            lineas.add(com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.debito(
+                    inv.getId(), totalCosto,
+                    "Reingreso inventario por devolución " + devolucion.getNumeroDevolucion()));
+            lineas.add(com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(
+                    costo.getId(), totalCosto,
+                    "Reversa costo de ventas por devolución " + devolucion.getNumeroDevolucion()));
+
+            // Sufijo "-COSTO" en el tipo para no chocar con la idempotencia
+            // del asiento principal de la devolución.
+            asientoService.generarAsiento(
+                    "COSTO-DV-" + devolucion.getNumeroDevolucion(),
+                    devolucion.getFechaCreacion() != null ? devolucion.getFechaCreacion() : LocalDate.now(),
+                    "Reversa costo devolución " + devolucion.getNumeroDevolucion(),
+                    "DV-COSTO",
+                    devolucion.getId(),
+                    devolucion.getComprobante(),
+                    lineas
+            );
+        } catch (Exception ex) {
+            System.out.println("[AsientoReversaCostoDevolucion] Error generando asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("DEVOLUCIONES-COSTO", "DV-COSTO",
+                    devolucion.getId(), devolucion.getNumeroDevolucion(),
+                    "Error generando reversa de COGS: " + ex.getMessage(), ex);
+        }
+    }
+
+    /** Resuelve el costo promedio del producto/variante para la reversa de COGS. */
+    private BigDecimal obtenerCostoVarianteParaDevolucion(String codigoProducto, String referenciaVariantes) {
+        try {
+            java.util.Optional<ProductoVariante> opt = productoVarianteRepository.findBySku(codigoProducto);
+            if (opt.isEmpty() && referenciaVariantes != null) {
+                opt = productoVarianteRepository.findBySku(referenciaVariantes);
+            }
+            if (opt.isPresent() && opt.get().getProducto() != null) {
+                Double c = opt.get().getProducto().getCosto();
+                if (c != null && c > 0) return BigDecimal.valueOf(c);
+            }
+        } catch (Exception ignored) { }
+        return null;
     }
 
     @Override

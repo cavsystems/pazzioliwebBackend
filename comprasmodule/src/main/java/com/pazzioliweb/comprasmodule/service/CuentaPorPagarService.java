@@ -11,5 +11,6 @@ public interface CuentaPorPagarService {
     List<CuentaPorPagarDTO> listarPorProveedor(Integer proveedorId);
     void pagar(Long id);
     void eliminarPorNumeroFactura(String numeroFactura);
+    void anularPorNumeroFactura(String numeroFactura, String motivo);
     void actualizarNumeroFacturaProveedor(String numeroFactura, String numeroFacturaProveedor);
 }

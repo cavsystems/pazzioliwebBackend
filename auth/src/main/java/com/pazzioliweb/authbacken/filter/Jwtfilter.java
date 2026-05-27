@@ -110,7 +110,9 @@ public class Jwtfilter extends OncePerRequestFilter {
 				|| path.startsWith("/api/cajeros") || path.startsWith("/api/detalle-cajeros")
 				|| path.startsWith("/api/comprobantes-egreso") || path.startsWith("/api/recibos-caja")
 				|| path.startsWith("/api/cuentas-por-cobrar") || path.startsWith("/api/cuentas-por-pagar")
-				|| path.startsWith("/api/reportes");
+				|| path.startsWith("/api/reportes")
+				|| path.startsWith("/api/inventario") || path.startsWith("/api/movimientos-inventario")
+				|| path.startsWith("/api/kardex");
 	}
 
 
