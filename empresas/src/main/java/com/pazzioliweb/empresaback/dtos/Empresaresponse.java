@@ -416,14 +416,16 @@ public class Empresaresponse {
 	
 	public static class Sucursales{
 		private String celular;
-		
+
 		private String codigopostal;
-		
+
 		private String codigosucursal;
-		
+
 		 private String correo;
-		
+
 		 private Departamento departamento;
+
+		 private boolean eliminar;
 		 
 		 public String getCelular() {
 			return celular;
@@ -522,6 +524,15 @@ public class Empresaresponse {
 
 		 public void setPais(Pais pais) {
 			 this.pais = pais;
+		 }
+
+
+		 public boolean isEliminar() {
+			 return eliminar;
+		 }
+
+		 public void setEliminar(boolean eliminar) {
+			 this.eliminar = eliminar;
 		 }
 
 

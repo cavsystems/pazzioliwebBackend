@@ -255,56 +255,68 @@ public class EmpresaService {
 		if(!empre.getSucursales().isEmpty()) {
 			// Obtener todas las bodegas existentes para comparar por nombre
 			List<Bodegas> todasLasBodegas = repotoribodega.findAll();
-			
+
 			// Crear mapas para facilitar la comparación por nombre
 			Map<String, Bodegas> existentesMap = new HashMap<>();
 			for(Bodegas existente : todasLasBodegas) {
 				String key = existente.getNombre() != null ? existente.getNombre().toLowerCase().trim() : "";
 				existentesMap.put(key, existente);
 			}
-			
+
 			List<Bodegas> bodegasActualizar = new ArrayList<>();
 			List<Bodegas> bodegasNuevas = new ArrayList<>();
+			List<Bodegas> bodegasEliminar = new ArrayList<>();
 			Set<String> sucursalesRecibidas = new HashSet<>();
-			
+
 			// Procesar cada sucursal recibida
 			for(Sucursales sucu : empre.getSucursales()) {
 				String nombreSucursal = sucu.getNombre() != null ? sucu.getNombre().toLowerCase().trim() : "";
 				sucursalesRecibidas.add(nombreSucursal);
-				
-				Object[] codigos = insertjoi.obtenercodigos(sucu.getMunicipio().getCodigo(), sucu.getDepartamento().getCodigo(), sucu.getPais().getCodigo());
-				
+
 				Bodegas bodegaExistente = existentesMap.get(nombreSucursal);
-				
-				if(bodegaExistente != null) {
-					// Actualizar bodega existente (preserva ID y relaciones)
-					bodegaExistente.setCelular(sucu.getCelular());
-					bodegaExistente.setCodigodepartamento((Departamento) codigos[1]);
-					bodegaExistente.setCodigomunicipio((Municipio) codigos[0]);
-					bodegaExistente.setCodigopais((Pais) codigos[2]);
-					bodegaExistente.setTelefono(sucu.getTelefonofijo());
-					bodegaExistente.setDireccion(sucu.getDireccion());
-					bodegaExistente.setCodigopostal(sucu.getCodigopostal());
-					// El nombre ya es el mismo, no se actualiza
-					bodegaExistente.setCorreo(sucu.getCorreo());
-					bodegasActualizar.add(bodegaExistente);
+
+				// Verificar si se debe eliminar la bodega
+				if(sucu.isEliminar()) {
+					if(bodegaExistente != null) {
+						// Agregar a la lista de bodegas a eliminar
+						bodegasEliminar.add(bodegaExistente);
+						System.out.println("Bodega marcada para eliminación: " + nombreSucursal);
+					}
+					// Si no existe, no hacemos nada
 				} else {
-					// Crear nueva bodega
-					Bodegas nuevaBodega = new Bodegas();
-					nuevaBodega.setCelular(sucu.getCelular());
-					nuevaBodega.setCodigodepartamento((Departamento) codigos[1]);
-					nuevaBodega.setCodigomunicipio((Municipio) codigos[0]);
-					nuevaBodega.setCodigopais((Pais) codigos[2]);
-					nuevaBodega.setTelefono(sucu.getTelefonofijo());
-					nuevaBodega.setDireccion(sucu.getDireccion());
-					nuevaBodega.setCodigopostal(sucu.getCodigopostal());
-					nuevaBodega.setNombre(sucu.getNombre());
-					nuevaBodega.setCodigosucursal(sucu.getCodigosucursal());
-					nuevaBodega.setCorreo(sucu.getCorreo());
-					bodegasNuevas.add(nuevaBodega);
+					// Lógica normal de actualización/creación
+					Object[] codigos = insertjoi.obtenercodigos(sucu.getMunicipio().getCodigo(), sucu.getDepartamento().getCodigo(), sucu.getPais().getCodigo());
+
+					if(bodegaExistente != null) {
+						// Actualizar bodega existente (preserva ID y relaciones)
+						bodegaExistente.setCelular(sucu.getCelular());
+						bodegaExistente.setCodigodepartamento((Departamento) codigos[1]);
+						bodegaExistente.setCodigomunicipio((Municipio) codigos[0]);
+						bodegaExistente.setCodigopais((Pais) codigos[2]);
+						bodegaExistente.setTelefono(sucu.getTelefonofijo());
+						bodegaExistente.setDireccion(sucu.getDireccion());
+						bodegaExistente.setCodigopostal(sucu.getCodigopostal());
+						// El nombre ya es el mismo, no se actualiza
+						bodegaExistente.setCorreo(sucu.getCorreo());
+						bodegasActualizar.add(bodegaExistente);
+					} else {
+						// Crear nueva bodega
+						Bodegas nuevaBodega = new Bodegas();
+						nuevaBodega.setCelular(sucu.getCelular());
+						nuevaBodega.setCodigodepartamento((Departamento) codigos[1]);
+						nuevaBodega.setCodigomunicipio((Municipio) codigos[0]);
+						nuevaBodega.setCodigopais((Pais) codigos[2]);
+						nuevaBodega.setTelefono(sucu.getTelefonofijo());
+						nuevaBodega.setDireccion(sucu.getDireccion());
+						nuevaBodega.setCodigopostal(sucu.getCodigopostal());
+						nuevaBodega.setNombre(sucu.getNombre());
+						nuevaBodega.setCodigosucursal(sucu.getCodigosucursal());
+						nuevaBodega.setCorreo(sucu.getCorreo());
+						bodegasNuevas.add(nuevaBodega);
+					}
 				}
 			}
-			
+
 			// Identificar bodegas a desactivar (las que no vienen en la actualización)
 			List<Bodegas> bodegasDesactivar = new ArrayList<>();
 			for(Map.Entry<String, Bodegas> entry : existentesMap.entrySet()) {
@@ -312,13 +324,19 @@ public class EmpresaService {
 					// Opción 1: Desactivar en lugar de eliminar
 					// entry.getValue().setEstado("INACTIVO"); // Si tuviera campo estado
 					// bodegasActualizar.add(entry.getValue()));
-					
+
 					// Opción 2: Eliminar solo si no tienen transacciones (más seguro)
 					// Por ahora, mantenemos las bodegas existentes para no romper relaciones
 					System.out.println("Bodega no actualizada: " + entry.getKey() + " - se mantiene para preservar relaciones existentes");
 				}
 			}
-			
+
+			// Eliminar bodegas marcadas
+			if(!bodegasEliminar.isEmpty()) {
+				repotoribodega.deleteAll(bodegasEliminar);
+				System.out.println("Bodegas eliminadas: " + bodegasEliminar.size());
+			}
+
 			// Guardar cambios
 			if(!bodegasActualizar.isEmpty()) {
 				repotoribodega.saveAll(bodegasActualizar);
