@@ -71,20 +71,33 @@ public class UblXmlGenerator {
             Element dianExtensions = doc.createElementNS(NS_STS, "sts:DianExtensions");
             Element invoiceControl = doc.createElementNS(NS_STS, "sts:InvoiceControl");
 
-            addTextElement(doc, invoiceControl, "sts:InvoiceAuthorization",
-                    dianConfig.getResolucion().getNumero() != null ? dianConfig.getResolucion().getNumero() : "");
+            // Datos de resolución: PRIORIZAR los del comprobante (request) sobre DianConfig.
+            String resolucionNumero = (request.getResolucionDian() != null && !request.getResolucionDian().isBlank())
+                    ? request.getResolucionDian()
+                    : (dianConfig.getResolucion().getNumero() != null ? dianConfig.getResolucion().getNumero() : "");
+            addTextElement(doc, invoiceControl, "sts:InvoiceAuthorization", resolucionNumero);
 
             Element authPeriod = doc.createElementNS(NS_STS, "sts:AuthorizationPeriod");
-            addCbcElement(doc, authPeriod, "cbc:StartDate",
-                    dianConfig.getResolucion().getFechaDesde() != null ? dianConfig.getResolucion().getFechaDesde() : "");
-            addCbcElement(doc, authPeriod, "cbc:EndDate",
-                    dianConfig.getResolucion().getFechaHasta() != null ? dianConfig.getResolucion().getFechaHasta() : "");
+            String startDate = request.getFechaInicioResolucion() != null
+                    ? request.getFechaInicioResolucion().toString()
+                    : (dianConfig.getResolucion().getFechaDesde() != null ? dianConfig.getResolucion().getFechaDesde() : "");
+            String endDate = request.getFechaFinResolucion() != null
+                    ? request.getFechaFinResolucion().toString()
+                    : (dianConfig.getResolucion().getFechaHasta() != null ? dianConfig.getResolucion().getFechaHasta() : "");
+            addCbcElement(doc, authPeriod, "cbc:StartDate", startDate);
+            addCbcElement(doc, authPeriod, "cbc:EndDate", endDate);
             invoiceControl.appendChild(authPeriod);
 
             Element authInvoices = doc.createElementNS(NS_STS, "sts:AuthorizedInvoices");
             addTextElement(doc, authInvoices, "sts:Prefix", request.getPrefijo());
-            addTextElement(doc, authInvoices, "sts:From", String.valueOf(dianConfig.getResolucion().getRangoDesde()));
-            addTextElement(doc, authInvoices, "sts:To", String.valueOf(dianConfig.getResolucion().getRangoHasta()));
+            String rangoDesde = request.getConsecutivoDesde() != null
+                    ? String.valueOf(request.getConsecutivoDesde())
+                    : String.valueOf(dianConfig.getResolucion().getRangoDesde());
+            String rangoHasta = request.getConsecutivoHasta() != null
+                    ? String.valueOf(request.getConsecutivoHasta())
+                    : String.valueOf(dianConfig.getResolucion().getRangoHasta());
+            addTextElement(doc, authInvoices, "sts:From", rangoDesde);
+            addTextElement(doc, authInvoices, "sts:To", rangoHasta);
             invoiceControl.appendChild(authInvoices);
 
             dianExtensions.appendChild(invoiceControl);
@@ -119,7 +132,20 @@ public class UblXmlGenerator {
 
             // UBLVersionID
             addCbcElement(doc, invoice, "cbc:UBLVersionID", "UBL 2.1");
-            addCbcElement(doc, invoice, "cbc:CustomizationID", "10");
+            // CustomizationID varía según el tipo de documento DIAN (Anexo Técnico 1.9):
+            //   "01" Factura          → "10"  Estándar
+            //   "20" Tiquete POS      → "11"  Tiquete POS Electrónico
+            //   "91" Nota Crédito     → "20"
+            //   "92" Nota Débito      → "30"
+            //   "05" Documento Soporte→ usar DocumentoSoporteXmlGenerator (root distinto)
+            String customizationId;
+            switch (request.getTipoDocumento() != null ? request.getTipoDocumento() : "01") {
+                case "20": customizationId = "11"; break; // Tiquete POS
+                case "91": customizationId = "20"; break; // NC
+                case "92": customizationId = "30"; break; // ND
+                default:   customizationId = "10";        // Factura
+            }
+            addCbcElement(doc, invoice, "cbc:CustomizationID", customizationId);
             addCbcElement(doc, invoice, "cbc:ProfileID", "DIAN 2.1");
             addCbcElement(doc, invoice, "cbc:ProfileExecutionID", String.valueOf(dianConfig.getAmbiente()));
 
@@ -144,8 +170,15 @@ public class UblXmlGenerator {
             invoiceTypeCode.setTextContent(request.getTipoDocumento());
             invoice.appendChild(invoiceTypeCode);
 
-            // Note
-            addCbcElement(doc, invoice, "cbc:Note", "Factura electrónica de venta");
+            // Note (varía según tipo de documento DIAN)
+            String nota;
+            switch (request.getTipoDocumento() != null ? request.getTipoDocumento() : "01") {
+                case "20": nota = "Tiquete POS Electrónico"; break;
+                case "91": nota = "Nota Crédito Electrónica"; break;
+                case "92": nota = "Nota Débito Electrónica"; break;
+                default:   nota = "Factura electrónica de venta";
+            }
+            addCbcElement(doc, invoice, "cbc:Note", nota);
 
             // DocumentCurrencyCode
             addCbcElement(doc, invoice, "cbc:DocumentCurrencyCode", "COP");
@@ -191,7 +224,20 @@ public class UblXmlGenerator {
 
             Element taxCategory = doc.createElementNS(NS_CAC, "cac:TaxCategory");
             Element percent = doc.createElementNS(NS_CBC, "cbc:Percent");
-            percent.setTextContent("19.00");
+            // Calcula la tasa efectiva de IVA a partir de los totales para soportar
+            // 0% (excluido), 5% y 19% según producto. Si la base es 0 (todo
+            // exento) reportamos 0.00.
+            java.math.BigDecimal base = request.getBaseGravable() != null
+                    ? request.getBaseGravable() : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal iva = request.getTotalIva() != null
+                    ? request.getTotalIva() : java.math.BigDecimal.ZERO;
+            String tasaIva = "0.00";
+            if (base.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                tasaIva = iva.multiply(java.math.BigDecimal.valueOf(100))
+                        .divide(base, 2, java.math.RoundingMode.HALF_UP)
+                        .toPlainString();
+            }
+            percent.setTextContent(tasaIva);
             taxCategory.appendChild(percent);
 
             Element taxScheme = doc.createElementNS(NS_CAC, "cac:TaxScheme");
@@ -236,25 +282,35 @@ public class UblXmlGenerator {
                 emisor != null ? emisor.getRazonSocial() : "");
         party.appendChild(partyName);
 
-        // PartyTaxScheme
+        // PartyTaxScheme (TaxLevelCode = responsabilidad fiscal DIAN obligatorio)
         Element partyTaxScheme = doc.createElementNS(NS_CAC, "cac:PartyTaxScheme");
         addCbcElement(doc, partyTaxScheme, "cbc:RegistrationName",
                 emisor != null ? emisor.getRazonSocial() : "");
         addCbcElement(doc, partyTaxScheme, "cbc:CompanyID",
                 emisor != null ? emisor.getNumeroIdentificacion() : "");
+        // cbc:TaxLevelCode: códigos DIAN separados por ";" (ej. "O-13;O-15").
+        // Si no se configuró en la empresa, se usa "R-99-PN" (no aplica/persona natural simplificado).
+        String emisorRespFiscal = (emisor != null && emisor.getResponsabilidadFiscal() != null
+                && !emisor.getResponsabilidadFiscal().isBlank())
+                ? emisor.getResponsabilidadFiscal() : "R-99-PN";
+        addCbcElement(doc, partyTaxScheme, "cbc:TaxLevelCode", emisorRespFiscal);
 
+        // Régimen TaxScheme: "01"=IVA si responsable, "ZZ"=No aplica.
         Element taxScheme = doc.createElementNS(NS_CAC, "cac:TaxScheme");
-        addCbcElement(doc, taxScheme, "cbc:ID", "01");
-        addCbcElement(doc, taxScheme, "cbc:Name", "IVA");
+        boolean emisorRespIva = emisor == null || emisor.getResponsableIva() == null
+                || Boolean.TRUE.equals(emisor.getResponsableIva());
+        addCbcElement(doc, taxScheme, "cbc:ID", emisorRespIva ? "01" : "ZZ");
+        addCbcElement(doc, taxScheme, "cbc:Name", emisorRespIva ? "IVA" : "No aplica");
         partyTaxScheme.appendChild(taxScheme);
         party.appendChild(partyTaxScheme);
 
-        // PartyLegalEntity
+        // PartyLegalEntity (también requiere TaxLevelCode)
         Element partyLegal = doc.createElementNS(NS_CAC, "cac:PartyLegalEntity");
         addCbcElement(doc, partyLegal, "cbc:RegistrationName",
                 emisor != null ? emisor.getRazonSocial() : "");
         addCbcElement(doc, partyLegal, "cbc:CompanyID",
                 emisor != null ? emisor.getNumeroIdentificacion() : "");
+        addCbcElement(doc, partyLegal, "cbc:TaxLevelCode", emisorRespFiscal);
 
         // Address
         if (emisor != null) {
@@ -313,9 +369,14 @@ public class UblXmlGenerator {
                 receptor.getNombre() != null ? receptor.getNombre() : "");
         addCbcElement(doc, partyTaxScheme, "cbc:CompanyID",
                 receptor.getNumeroIdentificacion() != null ? receptor.getNumeroIdentificacion() : "");
+        // TaxLevelCode receptor: si NIT (31)→ O-13;O-15 si gran contribuyente. Default R-99-PN.
+        String recRespFiscal = receptor.getResponsabilidadFiscal() != null && !receptor.getResponsabilidadFiscal().isBlank()
+                ? receptor.getResponsabilidadFiscal() : "R-99-PN";
+        addCbcElement(doc, partyTaxScheme, "cbc:TaxLevelCode", recRespFiscal);
         Element taxScheme = doc.createElementNS(NS_CAC, "cac:TaxScheme");
-        addCbcElement(doc, taxScheme, "cbc:ID", "01");
-        addCbcElement(doc, taxScheme, "cbc:Name", "IVA");
+        boolean recRespIva = receptor.getResponsableIva() == null || Boolean.TRUE.equals(receptor.getResponsableIva());
+        addCbcElement(doc, taxScheme, "cbc:ID", recRespIva ? "01" : "ZZ");
+        addCbcElement(doc, taxScheme, "cbc:Name", recRespIva ? "IVA" : "No aplica");
         partyTaxScheme.appendChild(taxScheme);
         party.appendChild(partyTaxScheme);
 
@@ -324,6 +385,24 @@ public class UblXmlGenerator {
                 receptor.getNombre() != null ? receptor.getNombre() : "");
         addCbcElement(doc, partyLegal, "cbc:CompanyID",
                 receptor.getNumeroIdentificacion() != null ? receptor.getNumeroIdentificacion() : "");
+        addCbcElement(doc, partyLegal, "cbc:TaxLevelCode", recRespFiscal);
+
+        // RegistrationAddress con país obligatorio (A14).
+        Element regAddr = doc.createElementNS(NS_CAC, "cac:RegistrationAddress");
+        addCbcElement(doc, regAddr, "cbc:CityName",
+                receptor.getMunicipio() != null ? receptor.getMunicipio() : "");
+        addCbcElement(doc, regAddr, "cbc:CountrySubentity",
+                receptor.getDepartamento() != null ? receptor.getDepartamento() : "");
+        Element addrLine = doc.createElementNS(NS_CAC, "cac:AddressLine");
+        addCbcElement(doc, addrLine, "cbc:Line",
+                receptor.getDireccion() != null ? receptor.getDireccion() : "");
+        regAddr.appendChild(addrLine);
+        Element countryRec = doc.createElementNS(NS_CAC, "cac:Country");
+        addCbcElement(doc, countryRec, "cbc:IdentificationCode", "CO");
+        addCbcElement(doc, countryRec, "cbc:Name", "Colombia");
+        regAddr.appendChild(countryRec);
+        partyLegal.appendChild(regAddr);
+
         party.appendChild(partyLegal);
 
         if (receptor.getCorreo() != null) {

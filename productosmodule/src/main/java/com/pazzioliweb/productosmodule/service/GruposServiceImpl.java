@@ -22,6 +22,10 @@ private final ProductosRepository product;
 	
 	@Override
 	public Grupos crear(Grupos grupos) {
+		// Asignar el primer hueco disponible para mantener códigos secuenciales sin saltos.
+		// Si se borró el grupo 2 y existen 1 y 3, el nuevo grupo será el 2.
+		Integer nextId = repo.findPrimerHueco();
+		grupos.setId(nextId != null ? nextId : 1);
 		return repo.save(grupos);
 	}
 	

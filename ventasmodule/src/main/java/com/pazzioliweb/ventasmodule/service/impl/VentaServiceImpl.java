@@ -39,6 +39,7 @@ import com.pazzioliweb.ventasmodule.mapper.VentaMapper;
 import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import com.pazzioliweb.ventasmodule.repository.VentaSpecification;
 import com.pazzioliweb.ventasmodule.service.VentaService;
+import com.pazzioliweb.ventasmodule.entity.CuentaPorCobrar;
 import com.pazzioliweb.ventasmodule.repository.CuentaPorCobrarRepository;
 import com.pazzioliweb.ventasmodule.service.CuentaPorCobrarService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,6 +81,10 @@ public class VentaServiceImpl implements VentaService {
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
     private final MovimientoInventarioAutoService movimientoInventarioAutoService;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
 
     @Autowired
     public VentaServiceImpl(VentaRepository ventaRepository, VentaMapper ventaMapper,
@@ -170,6 +175,13 @@ public class VentaServiceImpl implements VentaService {
     @Override
     @Transactional
     public VentaDTO crearVenta(VentaDTO ventaDTO) {
+
+        // Validar que el periodo contable de la fecha de emisión esté abierto.
+        // Bloquea aquí antes de cualquier escritura para evitar ventas huérfanas
+        // sin asiento contable.
+        if (ventaDTO.getFechaEmision() != null) {
+            periodoContableService.validarPeriodoAbierto(ventaDTO.getFechaEmision());
+        }
 
         // Verificar stock disponible antes de crear la venta
         for (DetalleVentaDTO detalleDTO : ventaDTO.getItems()) {
@@ -620,23 +632,20 @@ public class VentaServiceImpl implements VentaService {
                     subtotalSinIva,
                     "Ingreso venta " + venta.getNumeroVenta()));
 
-            // Crédito al IVA generado si lo hay y la cuenta está configurada.
-            // Si la cuenta de IVA NO existe, agrego el IVA a Ingresos para que el asiento cuadre.
+            // Crédito al IVA generado. Si no hay cuenta IVA configurada, FALLAR
+            // explícitamente: no se debe absorber el IVA en 4135 porque viola NIIF
+            // (los ingresos van netos de IVA) y distorsiona el Estado de Resultados.
             if (totalIva.compareTo(BigDecimal.ZERO) > 0) {
                 CuentaContable ivaGen = configContable.ivaGenerado().orElse(null);
-                if (ivaGen != null) {
-                    lineas.add(AsientoContableService.LineaDTO.credito(ivaGen.getId(), totalIva,
-                            "IVA generado venta " + venta.getNumeroVenta()));
-                } else {
-                    // Fallback: suma el IVA a la línea de ingresos para que el asiento cuadre.
-                    System.out.println("[AsientoVenta] Cuenta IVA generado 240801 no configurada. " +
-                            "IVA $" + totalIva + " se suma a Ingresos para cuadrar el asiento.");
-                    // Reemplazar la última línea de ingresos por una con monto total
-                    lineas.remove(lineas.size() - 1);
-                    lineas.add(AsientoContableService.LineaDTO.credito(ingresos.getId(),
-                            subtotalSinIva.add(totalIva),
-                            "Ingreso + IVA venta " + venta.getNumeroVenta()));
+                if (ivaGen == null) {
+                    throw new IllegalStateException(
+                        "La venta " + venta.getNumeroVenta() + " tiene IVA $" + totalIva +
+                        " pero la cuenta '240801 IVA generado' NO está configurada en el PUC. " +
+                        "Configúrela antes de continuar — no se puede acumular IVA en Ingresos."
+                    );
                 }
+                lineas.add(AsientoContableService.LineaDTO.credito(ivaGen.getId(), totalIva,
+                        "IVA generado venta " + venta.getNumeroVenta()));
             }
 
             // Tipo del documento: FC o VC según el comprobante
@@ -661,6 +670,11 @@ public class VentaServiceImpl implements VentaService {
             generarAsientoCostoVenta(venta, nombreCliente);
         } catch (Exception ex) {
             System.out.println("[AsientoVenta] Error generando asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("VENTAS",
+                    venta.getComprobante() != null && venta.getComprobante().getTipoMovimiento() != null
+                        ? venta.getComprobante().getTipoMovimiento().name() : "FC",
+                    venta.getId(), venta.getNumeroVenta(),
+                    "Error generando asiento de venta: " + ex.getMessage(), ex);
         }
     }
 
@@ -677,8 +691,11 @@ public class VentaServiceImpl implements VentaService {
             java.math.BigDecimal totalCosto = java.math.BigDecimal.ZERO;
             for (DetalleVenta d : venta.getItems()) {
                 if (d.getCantidad() == null || d.getCantidad() <= 0) continue;
-                // Resolvemos costo del producto/variante a partir del repo
-                java.math.BigDecimal costoUnit = obtenerCostoVarianteParaVenta(d.getCodigoProducto(), d.getReferenciaVariantes());
+                // Resolvemos costo del producto/variante. La bodega es a nivel de venta (DetalleVenta no la tiene).
+                java.math.BigDecimal costoUnit = obtenerCostoVarianteParaVenta(
+                        d.getCodigoProducto(),
+                        d.getReferenciaVariantes(),
+                        venta.getBodega());
                 if (costoUnit == null) continue;
                 totalCosto = totalCosto.add(costoUnit.multiply(java.math.BigDecimal.valueOf(d.getCantidad())));
             }
@@ -701,37 +718,71 @@ public class VentaServiceImpl implements VentaService {
                     ? venta.getComprobante().getTipoMovimiento().name()
                     : "FC";
 
+            // Diferenciamos el documentoOrigenTipo con sufijo "-COSTO" para que la
+            // idempotencia de AsientoContableService no confunda este asiento con el
+            // asiento principal de la venta (que usa el mismo ventaId).
             asientoService.generarAsiento(
                     "COSTO-" + (venta.getNumeroVenta() != null ? venta.getNumeroVenta() : ("V-" + venta.getId())),
                     venta.getFechaEmision() != null ? venta.getFechaEmision() : LocalDate.now(),
                     "Costo de venta " + venta.getNumeroVenta() + " - " + nombreCliente,
-                    tipo,
+                    tipo + "-COSTO",
                     venta.getId(),
                     venta.getComprobante(),
                     lineas
             );
         } catch (Exception ex) {
             System.out.println("[AsientoCosto] Error generando asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("VENTAS-COSTO",
+                    venta.getComprobante() != null && venta.getComprobante().getTipoMovimiento() != null
+                        ? venta.getComprobante().getTipoMovimiento().name() : "FC",
+                    venta.getId(), venta.getNumeroVenta(),
+                    "Error generando asiento de COGS: " + ex.getMessage(), ex);
         }
     }
 
-    /** Resuelve el costo unitario a usar para el asiento de COGS. */
-    private java.math.BigDecimal obtenerCostoVarianteParaVenta(String codigoProducto, String referenciaVariantes) {
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.pazzioliweb.movimientosinventariomodule.repository.KardexRepository kardexRepository;
+
+    /**
+     * Resuelve el costo unitario para el asiento de COGS.
+     * Prioridad (NIIF Sec.13 / NIC 2):
+     *   1. Costo promedio ponderado del Kardex de la variante+bodega.
+     *   2. Costo histórico del producto (fallback).
+     */
+    private java.math.BigDecimal obtenerCostoVarianteParaVenta(String codigoProducto, String referenciaVariantes,
+                                                                com.pazzioliweb.productosmodule.entity.Bodegas bodega) {
         try {
-            // Para ventas, codigoProducto = SKU completo. Lo buscamos directamente.
             java.util.Optional<com.pazzioliweb.productosmodule.entity.ProductoVariante> opt =
                     productoVarianteRepository.findBySku(codigoProducto);
             if (opt.isEmpty() && referenciaVariantes != null) {
                 opt = productoVarianteRepository.findBySku(referenciaVariantes);
             }
-            if (opt.isPresent() && opt.get().getProducto() != null) {
-                Double c = opt.get().getProducto().getCosto();
+            if (opt.isEmpty()) return null;
+            com.pazzioliweb.productosmodule.entity.ProductoVariante variante = opt.get();
+
+            // 1) Intentar costo promedio del Kardex (más fiel a NIIF Sec.13).
+            if (kardexRepository != null && bodega != null) {
+                java.util.Optional<com.pazzioliweb.movimientosinventariomodule.entity.Kardex> kx =
+                        kardexRepository.findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodega);
+                if (kx.isPresent() && kx.get().getCostoPromedio() != null && kx.get().getCostoPromedio() > 0) {
+                    return java.math.BigDecimal.valueOf(kx.get().getCostoPromedio());
+                }
+            }
+
+            // 2) Fallback al costo histórico del producto.
+            if (variante.getProducto() != null) {
+                Double c = variante.getProducto().getCosto();
                 if (c != null && c > 0) return java.math.BigDecimal.valueOf(c);
             }
         } catch (Exception ex) {
             System.out.println("[AsientoCosto] No se pudo resolver costo de " + codigoProducto + ": " + ex.getMessage());
         }
         return null;
+    }
+
+    /** Overload retro-compatible. */
+    private java.math.BigDecimal obtenerCostoVarianteParaVenta(String codigoProducto, String referenciaVariantes) {
+        return obtenerCostoVarianteParaVenta(codigoProducto, referenciaVariantes, null);
     }
 
     private CuentaContable resolverCuentaMetodoPago(MetodosPago metodo) {
@@ -747,9 +798,22 @@ public class VentaServiceImpl implements VentaService {
         return configContable.cajaGeneral().orElse(null);
     }
 
+    /**
+     * @deprecated Método legacy que solo restaura inventario SIN generar asiento contable,
+     *             reversar COGS ni emitir Nota Crédito DIAN. Usar {@code DevolucionService.registrarDevolucion}
+     *             que sí maneja partida doble, Kardex y NC electrónica.
+     *             Este método queda bloqueado para impedir corrupción contable.
+     */
     @Override
     @Transactional
+    @Deprecated
     public void devolverVenta(Long ventaId, List<DetalleVentaDTO> detallesDevueltos) {
+        throw new UnsupportedOperationException(
+            "VentaService.devolverVenta() está deprecado y bloqueado porque no genera asiento contable " +
+            "ni Nota Crédito DIAN. Use DevolucionService.registrarDevolucion() — endpoint POST /api/ventas/devolucion."
+        );
+        // Código legacy preservado debajo como referencia (inalcanzable).
+        /*
         Venta venta = ventaRepository.findById(ventaId)
                 .orElseThrow(() -> new VentaException("Venta no encontrada"));
 
@@ -807,6 +871,7 @@ public class VentaServiceImpl implements VentaService {
                 System.out.println("Error al registrar devolución en cajero: " + e.getMessage());
             }
         }
+        */
     }
 
     @Override
@@ -815,12 +880,76 @@ public class VentaServiceImpl implements VentaService {
         Venta venta = ventaRepository.findById(ventaId)
                 .orElseThrow(() -> new VentaException("Venta no encontrada"));
 
-        if (!"PENDIENTE".equals(venta.getEstado())) {
-            throw new VentaException("Solo se pueden anular ventas pendientes");
+        if ("ANULADA".equals(venta.getEstado())) {
+            throw new VentaException("La venta ya está anulada");
         }
+
+        // Estado previo determina si hubo asiento/Kardex/CxC generados (COMPLETADA sí, PENDIENTE no).
+        boolean teniaAsientos = "COMPLETADA".equals(venta.getEstado())
+                || "DEVOLUCION_PARCIAL".equals(venta.getEstado());
 
         venta.setEstado("ANULADA");
         ventaRepository.save(venta);
+
+        // ── Si tenía asiento contable, anularlo (ingreso + COGS) ──
+        if (teniaAsientos) {
+            try {
+                String tipoDoc = venta.getComprobante() != null
+                        ? venta.getComprobante().getTipoMovimiento().name() : "FC";
+                asientoService.anularAsientoDeDocumento(tipoDoc, venta.getId());
+                asientoService.anularAsientoDeDocumento(tipoDoc + "-COSTO", venta.getId());
+            } catch (Exception ex) {
+                System.out.println("[AnularVenta] Error anulando asiento: " + ex.getMessage());
+            }
+
+            // ── Restaurar existencias de cada item al saldo previo a la venta ──
+            // DetalleVenta no referencia ProductoVariante directamente: buscamos por SKU/codigoProducto
+            // y la bodega es a nivel de Venta.
+            try {
+                Integer bodegaCodigo = venta.getBodega() != null ? venta.getBodega().getCodigo() : null;
+                if (bodegaCodigo != null) {
+                    for (DetalleVenta det : venta.getItems()) {
+                        java.util.Optional<ProductoVariante> varOpt =
+                                productoVarianteRepository.findBySku(det.getCodigoProducto());
+                        if (varOpt.isEmpty() && det.getReferenciaVariantes() != null) {
+                            varOpt = productoVarianteRepository.findBySku(det.getReferenciaVariantes());
+                        }
+                        if (varOpt.isEmpty()) continue;
+                        Existencias exist = existenciasRepository
+                                .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
+                                        varOpt.get().getProductoVarianteId(), bodegaCodigo)
+                                .orElse(null);
+                        if (exist != null) {
+                            BigDecimal cant = det.getCantidad() != null
+                                    ? BigDecimal.valueOf(det.getCantidad()) : BigDecimal.ZERO;
+                            BigDecimal saldoActual = exist.getExistencia() != null
+                                    ? exist.getExistencia() : BigDecimal.ZERO;
+                            exist.setExistencia(saldoActual.add(cant));
+                            existenciasRepository.save(exist);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                System.out.println("[AnularVenta] Error restaurando existencias: " + ex.getMessage());
+            }
+
+            // ── Anular CxC del cliente si era venta a crédito (busca por numeroVenta) ──
+            try {
+                if (venta.getNumeroVenta() != null) {
+                    java.util.List<CuentaPorCobrar> cxcVenta = cuentaPorCobrarRepository
+                            .findByNumeroVenta(venta.getNumeroVenta());
+                    for (CuentaPorCobrar cxc : cxcVenta) {
+                        if (!"ANULADA".equals(cxc.getEstado()) && !"PAGADA".equals(cxc.getEstado())) {
+                            cxc.setEstado("ANULADA");
+                            cxc.setSaldo(BigDecimal.ZERO);
+                            cuentaPorCobrarRepository.save(cxc);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                System.out.println("[AnularVenta] Error anulando CxC: " + ex.getMessage());
+            }
+        }
 
         // ✅ Registrar movimiento ANULACION en cajero
         DatosSesiones sesionAnul = obtenerSesionActiva();

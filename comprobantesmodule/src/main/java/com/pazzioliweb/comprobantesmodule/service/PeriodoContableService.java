@@ -36,6 +36,24 @@ public class PeriodoContableService {
         return p.isPresent() && "CERRADO".equals(p.get().getEstado());
     }
 
+    /**
+     * Valida que el periodo de la fecha esté abierto. Si está cerrado lanza
+     * IllegalStateException que sube como BadRequest al cliente. Usar al
+     * inicio de cada operación de negocio (venta, compra, devolución, etc.)
+     * para evitar estados inconsistentes donde la operación se persiste
+     * pero su asiento contable es rechazado.
+     */
+    @Transactional(readOnly = true)
+    public void validarPeriodoAbierto(LocalDate fecha) {
+        if (fecha != null && estaCerrado(fecha)) {
+            throw new IllegalStateException(
+                "El periodo contable " + fecha.getMonthValue() + "/" + fecha.getYear()
+                + " está CERRADO. No se pueden registrar nuevas operaciones en esa fecha. " +
+                "Solicite al administrador reabrir el periodo o use una fecha en un periodo abierto."
+            );
+        }
+    }
+
     @Transactional(readOnly = true)
     public Optional<PeriodoContable> obtener(int anio, int mes) {
         return repo.findByAnioAndMes(anio, mes);

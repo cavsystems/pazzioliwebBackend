@@ -17,6 +17,7 @@ import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
+import com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
@@ -46,6 +47,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final TercerosRepository tercerosRepository;
     private final BodegasRepository bodegasRepository;
     private final AsignacionComprobanteService asignacionComprobante;
+    @org.springframework.beans.factory.annotation.Autowired
+    private AsientoFallidoService asientoFallidoService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
     private final ConfiguracionComprasService configCompras;
@@ -104,6 +109,26 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
      *   2. Si no → caer al cajero default configurado en ConfiguracionCompras.
      *   3. Si tampoco hay default → error claro pidiendo configurarlo.
      */
+    /**
+     * Devuelve true si ALGÚN método de pago del request tiene tipoNegociacion
+     * = "Credito". Equivalente a VentaServiceImpl.tieneCredito(): el método
+     * de pago decide el tipo de comprobante, independiente del plazo.
+     */
+    private boolean tieneMetodoPagoCredito(RealizarOrdenRequestDTO request) {
+        if (request.getMetodosPago() == null || request.getMetodosPago().isEmpty()) return false;
+        return request.getMetodosPago().stream().anyMatch(mp -> {
+            if (mp == null || mp.getMetodoPagoId() == null) return false;
+            try {
+                com.pazzioliweb.metodospagomodule.entity.MetodosPago m =
+                        metodosPagoRepository.findById(mp.getMetodoPagoId()).orElse(null);
+                return m != null && m.getTipoNegociacion() != null
+                        && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
+            } catch (Exception e) {
+                return false;
+            }
+        });
+    }
+
     private Integer resolverCajeroParaComprobante(Integer cajeroUsuario, TipoMovimientoComprobante tipo) {
         if (cajeroUsuario != null
                 && comprobanteRepository.findActivoByCajeroAndTipo(cajeroUsuario, tipo).isPresent()) {
@@ -178,6 +203,11 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         ordenExistente.setIva(ordenCompraDTO.getIva());
         ordenExistente.setTotalOrdenCompra(ordenCompraDTO.getTotal());
 
+        // Retenciones (C4): si se editan, persistirlas.
+        if (ordenCompraDTO.getRetefuente() != null) ordenExistente.setRetefuente(ordenCompraDTO.getRetefuente());
+        if (ordenCompraDTO.getReteiva()    != null) ordenExistente.setReteiva(ordenCompraDTO.getReteiva());
+        if (ordenCompraDTO.getReteica()    != null) ordenExistente.setReteica(ordenCompraDTO.getReteica());
+
         ordenExistente.getItems().clear();
         ordenCompraDTO.getItems().forEach(itemDto -> {
             DetalleOrdenCompra detalle = new DetalleOrdenCompra();
@@ -210,9 +240,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             throw new OrdenCompraException("La orden ya está anulada");
         }
 
+        // Validar periodo contable abierto antes de mover saldos.
+        periodoContableService.validarPeriodoAbierto(
+                orden.getFechaEmision() != null ? orden.getFechaEmision() : orden.getFechaCreacion());
+
         // Revertir inventario de lo recibido
         for (DetalleOrdenCompra detalle : orden.getItems()) {
-            if (detalle.getCantidadRecibida() > 0) {
+            if (detalle.getCantidadRecibida() != null && detalle.getCantidadRecibida() > 0) {
                 productoService.actualizarInventario(
                         detalle.getCodigoProducto(),
                         null, // No tenemos lote específico para reversión
@@ -222,14 +256,31 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             }
         }
 
-        // Eliminar detalles
-        orden.getItems().clear();
+        // ── Anular asiento contable (CC o CR) — NO se elimina, se marca ANULADO ──
+        try {
+            String tipoDoc = orden.getComprobante() != null
+                    ? orden.getComprobante().getTipoMovimiento().name() : "CC";
+            asientoService.anularAsientoDeDocumento(tipoDoc, orden.getId());
+        } catch (Exception ex) {
+            System.out.println("[AnularOC] Error anulando asiento: " + ex.getMessage());
+        }
 
-        // Eliminar cuenta por pagar
-        cuentaPorPagarService.eliminarPorNumeroFactura(orden.getNumeroOrden());
+        // ── Anular CxP en lugar de eliminarla (preservar trazabilidad) ──
+        try {
+            cuentaPorPagarService.anularPorNumeroFactura(orden.getNumeroOrden(), motivo);
+        } catch (Exception ex) {
+            // Fallback al método legacy si el nuevo no existe
+            try {
+                cuentaPorPagarService.eliminarPorNumeroFactura(orden.getNumeroOrden());
+            } catch (Exception ex2) {
+                System.out.println("[AnularOC] Error gestionando CxP: " + ex2.getMessage());
+            }
+        }
 
+        // NO se borran los items con orden.getItems().clear() — eso destruye trazabilidad.
         orden.setEstado("ANULADA");
-        orden.setObservaciones(orden.getObservaciones() + "\nAnulada: " + motivo);
+        String prev = orden.getObservaciones() != null ? orden.getObservaciones() : "";
+        orden.setObservaciones(prev + "\nAnulada: " + motivo);
         ordenCompraRepository.save(orden);
     }
 
@@ -294,6 +345,17 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     @Override
     @Transactional
     public OrdenCompraDTO realizarOrden(RealizarOrdenRequestDTO request) {
+        // Validar periodo contable antes de cualquier escritura.
+        if (request.getFechainicial() != null && !request.getFechainicial().isEmpty()) {
+            try {
+                LocalDate fechaInicial = LocalDate.parse(request.getFechainicial(),
+                        DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                periodoContableService.validarPeriodoAbierto(fechaInicial);
+            } catch (java.time.format.DateTimeParseException ignore) {
+                // Si la fecha no es parseable, se deja pasar — el flujo posterior usa LocalDate.now().
+            }
+        }
+
         // 1. Procesar productos: actualizar o crear productos con variantes
         procesarProductosDesdeRequest(request.getOrden_compra().getProducts());
 
@@ -333,18 +395,33 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         try {
             java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
 
-            BigDecimal total = orden.getTotalOrdenCompra() != null ? orden.getTotalOrdenCompra() : BigDecimal.ZERO;
+            // ── Bases del asiento ──
+            // IMPORTANTE: orden.getTotalOrdenCompra() es el total NETO (el frontend ya le restó
+            // las retenciones = lo que el proveedor realmente recibe). Para el asiento necesitamos
+            // el total BRUTO (base + IVA) porque el inventario y el IVA descontable NO se reducen
+            // por las retenciones — solo se reduce lo que se le paga/debe al proveedor.
+            BigDecimal totalNeto = orden.getTotalOrdenCompra() != null ? orden.getTotalOrdenCompra() : BigDecimal.ZERO;
             BigDecimal iva = orden.getIva() != null ? orden.getIva() : BigDecimal.ZERO;
-            BigDecimal subtotalSinIva = total.subtract(iva).max(BigDecimal.ZERO);
 
-            // DÉBITO Inventarios
+            // Retenciones practicadas al proveedor (pasivo de la empresa con el fisco)
+            BigDecimal retefuente = orden.getRetefuente() != null ? orden.getRetefuente() : BigDecimal.ZERO;
+            BigDecimal reteivaProv = orden.getReteiva() != null ? orden.getReteiva() : BigDecimal.ZERO;
+            BigDecimal reteicaProv = orden.getReteica() != null ? orden.getReteica() : BigDecimal.ZERO;
+            BigDecimal totalRetenciones = retefuente.add(reteivaProv).add(reteicaProv);
+
+            // Total bruto = neto + retenciones (revierte la resta hecha en el frontend).
+            BigDecimal totalBruto = totalNeto.add(totalRetenciones);
+            // Base del inventario = bruto - IVA (incluye gravada + exento, completa, SIN restar retenciones).
+            BigDecimal baseInventario = totalBruto.subtract(iva).max(BigDecimal.ZERO);
+
+            // DÉBITO Inventarios (por la base completa, no reducida por retenciones)
             CuentaContable inv = configContable.inventarios().orElse(null);
             if (inv == null) {
                 System.out.println("[AsientoCompra] Cuenta 1435 Inventarios no configurada. Asiento omitido.");
                 return;
             }
             lineas.add(AsientoContableService.LineaDTO.debito(inv.getId(),
-                    subtotalSinIva.compareTo(BigDecimal.ZERO) > 0 ? subtotalSinIva : total,
+                    baseInventario.compareTo(BigDecimal.ZERO) > 0 ? baseInventario : totalBruto,
                     "Compra " + orden.getNumeroOrden()));
 
             // DÉBITO IVA descontable
@@ -356,27 +433,78 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 }
             }
 
-            // CRÉDITO — divide entre métodos de pago (lo pagado) y CxP (saldo a crédito)
+            // CRÉDITO — divide entre métodos de pago de CONTADO (lo realmente pagado) y CxP (saldo a crédito).
+            // Un método de pago tipo "Credito" NO es un pago real: es deuda con el proveedor → NO se acredita
+            // a caja/banco ni cuenta como pagado; su monto queda como saldo y va a Proveedores (CxP 2205).
             BigDecimal totalPagado = BigDecimal.ZERO;
             if (orden.getMetodosPago() != null) {
                 for (OrdenCompraMetodoPago mp : orden.getMetodosPago()) {
                     BigDecimal monto = mp.getMonto() != null ? mp.getMonto() : BigDecimal.ZERO;
                     if (monto.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                    // Saltar métodos de pago a CRÉDITO (no son egreso de dinero → van a CxP).
+                    com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo = mp.getMetodoPago();
+                    boolean esMetodoCredito = metodo != null && metodo.getTipoNegociacion() != null
+                            && "Credito".equalsIgnoreCase(metodo.getTipoNegociacion().name());
+                    if (esMetodoCredito) continue;
+
                     // Resolver cuenta del método (banco si tiene cuenta bancaria, sino cuenta directa, sino caja)
-                    CuentaContable ctaMetodo = resolverCuentaMetodoPagoCompra(mp.getMetodoPago());
+                    CuentaContable ctaMetodo = resolverCuentaMetodoPagoCompra(metodo);
                     if (ctaMetodo == null) {
-                        System.out.println("[AsientoCompra] Método '" + mp.getMetodoPago().getDescripcion() + "' sin cuenta. Se asume caja.");
+                        System.out.println("[AsientoCompra] Método '" + (metodo != null ? metodo.getDescripcion() : "?") + "' sin cuenta. Se asume caja.");
                         ctaMetodo = configContable.cajaGeneral().orElse(null);
                         if (ctaMetodo == null) continue;
                     }
                     lineas.add(AsientoContableService.LineaDTO.credito(ctaMetodo.getId(), monto,
-                            "Pago " + mp.getMetodoPago().getDescripcion() + " compra " + orden.getNumeroOrden()));
+                            "Pago " + (metodo != null ? metodo.getDescripcion() : "") + " compra " + orden.getNumeroOrden()));
                     totalPagado = totalPagado.add(monto);
                 }
             }
 
-            // CRÉDITO CxP solo por el saldo pendiente
-            BigDecimal saldoCxP = total.subtract(totalPagado);
+            // CRÉDITO Retenciones por pagar (la empresa retiene al proveedor y le debe al fisco)
+            if (retefuente.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable rf = configContable.retefuentePagar().orElse(null);
+                if (rf != null) {
+                    AsientoContableService.LineaDTO rfLinea = AsientoContableService.LineaDTO
+                            .credito(rf.getId(), retefuente, "Retención fuente compra " + orden.getNumeroOrden());
+                    if (request.getProvedor() != null && request.getProvedor().getTerceroId() != null) {
+                        rfLinea.conTercero(request.getProvedor().getTerceroId(), request.getProvedor().getNombre());
+                    }
+                    lineas.add(rfLinea);
+                } else {
+                    System.out.println("[AsientoCompra] Cuenta 236505 Retefuente no configurada — retención no se contabiliza.");
+                }
+            }
+            if (reteivaProv.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable ri = configContable.reteivaPagar().orElse(null);
+                if (ri != null) {
+                    AsientoContableService.LineaDTO riLinea = AsientoContableService.LineaDTO
+                            .credito(ri.getId(), reteivaProv, "Retención IVA compra " + orden.getNumeroOrden());
+                    if (request.getProvedor() != null && request.getProvedor().getTerceroId() != null) {
+                        riLinea.conTercero(request.getProvedor().getTerceroId(), request.getProvedor().getNombre());
+                    }
+                    lineas.add(riLinea);
+                } else {
+                    System.out.println("[AsientoCompra] Cuenta 236540 ReteIVA no configurada — retención no se contabiliza.");
+                }
+            }
+            if (reteicaProv.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable ric = configContable.reteicaPagar().orElse(null);
+                if (ric != null) {
+                    AsientoContableService.LineaDTO ricLinea = AsientoContableService.LineaDTO
+                            .credito(ric.getId(), reteicaProv, "Retención ICA compra " + orden.getNumeroOrden());
+                    if (request.getProvedor() != null && request.getProvedor().getTerceroId() != null) {
+                        ricLinea.conTercero(request.getProvedor().getTerceroId(), request.getProvedor().getNombre());
+                    }
+                    lineas.add(ricLinea);
+                } else {
+                    System.out.println("[AsientoCompra] Cuenta 236570 ReteICA no configurada — retención no se contabiliza.");
+                }
+            }
+
+            // CRÉDITO CxP solo por el saldo pendiente.
+            // totalNeto YA tiene las retenciones restadas → NO restarlas de nuevo (eso era doble resta).
+            BigDecimal saldoCxP = totalNeto.subtract(totalPagado);
             if (saldoCxP.compareTo(new BigDecimal("0.01")) > 0) {
                 CuentaContable cxp = configContable.cxpProveedores().orElse(null);
                 if (cxp == null) {
@@ -406,6 +534,11 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             );
         } catch (Exception ex) {
             System.out.println("[AsientoCompra] Error generando asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("COMPRAS",
+                    orden.getComprobante() != null && orden.getComprobante().getTipoMovimiento() != null
+                        ? orden.getComprobante().getTipoMovimiento().name() : "CC",
+                    orden.getId(), orden.getNumeroOrden(),
+                    "Error generando asiento de compra: " + ex.getMessage(), ex);
         }
     }
 
@@ -510,12 +643,21 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // ─── Comprobante contable (CC contado / CR crédito) ───
         // Estrategia: si el usuario es cajero y su cajero tiene comprobante CC/CR, se usa.
         // Si no, se cae al cajero default de compras configurado a nivel de empresa.
-        // Regla autoritativa: el plazo manda. plazo=0 ⇒ contado, plazo>0 ⇒ crédito.
-        // El flag esCredito es legacy y solo se respeta cuando el plazo viene en null.
+        //
+        // El TIPO lo determina EL MÉTODO DE PAGO, no el plazo:
+        //   - Si algún método de pago tiene tipoNegociacion = "Credito" → CR
+        //     (y solo en ese caso se aplica el plazo para la fecha de vencimiento).
+        //   - Cualquier otro método de pago (efectivo, transferencia, etc.) → CC (contado),
+        //     sin importar el plazo que se haya escrito.
+        //   - Fallback solo si NO hay métodos de pago: flag explícito esCredito.
         boolean esCredito;
-        if (request.getPlazo() != null) {
-            esCredito = request.getPlazo() > 0;
+        if (tieneMetodoPagoCredito(request)) {
+            esCredito = true;
+        } else if (request.getMetodosPago() != null && !request.getMetodosPago().isEmpty()) {
+            // Hay métodos de pago y ninguno es de crédito → contado.
+            esCredito = false;
         } else {
+            // Sin métodos de pago seleccionados: respetar solo el flag explícito (NO el plazo).
             esCredito = Boolean.TRUE.equals(request.getEsCredito());
         }
         TipoMovimientoComprobante tipo = esCredito
@@ -547,8 +689,12 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         LocalDate fechaEntrega;
         if (request.getFechafinal() != null && !request.getFechafinal().isEmpty()) {
             fechaEntrega = LocalDate.parse(request.getFechafinal(), formatter);
-        } else {
+        } else if (esCredito) {
+            // Solo en compras a CRÉDITO se aplica el plazo para la fecha de vencimiento.
             fechaEntrega = fechaInicial.plusDays(request.getPlazo() != null ? request.getPlazo() : 30);
+        } else {
+            // Contado: vence el mismo día (el plazo escrito no aplica).
+            fechaEntrega = fechaInicial;
         }
         orden.setFechaEntregaEsperada(fechaEntrega);
 
@@ -559,6 +705,11 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         orden.setIva(request.getOrden_compra().getIva());
         orden.setDescuentos(request.getOrden_compra().getDescuentos());
         orden.setTotalOrdenCompra(request.getOrden_compra().getTotalOrdenCompra());
+
+        // Retenciones aplicadas al proveedor (la empresa es agente retenedor).
+        orden.setRetefuente(parseMoneyOrZero(request.getOrden_compra().getRetefuente()));
+        orden.setReteiva(parseMoneyOrZero(request.getOrden_compra().getReteiva()));
+        orden.setReteica(parseMoneyOrZero(request.getOrden_compra().getReteica()));
 
         // Set proveedor
         orden.setProveedor(tercerosRepository.findById(request.getProvedor().getTerceroId())
@@ -644,7 +795,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 mp.setMonto(mpDto.getMonto());
                 mp.setReferencia(mpDto.getReferencia());
                 persistidos.add(mp);
-                totalPagado = totalPagado.add(mpDto.getMonto());
+                // Los métodos de pago a CRÉDITO NO son pago real → no suman a "pagado"
+                // (su monto queda como saldo y genera la cuenta por pagar al proveedor).
+                boolean esMetodoCredito = metodo.getTipoNegociacion() != null
+                        && "Credito".equalsIgnoreCase(metodo.getTipoNegociacion().name());
+                if (!esMetodoCredito) {
+                    totalPagado = totalPagado.add(mpDto.getMonto());
+                }
             } catch (Exception ex) {
                 System.out.println("[OrdenCompra] Error procesando método de pago: " + ex.getMessage());
             }
@@ -655,8 +812,12 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     }
 
     /**
-     * Crea la CxP solo por el saldo NO pagado (totalOrden − totalPagado).
-     * Si totalPagado >= totalOrden, NO se crea CxP (todo pagado de contado).
+     * Crea la CxP solo por el saldo NO pagado al proveedor.
+     *
+     * orden.getTotalOrdenCompra() ya es el total NETO (el frontend le restó las retenciones),
+     * por eso aquí NO se vuelven a restar (antes había doble resta).
+     *   Saldo CxP = totalNeto − totalPagado
+     * Si saldoCxP &lt;= 0, NO se crea CxP.
      */
     private void crearCuentaPorPagarDesdeRequest(OrdenCompra orden, RealizarOrdenRequestDTO request,
                                                   BigDecimal totalPagado) {
@@ -672,11 +833,29 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         cuenta.setNombre(request.getProvedor().getNombre());
         cuenta.setNumeroFactura(orden.getNumeroOrden());
         cuenta.setFechaVencimiento(orden.getFechaEntregaEsperada());
-        cuenta.setValorNeto(saldoPendiente);  // solo el saldo no pagado
+        cuenta.setValorNeto(saldoPendiente);  // solo el saldo no pagado (total neto - pagado)
         cuenta.setEstado("PENDIENTE");
         cuenta.setProveedorId(request.getProvedor().getTerceroId());
 
         cuentaPorPagarService.crear(cuenta);
+    }
+
+    /** Parsea un valor monetario string del DTO. Acepta null, vacío, comas/decimales. */
+    private BigDecimal parseMoneyOrZero(String s) {
+        if (s == null || s.isBlank()) return BigDecimal.ZERO;
+        try {
+            return new BigDecimal(s.replace(",", "").trim());
+        } catch (NumberFormatException ex) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    /** Suma de retenciones aplicadas en la orden (fuente + IVA + ICA). */
+    private BigDecimal totalRetenciones(OrdenCompra orden) {
+        BigDecimal rf = orden.getRetefuente() != null ? orden.getRetefuente() : BigDecimal.ZERO;
+        BigDecimal ri = orden.getReteiva() != null ? orden.getReteiva() : BigDecimal.ZERO;
+        BigDecimal ric = orden.getReteica() != null ? orden.getReteica() : BigDecimal.ZERO;
+        return rf.add(ri).add(ric);
     }
 
 

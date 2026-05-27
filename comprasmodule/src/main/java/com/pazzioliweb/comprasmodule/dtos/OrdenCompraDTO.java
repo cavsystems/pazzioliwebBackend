@@ -27,6 +27,9 @@ public class OrdenCompraDTO {
     private BigDecimal subtotal;
     private BigDecimal iva;
     private BigDecimal total;
+    private BigDecimal retefuente;
+    private BigDecimal reteiva;
+    private BigDecimal reteica;
     private String usuarioCreacion;
     private LocalDate fechaCreacion;
     

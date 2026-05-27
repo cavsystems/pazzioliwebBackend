@@ -124,10 +124,9 @@ public class Usuariocontroller {
 		return usurepo.findByCodigo(codigousuario)
 				.map(usuario -> {
 					Roles rol = usuario.getCodigorol();
-					RolDTO rolDTO = new RolDTO(
-							rol.getCodigo(),
-							rol.getNombre()
-					);
+					RolDTO rolDTO = rol != null
+							? new RolDTO(rol.getCodigo(), rol.getNombre())
+							: null;
 
 					UsuarioDTO dto = new UsuarioDTO(
 							usuario.getCodigo(),
@@ -236,20 +235,18 @@ public class Usuariocontroller {
 		response.clear();
 		Optional<Roles> roloptional = reporoles.findByCodigo(idrol);
 		Optional<Permiso> permisooptional = repopermiso.findByCodigo(idpermiso);
-		PermisoRol rolpermiso = new PermisoRol();
-		if (!roloptional.isEmpty()) {
-			System.out.println(roloptional.get().getNombre());
-			//  rol.setNombre(nombrerol.getNombre());
-			rolpermiso.setCodigorol(roloptional.get());
-			rolpermiso.setCodigopermiso(permisooptional.get());
-			rolpermiso.setEstado("ACTIVO");
-
-			permisorol.save(rolpermiso);
-
-			response.put("mesajae", new MensajeResponsederol("permisorolhecho", true));
-
-
+		if (roloptional.isEmpty() || permisooptional.isEmpty()) {
+			response.put("mensaje", new MensajeResponsederol("Rol o permiso no encontrado", false));
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
 		}
+		PermisoRol rolpermiso = new PermisoRol();
+		rolpermiso.setCodigorol(roloptional.get());
+		rolpermiso.setCodigopermiso(permisooptional.get());
+		rolpermiso.setEstado("ACTIVO");
+
+		permisorol.save(rolpermiso);
+
+		response.put("mesajae", new MensajeResponsederol("permisorolhecho", true));
 
 
 		class MensajeResponse {
@@ -294,7 +291,6 @@ public class Usuariocontroller {
 		response.clear();
 		List<UsuarioclientesDTOS> usuariopersona = usurepocli.findByUsuariclienteind();
 		response.put("usuariosclientes", usuariopersona);
-		System.out.println(usuariopersona.get(0).getEstado());
 		return ResponseEntity.ok().body(response);
 	}
 
@@ -313,8 +309,15 @@ public class Usuariocontroller {
 	@PostMapping(value = "/crearpersona", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<Map<String, Object>> crearpersonas(@ModelAttribute crearpersonaDTOS usuarioper) {
 		Map<String, Object> response = new HashMap<>();
-		System.out.println("usuariocliente" + usuarioper.getCorreo());
 		response.clear();
+
+		Optional<Usuario> optiousu = usurepo.findByCodigo(1);
+		Optional<Usuario> optiousuc = usurepo.findByCodigo(usuarioper.getCodigousuario());
+		if (optiousu.isEmpty() || optiousuc.isEmpty()) {
+			response.put("mensaje", new MensajeResponsederol("Usuario no encontrado", false));
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+		}
+
 		Usuarioclientes usucliente = new Usuarioclientes();
 		usucliente.setNombre(usuarioper.getNombre());
 		usucliente.setApellido(usuarioper.getApellido());
@@ -322,46 +325,27 @@ public class Usuariocontroller {
 		usucliente.setDireccion(usuarioper.getDireccion());
 		usucliente.setEstado(usuarioper.getEstado());
 		usucliente.setIdentificacion(usuarioper.getIdentificacion());
-		if (usuarioper.getImagenperfil() != null) {
+		if (usuarioper.getImagenperfil() != null && !usuarioper.getImagenperfil().isEmpty()) {
 			try {
 				usucliente.setImagenperfil(usuarioper.getImagenperfil().getBytes());
-
 				usucliente.setTipoimagen(usuarioper.getImagenperfil().getContentType() + '/' + usuarioper.getImagenperfil().getOriginalFilename());
-				System.out.println("usuariocliente" + usuarioper.getImagenperfil().getName() + '/' + usuarioper.getImagenperfil().getOriginalFilename());
-				Optional<Usuario> optiousu = usurepo.findByCodigo(1);
-				usucliente.setCodigousuariocreado(optiousu.get());
-				Usuarioclientes responu = personacliente.save(usucliente);
-				Usuarioclientesusuario newusucliente = new Usuarioclientesusuario();
-				Optional<Usuario> optiousuc = usurepo.findByCodigo(usuarioper.getCodigousuario());
-				newusucliente.setCodigocliente(responu);
-				newusucliente.setCodigousuario(optiousuc.get());
-				usuclienteu.save(newusucliente);
-				response.put("mensaje", new MensajeResponsederol("usuarioc cliente creado", true));
-				return ResponseEntity.status(200).body(response);
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				response.put("mensaje", new MensajeResponsederol("hubo un error al cargar la imagem", false));
+				response.put("mensaje", new MensajeResponsederol("hubo un error al cargar la imagen", false));
 				return ResponseEntity.status(500).body(response);
-
 			}
-
 		} else {
 			usucliente.setImagenperfil(null);
-
 			usucliente.setTipoimagen("");
-
-			Optional<Usuario> optiousu = usurepo.findByCodigo(1);
-			usucliente.setCodigousuariocreado(optiousu.get());
-			Usuarioclientes responu = personacliente.save(usucliente);
-			Usuarioclientesusuario newusucliente = new Usuarioclientesusuario();
-			Optional<Usuario> optiousuc = usurepo.findByCodigo(usuarioper.getCodigousuario());
-			newusucliente.setCodigocliente(responu);
-			newusucliente.setCodigousuario(optiousuc.get());
-			usuclienteu.save(newusucliente);
-			response.put("mensaje", new MensajeResponsederol("usuarioc cliente creado", true));
-			return ResponseEntity.status(200).body(response);
-
 		}
+
+		usucliente.setCodigousuariocreado(optiousu.get());
+		Usuarioclientes responu = personacliente.save(usucliente);
+		Usuarioclientesusuario newusucliente = new Usuarioclientesusuario();
+		newusucliente.setCodigocliente(responu);
+		newusucliente.setCodigousuario(optiousuc.get());
+		usuclienteu.save(newusucliente);
+		response.put("mensaje", new MensajeResponsederol("usuarioc cliente creado", true));
+		return ResponseEntity.status(200).body(response);
 	}
 
 
@@ -369,16 +353,18 @@ public class Usuariocontroller {
 	@PutMapping(value = "/asignarpersona/{idusuario}/{codigoper}")
 	public ResponseEntity<Map<String, Object>> asignarpersona(@PathVariable int idusuario, @PathVariable int codigoper) {
 		Map<String, Object> response = new HashMap<>();
-
-
 		response.clear();
-		Usuarioclientes usucliente = new Usuarioclientes();
 
 		Optional<Usuario> usuop = usurepo.findByCodigo(idusuario);
 		Optional<Usuarioclientes> usuopcli = personacliente.findByCodigo(codigoper);
 
+		if (usuop.isEmpty() || usuopcli.isEmpty()) {
+			response.put("mensaje", "Usuario o cliente no encontrado");
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+		}
+
 		List<UsuarioclientesDTOS> usuclientes = usuclienteu.findByUsuariclienteusuario(idusuario, codigoper);
-		if (usuclientes.size() <= 0) {
+		if (usuclientes.isEmpty()) {
 			Usuarioclientesusuario usucli = new Usuarioclientesusuario();
 
 			usucli.setCodigocliente(usuopcli.get());
@@ -416,15 +402,13 @@ public class Usuariocontroller {
 
 	@PutMapping(value = "actulizarpersona/{idper}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@Transactional
-	public ResponseEntity<Map<String, Object>> crearpermisorol(@PathVariable int idper, @ModelAttribute crearpersonaDTOS usuarioper) throws IOException {
+	public ResponseEntity<Map<String, Object>> crearpermisorol(@PathVariable int idper, @ModelAttribute crearpersonaDTOS usuarioper) {
 		Map<String, Object> response = new HashMap<>();
 		response.clear();
 		System.out.println("entro actulizar persona");
 		try {
 
-			// me devuelve el usuariocliente y en caso contrario una exepcion
 			Usuarioclientes persona = personacliente.findByCodigo(idper)
-
 					.orElseThrow(() -> new ResponseStatusException(
 							HttpStatus.NOT_FOUND, "Usuario no encontrado"));
 
@@ -437,24 +421,23 @@ public class Usuariocontroller {
 			if (usuarioper.getImagenperfil() != null && !usuarioper.getImagenperfil().isEmpty()) {
 				persona.setImagenperfil(usuarioper.getImagenperfil().getBytes());
 				persona.setTipoimagen(usuarioper.getImagenperfil().getContentType() + "/" + usuarioper.getImagenperfil().getOriginalFilename());
-
-			} else {
-				persona.setImagenperfil(null);
-				persona.setTipoimagen("");
-
 			}
 
 			personacliente.save(persona);
+			response.put("mensaje", new MensajeResponsederol("Usuario actualizado", true));
+			return ResponseEntity.ok().body(response);
 
-			response.put("mesaje", new MensajeResponsederol("Usuarioactulizado", true));
-
-
+		} catch (ResponseStatusException e) {
+			response.put("mensaje", new MensajeResponsederol(e.getReason(), false));
+			return ResponseEntity.status(e.getStatusCode()).body(response);
+		} catch (IOException e) {
+			response.put("mensaje", new MensajeResponsederol("Error procesando la imagen", false));
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 		} catch (Exception e) {
 			e.printStackTrace();
+			response.put("mensaje", new MensajeResponsederol("Error actualizando el cliente: " + e.getMessage(), false));
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 		}
-
-		return ResponseEntity.ok().body(response);
-
 	}
 
 
@@ -474,16 +457,26 @@ public class Usuariocontroller {
 
 	@PutMapping("actualizar/id/{idusuario}")
 	public ResponseEntity<Object> restablecercontrasena(@PathVariable Integer idusuario, @RequestBody CrearusuarioDTOS dto) {
+		if (dto == null || dto.getContrasena() == null || dto.getContrasena().trim().isEmpty()) {
+			Map<String, Object> err = new HashMap<>();
+			err.put("mensaje", "La contraseña es obligatoria");
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(err);
+		}
+		if (dto.getContrasena().length() < 6) {
+			Map<String, Object> err = new HashMap<>();
+			err.put("mensaje", "La contraseña debe tener mínimo 6 caracteres");
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(err);
+		}
 		Optional<Usuario> usuarioop = usurepo.findByCodigo(idusuario);
-		if (!usuarioop.isEmpty() && usuarioop.isPresent()) {
+		if (usuarioop.isPresent()) {
 
 			Usuario usuario = usuarioop.get();
-			usuario.setContrasena(PasswordUtils.encrypt(usuario.getContrasena()));
+			usuario.setContrasena(PasswordUtils.encrypt(dto.getContrasena()));
 
 			usurepo.save(usuario);
 
 
-			return ResponseEntity.ok(true); // Status 200 con booleano
+			return ResponseEntity.ok(true);
 		}
 
 		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(false);

@@ -74,6 +74,48 @@ public class Empresa {
  private String razonsocial;
  private String codigopostal;
 
+ // ──────────────────────────────────────────────────────────────
+ // Datos fiscales DIAN (exigidos en cbc:TaxLevelCode del XML UBL)
+ // ──────────────────────────────────────────────────────────────
+ /**
+  * Responsabilidad fiscal según código DIAN.
+  * Valores válidos: O-13 (Gran Contribuyente), O-15 (Autorretenedor),
+  * O-23 (Agente retención IVA), O-47 (Régimen Simple),
+  * R-99-PN (No aplica — persona natural simplificado), etc.
+  * Se puede combinar (ej: "O-13;O-15"). Sin esto DIAN rechaza el XML.
+  */
+ @Column(name = "responsabilidad_fiscal", length = 100)
+ private String responsabilidadFiscal;
+
+ /** Tipo de contribuyente: PERSONA_NATURAL / PERSONA_JURIDICA */
+ @Column(name = "tipo_contribuyente", length = 30)
+ private String tipoContribuyente;
+
+ /** Marca si es Gran Contribuyente (afecta retenciones aplicables). */
+ @Column(name = "gran_contribuyente", nullable = false)
+ private Boolean granContribuyente = false;
+
+ /** Marca si es autorretenedor (se autoaplica retención en fuente). */
+ @Column(name = "autorretenedor", nullable = false)
+ private Boolean autorretenedor = false;
+
+ /** Marca si es responsable de IVA. */
+ @Column(name = "responsable_iva", nullable = false)
+ private Boolean responsableIva = true;
+
+ // ──────────────────────────────────────────────────────────────
+ // Getters/setters fiscales
+ public String getResponsabilidadFiscal() { return responsabilidadFiscal; }
+ public void setResponsabilidadFiscal(String responsabilidadFiscal) { this.responsabilidadFiscal = responsabilidadFiscal; }
+ public String getTipoContribuyente() { return tipoContribuyente; }
+ public void setTipoContribuyente(String tipoContribuyente) { this.tipoContribuyente = tipoContribuyente; }
+ public Boolean getGranContribuyente() { return granContribuyente; }
+ public void setGranContribuyente(Boolean granContribuyente) { this.granContribuyente = granContribuyente; }
+ public Boolean getAutorretenedor() { return autorretenedor; }
+ public void setAutorretenedor(Boolean autorretenedor) { this.autorretenedor = autorretenedor; }
+ public Boolean getResponsableIva() { return responsableIva; }
+ public void setResponsableIva(Boolean responsableIva) { this.responsableIva = responsableIva; }
+
 	public int getNumerousuarios() {
 		return numerousuarios;
 	}

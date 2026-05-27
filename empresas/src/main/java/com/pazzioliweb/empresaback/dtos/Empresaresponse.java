@@ -71,6 +71,24 @@ public class Empresaresponse {
   	private int 	tipodepersona;
 	private String estado;
 
+	// ── Campos fiscales DIAN (TaxLevelCode UBL obligatorio) ──
+	private String responsabilidadFiscal;
+	private String tipoContribuyente;
+	private Boolean granContribuyente;
+	private Boolean autorretenedor;
+	private Boolean responsableIva;
+
+	public String getResponsabilidadFiscal() { return responsabilidadFiscal; }
+	public void setResponsabilidadFiscal(String responsabilidadFiscal) { this.responsabilidadFiscal = responsabilidadFiscal; }
+	public String getTipoContribuyente() { return tipoContribuyente; }
+	public void setTipoContribuyente(String tipoContribuyente) { this.tipoContribuyente = tipoContribuyente; }
+	public Boolean getGranContribuyente() { return granContribuyente; }
+	public void setGranContribuyente(Boolean granContribuyente) { this.granContribuyente = granContribuyente; }
+	public Boolean getAutorretenedor() { return autorretenedor; }
+	public void setAutorretenedor(Boolean autorretenedor) { this.autorretenedor = autorretenedor; }
+	public Boolean getResponsableIva() { return responsableIva; }
+	public void setResponsableIva(Boolean responsableIva) { this.responsableIva = responsableIva; }
+
 	public void setDepartamento(int departamento) {
 		this.departamento = departamento;
 	}

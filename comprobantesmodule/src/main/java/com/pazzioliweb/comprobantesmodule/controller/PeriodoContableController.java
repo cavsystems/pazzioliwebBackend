@@ -1,7 +1,9 @@
 package com.pazzioliweb.comprobantesmodule.controller;
 
 import com.pazzioliweb.comprobantesmodule.entity.PeriodoContable;
+import com.pazzioliweb.comprobantesmodule.service.CierreAnualService;
 import com.pazzioliweb.comprobantesmodule.service.PeriodoContableService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,9 +17,23 @@ import java.util.Map;
 public class PeriodoContableController {
 
     private final PeriodoContableService service;
+    @Autowired
+    private CierreAnualService cierreAnualService;
 
     public PeriodoContableController(PeriodoContableService service) {
         this.service = service;
+    }
+
+    /**
+     * Ejecuta el cierre anual: cierra cuentas de resultado contra 3605 y traslada
+     * el resultado a 3705 al 01-Ene del año siguiente. Requiere que los 12 meses
+     * del año estén cerrados previamente.
+     */
+    @PostMapping("/cierre-anual")
+    public ResponseEntity<CierreAnualService.ResultadoCierre> cierreAnual(@RequestBody Map<String, Object> body) {
+        int anio = ((Number) body.get("anio")).intValue();
+        String usuario = (String) body.getOrDefault("usuario", "sistema");
+        return ResponseEntity.ok(cierreAnualService.cerrarAnio(anio, usuario));
     }
 
     /** Lista todos los periodos, o de un año específico. */

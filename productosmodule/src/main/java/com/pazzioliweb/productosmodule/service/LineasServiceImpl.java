@@ -27,6 +27,9 @@ public class LineasServiceImpl implements LineasService{
 	
 	@Override
 	public Lineas crear(Lineas linea) {
+		// Asignar el primer hueco disponible para mantener códigos secuenciales sin saltos.
+		Integer nextId = repo.findPrimerHueco();
+		linea.setId(nextId != null ? nextId : 1);
 		return repo.save(linea);
 	}
 	

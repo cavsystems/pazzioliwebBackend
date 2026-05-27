@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-05-23T13:17:41-0500",
-    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
+    date = "2026-05-25T23:31:20-0500",
+    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.2 (Oracle Corporation)"
 )
 @Component
 public class OrdenCompraMapperImpl implements OrdenCompraMapper {
@@ -49,6 +49,9 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
         ordenCompraDTO.setUsuarioCreacion( ordenCompra.getUsuarioCreacion() );
         ordenCompraDTO.setFechaCreacion( ordenCompra.getFechaCreacion() );
         ordenCompraDTO.setItems( toDetalleDtoList( ordenCompra.getItems() ) );
+        ordenCompraDTO.setRetefuente( ordenCompra.getRetefuente() );
+        ordenCompraDTO.setReteiva( ordenCompra.getReteiva() );
+        ordenCompraDTO.setReteica( ordenCompra.getReteica() );
 
         return ordenCompraDTO;
     }
@@ -73,6 +76,9 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
         ordenCompra.setUsuarioCreacion( ordenCompraDTO.getUsuarioCreacion() );
         ordenCompra.setFechaCreacion( ordenCompraDTO.getFechaCreacion() );
         ordenCompra.setItems( detalleOrdenCompraDTOListToDetalleOrdenCompraList( ordenCompraDTO.getItems() ) );
+        ordenCompra.setRetefuente( ordenCompraDTO.getRetefuente() );
+        ordenCompra.setReteiva( ordenCompraDTO.getReteiva() );
+        ordenCompra.setReteica( ordenCompraDTO.getReteica() );
 
         setOrdenCompraInDetalles( ordenCompra );
 

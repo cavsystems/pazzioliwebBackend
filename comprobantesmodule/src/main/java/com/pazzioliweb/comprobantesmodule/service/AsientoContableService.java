@@ -95,12 +95,14 @@ public class AsientoContableService {
                                            String documentoOrigenTipo, Long documentoOrigenId,
                                            ComprobanteContable comprobante,
                                            List<LineaDTO> lineas) {
-        // Idempotencia: si ya existe asiento para este documento, regresarlo
+        // Idempotencia: si ya existe asiento CONFIRMADO para este documento, regresarlo.
+        // Los asientos ANULADOS no bloquean la creación — si se reactiva un documento
+        // (ej. orden reabierta tras anulación) debe generarse uno nuevo CONFIRMADO.
         if (documentoOrigenTipo != null && documentoOrigenId != null) {
             Optional<AsientoContable> existente = asientoRepo
                     .findByDocumentoOrigenTipoAndDocumentoOrigenId(documentoOrigenTipo, documentoOrigenId);
-            if (existente.isPresent()) {
-                log.info("[AsientoContable] Ya existe asiento para {} #{}", documentoOrigenTipo, documentoOrigenId);
+            if (existente.isPresent() && !"ANULADO".equals(existente.get().getEstado())) {
+                log.info("[AsientoContable] Ya existe asiento CONFIRMADO para {} #{}", documentoOrigenTipo, documentoOrigenId);
                 return existente.get();
             }
         }
@@ -163,6 +165,29 @@ public class AsientoContableService {
         for (LineaDTO ldto : validas) {
             CuentaContable cc = cuentaRepo.findById(ldto.cuentaContableId)
                     .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe: " + ldto.cuentaContableId));
+
+            // Validación 1: la cuenta debe ser de movimiento (hoja del árbol),
+            // no una cuenta padre. Asientos contra cuentas padre rompen los
+            // reportes financieros (Balance, Estado de Resultados).
+            if (cc.getEsMovimiento() != null && !cc.getEsMovimiento()) {
+                throw new IllegalStateException(
+                    "La cuenta '" + cc.getCodigo() + " - " + cc.getNombre() + "' es una cuenta PADRE " +
+                    "y no admite movimientos. Use una subcuenta hoja del árbol contable."
+                );
+            }
+
+            // Validación 2: si la cuenta requiere tercero (CxC, CxP, IVA descontable,
+            // retenciones, etc.) debe venir un tercero en la línea. Sin esto
+            // los informes por tercero quedan incompletos y la exógena DIAN
+            // (formato 1001/1002) tendrá datos vacíos.
+            if (Boolean.TRUE.equals(cc.getRequiereTercero())
+                    && (ldto.terceroId == null || ldto.terceroId == 0)) {
+                throw new IllegalStateException(
+                    "La cuenta '" + cc.getCodigo() + " - " + cc.getNombre() + "' requiere tercero, " +
+                    "pero la línea no lo trae. Doc: " + documentoOrigenTipo + " #" + documentoOrigenId
+                );
+            }
+
             AsientoContableLinea linea = new AsientoContableLinea();
             linea.setAsiento(asiento);
             linea.setCuentaContable(cc);

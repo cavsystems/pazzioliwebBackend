@@ -116,6 +116,17 @@ public class ComprobanteContableService {
             throw new IllegalArgumentException("Tipo de movimiento inválido: " + dto.getTipoMovimiento());
         }
 
+        // Si el tipo requiere cajero (FC, VC, CC, CR, RC, CE, DV), debe traer al menos uno.
+        boolean activo = dto.getActivo() == null || Boolean.TRUE.equals(dto.getActivo());
+        if (tipo.requiereCajero() && activo
+                && (dto.getCajeroIds() == null || dto.getCajeroIds().isEmpty())) {
+            throw new IllegalArgumentException(
+                "El comprobante de tipo " + tipo.name() + " (" + tipo.getDescripcion()
+                + ") debe tener al menos un cajero asignado para poder usarse. " +
+                "Sin cajero, el sistema no podrá generar el consecutivo al hacer una " + tipo.getDescripcion().toLowerCase() + "."
+            );
+        }
+
         // Prefijo único POR TIPO (no global) — varios cajeros pueden compartir el mismo prefijo+tipo,
         // pero NO el mismo prefijo dentro del mismo tipo está duplicado.
         boolean prefijoExiste = idActual == null

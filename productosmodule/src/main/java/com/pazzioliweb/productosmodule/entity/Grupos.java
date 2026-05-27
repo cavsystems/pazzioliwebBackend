@@ -2,8 +2,6 @@ package com.pazzioliweb.productosmodule.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -11,7 +9,6 @@ import jakarta.persistence.Table;
 @Table(name ="grupos")
 public class Grupos {
 	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "grupo_id")
 	private Integer id;
 	

@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -114,6 +115,18 @@ public class EmpresaService {
 	  private  TenantRegister register;
 	  @Autowired
 	  private EmpresaRepositori emprerepo;
+
+	@Value("${spring.datasource.username:root}")
+	private String dbUser;
+
+	@Value("${spring.datasource.password:root}")
+	private String dbPass;
+
+	@Value("${app.backup.path:C:\\backups}")
+	private String backupBasePath;
+
+	@Value("${app.backup.mysqldump:mysqldump}")
+	private String mysqldumpCmd;
 
 	@PersistenceContext
     private EntityManager em;
@@ -212,6 +225,14 @@ public class EmpresaService {
 		empresa.setFechainiciolicencia(empre.getFechainiciolicencia());
 		empresa.setFechafinallicencia(empre.getFechafinallicencia());
 		empresa.setEstado(Estado.ACTIVA);
+
+		// Datos fiscales DIAN (obligatorios para XML UBL TaxLevelCode)
+		empresa.setResponsabilidadFiscal(empre.getResponsabilidadFiscal());
+		empresa.setTipoContribuyente(empre.getTipoContribuyente());
+		empresa.setGranContribuyente(empre.getGranContribuyente() != null ? empre.getGranContribuyente() : false);
+		empresa.setAutorretenedor(empre.getAutorretenedor() != null ? empre.getAutorretenedor() : false);
+		empresa.setResponsableIva(empre.getResponsableIva() != null ? empre.getResponsableIva() : true);
+
 		if (archivo != null && !archivo.isEmpty()) {
 			empresa.setImagenEmpresa(archivo.getBytes());
 		    empresa.setTipoImagen(archivo.getContentType()); // Guardamos el tipo MIME
@@ -380,7 +401,14 @@ public class EmpresaService {
 		empresa.setSegundoapellido(empre.getSegundoapellido());
 		empresa.setRazonsocial(empre.getRazonsocial());
 		empresa.setTelfonofijo(empre.getTelefonofijo());
-		
+
+		// Datos fiscales DIAN (TaxLevelCode UBL). Solo actualiza si vienen en el request.
+		if (empre.getResponsabilidadFiscal() != null) empresa.setResponsabilidadFiscal(empre.getResponsabilidadFiscal());
+		if (empre.getTipoContribuyente() != null)    empresa.setTipoContribuyente(empre.getTipoContribuyente());
+		if (empre.getGranContribuyente() != null)    empresa.setGranContribuyente(empre.getGranContribuyente());
+		if (empre.getAutorretenedor() != null)       empresa.setAutorretenedor(empre.getAutorretenedor());
+		if (empre.getResponsableIva() != null)       empresa.setResponsableIva(empre.getResponsableIva());
+
 		// Actualizar estado si se proporciona
 		if (empre.getEstado() != null && !empre.getEstado().trim().isEmpty()) {
 			try {
@@ -475,9 +503,7 @@ public class EmpresaService {
 			
 			// Encriptar contraseña
 			String contrasenaEncriptada = PasswordUtils.encrypt(contrasena);
-			System.out.println("Usuario: " + usuarioDto.getUsuario() + " - Contraseña original: " + contrasena);
-			System.out.println("Usuario: " + usuarioDto.getUsuario() + " - Contraseña encriptada: " + contrasenaEncriptada);
-			
+
 			nuevoUsuario.setContrasena(contrasenaEncriptada);
 			nuevoUsuario.setEstado(usuarioDto.getEstado() != null ? usuarioDto.getEstado() : "ACTIVO");
 			nuevoUsuario.setCodigousuariocreado(1); // Usuario por defecto que crea
@@ -501,7 +527,6 @@ public class EmpresaService {
 			
 			Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 			System.out.println("Usuario guardado con ID: " + usuarioGuardado.getCodigo());
-			System.out.println("Contraseña guardada en BD: " + usuarioGuardado.getContrasena());
 			
 		} catch (Exception e) {
 			System.err.println("Error al crear usuario individual " + usuarioDto.getUsuario() + ": " + e.getMessage());
@@ -667,23 +692,25 @@ public class EmpresaService {
 	public boolean crearBackupSchema(String nombreEmpresa) {
 		try {
 			String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-			String backupPath = "C:\\Users\\AUXPAZZIOLI\\Documents\\backupsempresas";
 			String backupFileName = nombreEmpresa + "_" + timestamp + ".sql";
-			
-			Path path = Paths.get(backupPath);
+
+			Path path = Paths.get(backupBasePath);
 			if (!Files.exists(path)) {
 				Files.createDirectories(path);
 			}
 			String backupCommand = String.format(
-					"mysqldump -u root -proot125 --single-transaction --routines --triggers %s > \"%s\\%s\"",
+					"%s -u %s -p%s --single-transaction --routines --triggers %s > \"%s\\%s\"",
+					mysqldumpCmd,
+					dbUser,
+					dbPass,
 					nombreEmpresa,
-					backupPath,
+					backupBasePath,
 					backupFileName
 			);
-			
+
 			Process process = Runtime.getRuntime().exec("cmd /c " + backupCommand);
 			int exitCode = process.waitFor();
-			
+
 			return exitCode == 0;
 		} catch (IOException | InterruptedException e) {
 			e.printStackTrace();

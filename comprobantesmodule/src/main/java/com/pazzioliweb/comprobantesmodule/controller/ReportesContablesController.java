@@ -42,6 +42,86 @@ public class ReportesContablesController {
     }
 
     /**
+     * LIBRO DIARIO oficial — exigido por DIAN (art. 125 D.R. 2649).
+     *
+     * Lista cronológicamente TODOS los asientos contables del rango con sus
+     * líneas, mostrando: fecha, número de asiento, descripción, cuenta,
+     * tercero, débito, crédito. Es el reporte primario para auditoría DIAN.
+     *
+     * GET /api/reportes-contables/libro-diario?desde=2026-01-01&hasta=2026-12-31
+     */
+    @GetMapping("/libro-diario")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Map<String, Object>> libroDiario(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+
+        LocalDate d = desde != null ? LocalDate.parse(desde) : LocalDate.now().withDayOfMonth(1);
+        LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery(
+                "SELECT a.id, a.numero_asiento, a.fecha, a.descripcion, " +
+                "       a.documento_origen_tipo, a.documento_origen_id, a.estado, " +
+                "       l.orden, cc.codigo, cc.nombre, l.tercero_id, l.tercero_nombre, " +
+                "       l.debito, l.credito, l.descripcion AS desc_linea " +
+                "FROM asientos_contables a " +
+                "JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "WHERE a.fecha BETWEEN :d AND :h AND a.estado <> 'ANULADO' " +
+                "ORDER BY a.fecha, a.id, l.orden")
+                .setParameter("d", d)
+                .setParameter("h", h)
+                .getResultList();
+
+        // Agrupamos por asiento para no repetir cabecera por cada línea.
+        Map<Long, Map<String, Object>> asientos = new LinkedHashMap<>();
+        BigDecimal totalDebitoGen = BigDecimal.ZERO;
+        BigDecimal totalCreditoGen = BigDecimal.ZERO;
+
+        for (Object[] r : rows) {
+            Long asientoId = ((Number) r[0]).longValue();
+            Map<String, Object> a = asientos.computeIfAbsent(asientoId, id -> {
+                Map<String, Object> nuevo = new LinkedHashMap<>();
+                nuevo.put("id", asientoId);
+                nuevo.put("numeroAsiento", r[1]);
+                nuevo.put("fecha", r[2] != null ? r[2].toString() : null);
+                nuevo.put("descripcion", r[3]);
+                nuevo.put("documentoOrigenTipo", r[4]);
+                nuevo.put("documentoOrigenId", r[5]);
+                nuevo.put("estado", r[6]);
+                nuevo.put("lineas", new ArrayList<Map<String, Object>>());
+                return nuevo;
+            });
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> lineas = (List<Map<String, Object>>) a.get("lineas");
+            Map<String, Object> linea = new LinkedHashMap<>();
+            linea.put("orden", r[7]);
+            linea.put("cuentaCodigo", r[8]);
+            linea.put("cuentaNombre", r[9]);
+            linea.put("terceroId", r[10]);
+            linea.put("terceroNombre", r[11]);
+            BigDecimal db = r[12] != null ? (BigDecimal) r[12] : BigDecimal.ZERO;
+            BigDecimal cr = r[13] != null ? (BigDecimal) r[13] : BigDecimal.ZERO;
+            linea.put("debito", db);
+            linea.put("credito", cr);
+            linea.put("descripcion", r[14]);
+            lineas.add(linea);
+            totalDebitoGen = totalDebitoGen.add(db);
+            totalCreditoGen = totalCreditoGen.add(cr);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("desde", d.toString());
+        response.put("hasta", h.toString());
+        response.put("asientos", new ArrayList<>(asientos.values()));
+        response.put("totalDebito", totalDebitoGen);
+        response.put("totalCredito", totalCreditoGen);
+        response.put("diferencia", totalDebitoGen.subtract(totalCreditoGen).abs());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Libro mayor de una cuenta: lista todos los movimientos en el rango con
      * saldo inicial + corrido + saldo final. Replica el reporte de Alegra
      * "Movimientos por cuenta contable".
@@ -339,16 +419,27 @@ public class ReportesContablesController {
         BigDecimal patrimonioBase = sumaPorPrefijo(saldosPasivosPat, "3", true);
 
         // Utilidad del ejercicio = ingresos - costos - gastos del año en curso.
-        // Suma directa "4": como 4175 (Devoluciones) tiene naturaleza débito, ya viene con
-        // saldo negativo en la suma, así que el resultado ya tiene las devoluciones descontadas.
-        Map<String, BigDecimal> saldosAnioActual = saldosPorCodigoEnPeriodo(inicioAnio, corte);
+        // F6 fix: EXCLUIR asientos de CIERRE y APERTURA del cálculo — esos asientos
+        // netean las cuentas 4/5/6/7 contra 3605 y, si se incluyen aquí, la utilidad
+        // sale doblada (3605 ya está sumado en patrimonioBase).
+        Map<String, BigDecimal> saldosAnioActual = saldosPorCodigoEnPeriodoExcluyendoCierres(inicioAnio, corte);
         BigDecimal ingresosAnio = sumaPorPrefijo(saldosAnioActual, "4", true);
         BigDecimal gastosCostosAnio = sumaPorPrefijo(saldosAnioActual, "5", false)
                 .add(sumaPorPrefijo(saldosAnioActual, "6", false))
                 .add(sumaPorPrefijo(saldosAnioActual, "7", false));
         BigDecimal utilidadEjercicio = ingresosAnio.subtract(gastosCostosAnio);
 
-        BigDecimal totalPatrimonio = patrimonioBase.add(utilidadEjercicio);
+        // F6 fix: NO sumar el saldo de 3605 al patrimonio base si la utilidad ya se calcula
+        // arriba — sería contar dos veces. Excluir 360x del patrimonioBase.
+        BigDecimal saldo3605 = BigDecimal.ZERO;
+        for (Map.Entry<String, BigDecimal> e : saldosPasivosPat.entrySet()) {
+            if (e.getKey() != null && e.getKey().startsWith("3605")) {
+                saldo3605 = saldo3605.add(e.getValue());
+            }
+        }
+        BigDecimal patrimonioBaseSinResEjercicio = patrimonioBase.subtract(saldo3605);
+
+        BigDecimal totalPatrimonio = patrimonioBaseSinResEjercicio.add(utilidadEjercicio);
         BigDecimal totalPasivoMasPatrimonio = totalPasivos.add(totalPatrimonio);
         BigDecimal diferencia = totalActivos.subtract(totalPasivoMasPatrimonio);
 
@@ -407,6 +498,25 @@ public class ReportesContablesController {
                 "WHERE a.fecha BETWEEN :d AND :h AND a.estado = 'CONFIRMADO' " +
                 "GROUP BY cc.codigo")
                 .setParameter("d", d).setParameter("h", h).getResultList();
+        return mapearSaldos(rows);
+    }
+
+    /** Igual que saldosPorCodigoEnPeriodo pero EXCLUYE asientos de CIERRE y APERTURA. */
+    @SuppressWarnings("unchecked")
+    private Map<String, BigDecimal> saldosPorCodigoEnPeriodoExcluyendoCierres(LocalDate d, LocalDate h) {
+        List<Object[]> rows = em.createNativeQuery(
+                "SELECT cc.codigo, SUM(l.debito) AS d, SUM(l.credito) AS c " +
+                "FROM asientos_contables_lineas l " +
+                "JOIN asientos_contables a ON a.id = l.asiento_id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "WHERE a.fecha BETWEEN :d AND :h AND a.estado = 'CONFIRMADO' " +
+                "  AND (a.documento_origen_tipo IS NULL OR a.documento_origen_tipo NOT IN ('CIERRE','APERTURA')) " +
+                "GROUP BY cc.codigo")
+                .setParameter("d", d).setParameter("h", h).getResultList();
+        return mapearSaldos(rows);
+    }
+
+    private Map<String, BigDecimal> mapearSaldos(List<Object[]> rows) {
         Map<String, BigDecimal> map = new HashMap<>();
         for (Object[] r : rows) {
             String codigo = (String) r[0];

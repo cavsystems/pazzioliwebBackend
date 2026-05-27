@@ -3,6 +3,8 @@ package com.pazzioliweb.facturacionmodule.service;
 import com.pazzioliweb.commonbacken.events.VentaCompletadaEvent;
 import com.pazzioliweb.facturacionmodule.dtos.FacturaElectronicaResponseDTO;
 import com.pazzioliweb.facturacionmodule.dtos.GenerarFacturaRequestDTO;
+import com.pazzioliweb.ventasmodule.entity.Venta;
+import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -21,9 +23,12 @@ public class VentaCompletadaListener {
     private static final Logger log = LoggerFactory.getLogger(VentaCompletadaListener.class);
 
     private final FacturacionElectronicaService facturacionService;
+    private final VentaRepository ventaRepository;
 
-    public VentaCompletadaListener(FacturacionElectronicaService facturacionService) {
+    public VentaCompletadaListener(FacturacionElectronicaService facturacionService,
+                                   VentaRepository ventaRepository) {
         this.facturacionService = facturacionService;
+        this.ventaRepository = ventaRepository;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -33,10 +38,23 @@ public class VentaCompletadaListener {
         log.info("Venta ID: {}, Cajero ID: {}", event.getVentaId(), event.getCajeroId());
 
         try {
+            // Buscamos el comprobante_id real de la venta para no depender de un id
+            // hardcodeado (que puede no existir en la BD desplegada).
+            Integer comprobanteIdReal = null;
+            Venta venta = ventaRepository.findById(event.getVentaId()).orElse(null);
+            if (venta != null && venta.getComprobante() != null && venta.getComprobante().getId() != null) {
+                comprobanteIdReal = venta.getComprobante().getId().intValue();
+            }
+            if (comprobanteIdReal == null) {
+                log.error("No se pudo determinar el comprobante de la venta {}. Abortando facturación electrónica.",
+                        event.getVentaId());
+                return;
+            }
+
             GenerarFacturaRequestDTO request = new GenerarFacturaRequestDTO();
             request.setVentaId(event.getVentaId());
-            request.setComprobanteId(1); // Comprobante tipo Factura de Venta
-            request.setCajaId(event.getCajeroId()); // caja_id ahora referencia cajeros.cajero_id
+            request.setComprobanteId(comprobanteIdReal);
+            request.setCajaId(event.getCajeroId());
 
             FacturaElectronicaResponseDTO response = facturacionService.generarDesdeVenta(request);
 
