@@ -23,13 +23,13 @@ public class VendedoresService {
 		this.vendedorRepository = vendedorRepository;
 	}
 	
-	public Page<VendedorDTO> listar(int page, int size, String sortField, String sortDirection){
+	public Page<Vendedores> listar(int page, int size, String sortField, String sortDirection){
 		Sort sort = sortDirection.equalsIgnoreCase("asc")
                 ? Sort.by(sortField).descending()
                 : Sort.by(sortField).ascending();
     	Pageable pageable = PageRequest.of(page, size, sort);
     	
-    	Page<VendedorDTO> listadoVendedores = vendedorRepository.listarVendedoresDTO(pageable);
+    	Page<Vendedores> listadoVendedores = vendedorRepository.listarVendedoresDTO(pageable);
     	
     	return listadoVendedores;
 	}

@@ -37,7 +37,7 @@ public class VendedoresController {
             @RequestParam(defaultValue = "vendedor_id") String sortField,
             @RequestParam(defaultValue = "asc") String sortDirection) {
 
-        Page<VendedorDTO> vendedoresPage = vendedorService.listar(page, size, sortField, sortDirection);
+        Page<Vendedores> vendedoresPage = vendedorService.listar(page, size, sortField, sortDirection);
 
         Map<String, Object> response = new HashMap<>();
         response.put("content", vendedoresPage.getContent());

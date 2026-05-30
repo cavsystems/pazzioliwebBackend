@@ -2,12 +2,112 @@ package com.pazzioliweb.vendedoresmodule.dtos;
 
 import java.time.LocalDate;
 
-public interface VendedorDTO {
-	Integer getVendedor_id();
-	String getNombre();
-	String getDireccion();
-	String getTelefono();
-	String getEstado();
-	Integer getCodigo_usuario_creo();
-	LocalDate getFechacreado();
+public class VendedorDTO {
+	private Integer vendedor_id;
+	private String nombre;
+	private String direccion;
+	private String telefono;
+	private String estado;
+	private Integer codigo_usuario_creo;
+	private LocalDate fechacreado;
+	
+	// Campos de usuario y rol
+	private Integer usuarioCodigo;
+	private String usuarioNombre;
+	private String rolNombre;
+
+	public VendedorDTO(Integer vendedor_id, String nombre, String direccion, String telefono, 
+	                   String estado, Integer codigo_usuario_creo, LocalDate fechacreado,
+	                   Integer usuarioCodigo, String usuarioNombre, String rolNombre) {
+		this.vendedor_id = vendedor_id;
+		this.nombre = nombre;
+		this.direccion = direccion;
+		this.telefono = telefono;
+		this.estado = estado;
+		this.codigo_usuario_creo = codigo_usuario_creo;
+		this.fechacreado = fechacreado;
+		this.usuarioCodigo = usuarioCodigo;
+		this.usuarioNombre = usuarioNombre;
+		this.rolNombre = rolNombre;
+	}
+
+	public Integer getVendedor_id() {
+		return vendedor_id;
+	}
+
+	public void setVendedor_id(Integer vendedor_id) {
+		this.vendedor_id = vendedor_id;
+	}
+
+	public String getNombre() {
+		return nombre;
+	}
+
+	public void setNombre(String nombre) {
+		this.nombre = nombre;
+	}
+
+	public String getDireccion() {
+		return direccion;
+	}
+
+	public void setDireccion(String direccion) {
+		this.direccion = direccion;
+	}
+
+	public String getTelefono() {
+		return telefono;
+	}
+
+	public void setTelefono(String telefono) {
+		this.telefono = telefono;
+	}
+
+	public String getEstado() {
+		return estado;
+	}
+
+	public void setEstado(String estado) {
+		this.estado = estado;
+	}
+
+	public Integer getCodigo_usuario_creo() {
+		return codigo_usuario_creo;
+	}
+
+	public void setCodigo_usuario_creo(Integer codigo_usuario_creo) {
+		this.codigo_usuario_creo = codigo_usuario_creo;
+	}
+
+	public LocalDate getFechacreado() {
+		return fechacreado;
+	}
+
+	public void setFechacreado(LocalDate fechacreado) {
+		this.fechacreado = fechacreado;
+	}
+
+	public Integer getUsuarioCodigo() {
+		return usuarioCodigo;
+	}
+
+	public void setUsuarioCodigo(Integer usuarioCodigo) {
+		this.usuarioCodigo = usuarioCodigo;
+	}
+
+	public String getUsuarioNombre() {
+		return usuarioNombre;
+	}
+
+	public void setUsuarioNombre(String usuarioNombre) {
+		this.usuarioNombre = usuarioNombre;
+	}
+
+	public String getRolNombre() {
+		return rolNombre;
+	}
+
+	public void setRolNombre(String rolNombre) {
+		this.rolNombre = rolNombre;
+	}
 }

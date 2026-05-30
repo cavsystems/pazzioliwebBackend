@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -31,6 +32,9 @@ import com.pazzioliweb.commonbacken.repositorio.SessionRepository;
 import com.pazzioliweb.commonbacken.util.PasswordUtils;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
+import com.pazzioliweb.empresasback.entity.Empresa;
+import com.pazzioliweb.empresasback.entity.Estado;
+import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
 
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.Cookie;
@@ -57,6 +61,10 @@ public class AuthController {
     private CajeroRepository cajeroRepository;
     @Autowired
     private DetalleCajeroService detalleCajeroService;
+    
+    // ✅ Inyección para validación de empresa
+    @Autowired
+    private EmpresaRepositori empresaRepositori;
 
     @Autowired
     public AuthController(UsuarioRepository usuarioRepository, SessionRepository sessionRepositorio, JwUtilJava jwtUtil, HttpServletResponse servletResponse) {
@@ -86,6 +94,16 @@ public class AuthController {
                 boolean contrasenaValida = verificarContrasena(request.password, usuario.getContrasena());
                 
                 if (contrasenaValida) {
+                    // ✅ Validar estado de la empresa y licencia
+                    if(!request.db.equals("cavsystems")){
+                        Map<String, Object> validacionEmpresa = validarEmpresa(request.db);
+                        if (!(boolean) validacionEmpresa.get("valido")) {
+                            response.put("success", false);
+                            response.put("message", validacionEmpresa.get("mensaje"));
+                            response.put("Activa", false);
+                            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+                        }
+                    }
                     Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
 
                     if (optionalsession.isPresent()) {
@@ -158,6 +176,18 @@ public class AuthController {
             boolean contrasenaValida = verificarContrasena(request.password, usuario.getContrasena());
             
             if (contrasenaValida) {
+                // ✅ Validar estado de la empresa y licencia
+                System.out.println("db actual es esta"+request.db+request.usuario);
+                if(!request.db.equals("cavsystems")){
+                    Map<String, Object> validacionEmpresa = validarEmpresa(request.db);
+                    if (!(boolean) validacionEmpresa.get("valido")) {
+                        response.put("success", false);
+                        response.put("message", validacionEmpresa.get("mensaje"));
+                        response.put("Activa", false);
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+                    }
+                }
+
                 Optional<Sesiones> optionalsession = sessionRepository.findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(usuario.getCodigo(), "ACTIVO");
 
                 if (optionalsession.isPresent()) {
@@ -285,8 +315,32 @@ public class AuthController {
             if(token == null){
                 return  ResponseEntity.ok(false);
             }else {
-              return   ResponseEntity.ok(jwtUtil.validarToken(token));
+                // Validar token JWT
+                boolean tokenValido = jwtUtil.validarToken(token);
+                if (!tokenValido) {
+                    return ResponseEntity.ok(false);
+                }
+                
+                // Validar empresa y licencia
+                try {
+                    Claims claims = jwtUtil.extraerClaims(token);
 
+                    DatosSesiones datos = redisTemplate.opsForValue().get( claims.get("idsecion",String.class));
+                    String dbName = datos.getDbName();
+                    // No validar empresa si es cavsystems
+                    if (!dbName.equals("cavsystems")) {
+                        Map<String, Object> validacionEmpresa = validarEmpresa(dbName);
+                        System.out.println("valido actual "+validacionEmpresa.get("valido"));
+                        if (!(boolean) validacionEmpresa.get("valido")) {
+                            return ResponseEntity.ok(false);
+                        }
+                    }
+                    
+                    return ResponseEntity.ok(true);
+                } catch (Exception e) {
+                    System.out.println("Error al validar empresa en verificar: " + e.getMessage());
+                    return ResponseEntity.ok(false);
+                }
             }
         }else {
             return  ResponseEntity.ok(false);
@@ -355,6 +409,57 @@ public class AuthController {
     // ──────────────────────────────────────────────────────────────────────────
     // Utilidades
     // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Valida el estado de la empresa y la vigencia de la licencia
+     */
+    private Map<String, Object> validarEmpresa(String dbName) {
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("valido", true);
+        resultado.put("mensaje", "");
+        
+        try {
+            // Obtener el primer registro de empresa del esquema actual (cada esquema tiene solo un registro)
+            Optional<Empresa> empresaOpt = empresaRepositori.findAll().stream().findFirst();
+            
+            if (empresaOpt.isEmpty()) {
+                resultado.put("valido", false);
+                resultado.put("mensaje", "Empresa no encontrada");
+                return resultado;
+            }
+            
+            Empresa empresa = empresaOpt.get();
+            
+            // Validar estado de la empresa
+            if (empresa.getEstado() != Estado.ACTIVA) {
+                resultado.put("valido", false);
+                resultado.put("mensaje", "Empresa actualmente no activa");
+                return resultado;
+            }
+            
+            // Validar vigencia de la licencia (considerando el plazo)
+            LocalDate fechaActual = LocalDate.now();
+            LocalDate fechaFinalLicencia = empresa.getFechafinallicencia();
+            int plazo = empresa.getPlazo();
+            
+            if (fechaFinalLicencia != null) {
+                // Calcular fecha de vencimiento considerando el plazo (en días)
+                LocalDate fechaVencimientoConPlazo = fechaFinalLicencia.plusDays(plazo);
+                
+                if (fechaActual.isAfter(fechaVencimientoConPlazo)) {
+                    resultado.put("valido", false);
+                    resultado.put("mensaje", "Licencia vencida");
+                    return resultado;
+                }
+            }
+            
+        } catch (Exception e) {
+            resultado.put("valido", false);
+            resultado.put("mensaje", "Error al validar empresa: " + e.getMessage());
+        }
+        
+        return resultado;
+    }
 
     /**
      * Verifica la contraseña del usuario manejando ambos casos:

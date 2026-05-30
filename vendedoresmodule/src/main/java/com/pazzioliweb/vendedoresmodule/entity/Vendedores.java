@@ -1,6 +1,9 @@
 package com.pazzioliweb.vendedoresmodule.entity;
 
 import java.time.LocalDate;
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -9,6 +12,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Data;
 
@@ -40,6 +44,10 @@ public class Vendedores {
 
     @Column(name = "fechacreado", nullable = false, updatable = false)
     private LocalDate fechacreado = LocalDate.now();
+
+    @OneToMany(mappedBy = "vendedor")
+    @JsonIgnore
+    private List<Usuariosvendedor> usuariosVendedores;
 
     public enum Estado {
         ACTIVO, INACTIVO
