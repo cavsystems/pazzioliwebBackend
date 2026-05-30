@@ -71,11 +71,17 @@ import lombok.Data;
 						@ColumnResult(name = "imagenempresa", type = String.class),
 						@ColumnResult(name = "tipoImagen", type = String.class),
 						@ColumnResult(name = "fechainiciolicencia", type = String.class),
+						@ColumnResult(name = "fecharenovacion", type = String.class),
 						@ColumnResult(name = "fechafinallicencia", type = String.class),
 						@ColumnResult(name = "estadolicencia", type = String.class),
 						@ColumnResult(name = "plazo", type = Integer.class),
-						@ColumnResult(name = "numerousuarios", type = Integer.class)
+						@ColumnResult(name = "numerousuarios", type = Integer.class),
 
+						@ColumnResult(name = "responsabilidadFiscal", type = String.class),
+						@ColumnResult(name = "tipoContribuyente", type = String.class),
+						@ColumnResult(name = "granContribuyente", type = Boolean.class),
+						@ColumnResult(name = "autorretenedor", type = Boolean.class),
+						@ColumnResult(name = "responsableIva", type = Boolean.class),
 
 				}
 		)

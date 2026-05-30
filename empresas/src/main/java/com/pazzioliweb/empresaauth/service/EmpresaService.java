@@ -3,6 +3,7 @@ package com.pazzioliweb.empresaauth.service;
 import com.pazzioliweb.empresaback.dtos.EmpresaTenantProjection;
 import com.pazzioliweb.empresaback.exception.Empresaexception;
 import com.pazzioliweb.empresasback.entity.Estado;
+import com.pazzioliweb.empresasback.entity.TipoLicencia;
 import com.pazzioliweb.productosmodule.entity.Usuariobodega;
 import com.pazzioliweb.productosmodule.repositori.UsuariobodegaRepository;
 import jakarta.persistence.EntityManager;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -224,7 +226,23 @@ public class EmpresaService {
 		empresa.setTelfonofijo(empre.getTelefonofijo());
 		empresa.setFechainiciolicencia(empre.getFechainiciolicencia());
 		empresa.setFechafinallicencia(empre.getFechafinallicencia());
+		empresa.setFecharenovacion(empre.getFecharenovacion());
 		empresa.setEstado(Estado.ACTIVA);
+
+		// Establecer tipo de licencia
+		if (empre.getTipoLicencia() != null && !empre.getTipoLicencia().trim().isEmpty()) {
+			try {
+				TipoLicencia tipoLicencia = TipoLicencia.valueOf(empre.getTipoLicencia().toUpperCase());
+				empresa.setTipolicencia(tipoLicencia);
+			} catch (IllegalArgumentException e) {
+				// Si el valor no es válido, usar MENSUAL por defecto
+				empresa.setTipolicencia(TipoLicencia.MENSUAL);
+				System.err.println("Tipo de licencia inválido: " + empre.getTipoLicencia() + ", usando MENSUAL por defecto");
+			}
+		} else {
+			// Valor por defecto si no se proporciona
+			empresa.setTipolicencia(TipoLicencia.MENSUAL);
+		}
 
 		// Datos fiscales DIAN (obligatorios para XML UBL TaxLevelCode)
 		empresa.setResponsabilidadFiscal(empre.getResponsabilidadFiscal());
@@ -257,11 +275,36 @@ public class EmpresaService {
 		Empresa empresa=emprerepo.findByCodigo(codigoempresa).get();
 		empresa.setFechainiciolicencia(empre.getFechainiciolicencia());
 		empresa.setFechafinallicencia(empre.getFechafinallicencia());
+		empresa.setFecharenovacion(LocalDate.now());
 		empresa.setPlazo(empre.getPlazo());
 		empresa.setNumerousuarios(empre.getNumerousuarios());
 		return  EmpresaTenantProjection.mapperdtos(emprerepo.save(empresa));
 
 	  }
+
+	public EmpresaTenantProjection renovarLicencia(int codigoempresa) {
+		Empresa empresa = emprerepo.findByCodigo(codigoempresa).get();
+		
+		if (empresa.getTipolicencia() == null) {
+			throw new RuntimeException("Tipo de licencia no definido para la empresa");
+		}
+		
+		LocalDate nuevaFechaFinal;
+		if (empresa.getTipolicencia() == TipoLicencia.MENSUAL) {
+			nuevaFechaFinal = LocalDate.now().plusMonths(1);  // ✓
+
+		} else if (empresa.getTipolicencia() == TipoLicencia.ANUAL) {
+			nuevaFechaFinal = LocalDate.now().plusYears(1);   // ✓
+		
+		} else {
+			throw new RuntimeException("Tipo de licencia no reconocido");
+		}
+		
+		empresa.setFechafinallicencia(nuevaFechaFinal);
+		empresa.setFecharenovacion(LocalDate.now());
+		
+		return EmpresaTenantProjection.mapperdtos(emprerepo.save(empresa));
+	}
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void updateEmpresa(Empresaresponse empre, String db, MultipartFile archivo, Integer empresaId) throws Exception{
 		// Buscar la empresa existente
@@ -409,6 +452,11 @@ public class EmpresaService {
 		if (empre.getAutorretenedor() != null)       empresa.setAutorretenedor(empre.getAutorretenedor());
 		if (empre.getResponsableIva() != null)       empresa.setResponsableIva(empre.getResponsableIva());
 
+		// Actualizar fechas de licencia si se proporcionan
+		if (empre.getFechainiciolicencia() != null) empresa.setFechainiciolicencia(empre.getFechainiciolicencia());
+		if (empre.getFechafinallicencia() != null) empresa.setFechafinallicencia(empre.getFechafinallicencia());
+		if (empre.getFecharenovacion() != null) empresa.setFecharenovacion(empre.getFecharenovacion());
+
 		// Actualizar estado si se proporciona
 		if (empre.getEstado() != null && !empre.getEstado().trim().isEmpty()) {
 			try {
@@ -494,7 +542,7 @@ public class EmpresaService {
 			
 			// Crear usuario
 			Usuario nuevoUsuario = new Usuario();
-			nuevoUsuario.setNombre(usuarioDto.getUsuario()); // Usar el nombre de usuario como nombre
+			nuevoUsuario.setNombre(usuarioDto.getNombre() != null && !usuarioDto.getNombre().trim().isEmpty() ? usuarioDto.getNombre() : usuarioDto.getUsuario());
 			nuevoUsuario.setUsuario(usuarioDto.getUsuario());
 			
 			// Usar contraseña proporcionada o generar una por defecto
@@ -626,7 +674,11 @@ public class EmpresaService {
 			// Actualizar nombre de usuario si se proporcionó
 			if (usuarioDto.getUsuario() != null && !usuarioDto.getUsuario().trim().isEmpty()) {
 				usuarioExistente.setUsuario(usuarioDto.getUsuario());
-				usuarioExistente.setNombre(usuarioDto.getUsuario());
+			}
+			
+			// Actualizar nombre si se proporcionó
+			if (usuarioDto.getNombre() != null && !usuarioDto.getNombre().trim().isEmpty()) {
+				usuarioExistente.setNombre(usuarioDto.getNombre());
 			}
 			
 			// Actualizar contraseña si se proporcionó

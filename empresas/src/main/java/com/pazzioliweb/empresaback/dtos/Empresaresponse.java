@@ -40,6 +40,17 @@ public class Empresaresponse {
 	}
 
 	private LocalDate fechafinallicencia;
+
+	public LocalDate getFecharenovacion() {
+		return fecharenovacion;
+	}
+
+	public void setFecharenovacion(LocalDate fecharenovacion) {
+		this.fecharenovacion = fecharenovacion;
+	}
+
+	private LocalDate fecharenovacion;
+
 	public int getPlazo() {
 		return plazo;
 	}
@@ -78,6 +89,9 @@ public class Empresaresponse {
 	private Boolean autorretenedor;
 	private Boolean responsableIva;
 
+	// ── Tipo de licencia ──
+	private String tipoLicencia;
+
 	public String getResponsabilidadFiscal() { return responsabilidadFiscal; }
 	public void setResponsabilidadFiscal(String responsabilidadFiscal) { this.responsabilidadFiscal = responsabilidadFiscal; }
 	public String getTipoContribuyente() { return tipoContribuyente; }
@@ -88,6 +102,9 @@ public class Empresaresponse {
 	public void setAutorretenedor(Boolean autorretenedor) { this.autorretenedor = autorretenedor; }
 	public Boolean getResponsableIva() { return responsableIva; }
 	public void setResponsableIva(Boolean responsableIva) { this.responsableIva = responsableIva; }
+
+	public String getTipoLicencia() { return tipoLicencia; }
+	public void setTipoLicencia(String tipoLicencia) { this.tipoLicencia = tipoLicencia; }
 
 	public void setDepartamento(int departamento) {
 		this.departamento = departamento;
@@ -429,6 +446,16 @@ public class Empresaresponse {
 		}
 
 		private String usuario;
+
+		public String getNombre() {
+			return nombre;
+		}
+
+		public void setNombre(String nombre) {
+			this.nombre = nombre;
+		}
+
+		private String nombre;
 
 	}
 	

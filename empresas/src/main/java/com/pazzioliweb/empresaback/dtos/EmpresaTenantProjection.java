@@ -47,6 +47,12 @@ private   Integer plazo;
 
             private Integer numerousuarios;
 
+    private String responsabilidadFiscal;
+    private String tipoContribuyente;
+    private Boolean granContribuyente;
+    private Boolean autorretenedor;
+    private Boolean responsableIva;
+    private String fecharenovacion;
     public EmpresaTenantProjection(
             String tenant,
             String estado,
@@ -77,7 +83,14 @@ private   Integer plazo;
 
     String estadolicencia,
             Integer plazo,
-             Integer numerousuarios
+             Integer numerousuarios,
+
+    String responsabilidadFiscal,
+    String tipoContribuyente,
+    Boolean granContribuyente,
+    Boolean autorretenedor,
+    Boolean responsableIva,
+            String fecharenovacion
 
     ) {
         this.codigotipopersona=codigotipopersona;
@@ -109,6 +122,12 @@ private   Integer plazo;
         this.estadolicencia = estadolicencia;
         this.plazo = plazo;
         this.numerousuarios = numerousuarios;
+        this.responsabilidadFiscal = responsabilidadFiscal;
+        this.tipoContribuyente = tipoContribuyente;
+        this.granContribuyente = granContribuyente;
+        this.autorretenedor = autorretenedor;
+        this.responsableIva = responsableIva;
+        this.fecharenovacion = fecharenovacion;
     }
 
     public EmpresaTenantProjection(){

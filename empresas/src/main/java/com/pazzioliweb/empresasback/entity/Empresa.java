@@ -64,7 +64,30 @@ public class Empresa {
 
 	@Column(name = "fechafinallicencia")
 	private LocalDate fechafinallicencia;
-  
+
+	public LocalDate getFecharenovacion() {
+		return fecharenovacion;
+	}
+
+	public void setFecharenovacion(LocalDate fecharenovacion) {
+		this.fecharenovacion = fecharenovacion;
+	}
+
+	@Column(name = "fecharenovacion")
+	private LocalDate fecharenovacion;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "tipolicencia")
+	private TipoLicencia tipolicencia;
+
+	public TipoLicencia getTipolicencia() {
+		return tipolicencia;
+	}
+
+	public void setTipolicencia(TipoLicencia tipolicencia) {
+		this.tipolicencia = tipolicencia;
+	}
+
  private String numeroidentificacion;
  private String digitoverificacion;
  private String primernombre;

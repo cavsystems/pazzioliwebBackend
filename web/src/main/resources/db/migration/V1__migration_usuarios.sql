@@ -759,6 +759,13 @@ CREATE TABLE `empresa` (
   `imagenempresa` longblob,
   `tipoImagen` varchar(100) DEFAULT '',
   `estado`  enum('ACTIVA','INACTIVA') DEFAULT 'ACTIVA',
+  `responsabilidad_fiscal` varchar(100) DEFAULT NULL,
+    `tipo_contribuyente` varchar(30) DEFAULT NULL,
+    `gran_contribuyente` tinyint(1) NOT NULL DEFAULT 0,
+    `autorretenedor` tinyint(1) NOT NULL DEFAULT 0,
+    `responsable_iva` tinyint(1) NOT NULL DEFAULT 0,
+    `fecharenovacion` DATE NULL,
+    tipolicencia  enum('ANUAL','MENSUAL')  DEFAULT 'MENSUAL',
     PRIMARY KEY (`codigo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
