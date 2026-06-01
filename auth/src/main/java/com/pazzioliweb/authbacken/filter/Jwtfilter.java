@@ -73,8 +73,12 @@ public class Jwtfilter extends OncePerRequestFilter {
 			);
 			String db = claims.get("dbname", String.class);
 			DatosSesiones datos = redisTemplate.opsForValue().get( claims.get("idsecion",String.class));
-			if (datos.getDbName() != null && !datos.getDbName().isEmpty()) {
-				TenantContext.setCurrentTenant(datos.getDbName()); // igual que en tu interceptor
+			// Si Redis está caído, usar el claim dbname del JWT como fallback de tenant
+			String tenantDb = (datos != null && datos.getDbName() != null && !datos.getDbName().isEmpty())
+					? datos.getDbName()
+					: db;
+			if (tenantDb != null && !tenantDb.isEmpty()) {
+				TenantContext.setCurrentTenant(tenantDb);
 			}
 			UsernamePasswordAuthenticationToken authToken =
 					new UsernamePasswordAuthenticationToken(usuario, claims.get("idsecion",String.class), authorities);

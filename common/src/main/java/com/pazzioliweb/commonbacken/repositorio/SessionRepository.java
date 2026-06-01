@@ -15,4 +15,5 @@ public interface SessionRepository  extends  JpaRepository<Sesiones, Long>{
 	Optional<Sesiones> findByCodigoAndCodigoUsuario(long codigo,long CodigoUsuario);
 	Optional<Sesiones> findFirstBycodigoUsuarioAndEstadoOrderByCodigoDesc(long CodigoUsuario,String estado);
 	Optional<Sesiones> findTopByOrderByCodigoDesc();
+	Optional<Sesiones> findFirstByTokenAndEstado(String token, String estado);
 }
