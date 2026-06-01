@@ -26,6 +26,7 @@ import com.pazzioliweb.cajerosmodule.entity.DetalleCajero;
 import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 import com.pazzioliweb.commonbacken.conexiondb.ConexionFactory;
+import com.pazzioliweb.commonbacken.conexiondb.TenantContext;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
 import com.pazzioliweb.commonbacken.entity.Sesiones;
 import com.pazzioliweb.commonbacken.repositorio.SessionRepository;
@@ -301,51 +302,60 @@ public class AuthController {
     //________________________________________________________________________________
     @GetMapping("verificar")
     public ResponseEntity<Boolean> Verificar(HttpServletRequest request){
-        if (request.getCookies() != null) {
-            String token=null;
-            for (Cookie cookie : request.getCookies()) {
-                if ("token".equals(cookie.getName())) {
-                    token = cookie.getValue();
-                    break;
-
-                }
-
-            }
-
-            if(token == null){
-                return  ResponseEntity.ok(false);
-            }else {
-                // Validar token JWT
-                boolean tokenValido = jwtUtil.validarToken(token);
-                if (!tokenValido) {
-                    return ResponseEntity.ok(false);
-                }
-                
-                // Validar empresa y licencia
-                try {
-                    Claims claims = jwtUtil.extraerClaims(token);
-
-                    DatosSesiones datos = redisTemplate.opsForValue().get( claims.get("idsecion",String.class));
-                    String dbName = datos.getDbName();
-                    // No validar empresa si es cavsystems
-                    if (!dbName.equals("cavsystems")) {
-                        Map<String, Object> validacionEmpresa = validarEmpresa(dbName);
-                        System.out.println("valido actual "+validacionEmpresa.get("valido"));
-                        if (!(boolean) validacionEmpresa.get("valido")) {
-                            return ResponseEntity.ok(false);
-                        }
-                    }
-                    
-                    return ResponseEntity.ok(true);
-                } catch (Exception e) {
-                    System.out.println("Error al validar empresa en verificar: " + e.getMessage());
-                    return ResponseEntity.ok(false);
-                }
-            }
-        }else {
-            return  ResponseEntity.ok(false);
+        if (request.getCookies() == null) {
+            return ResponseEntity.ok(false);
         }
+        String token = null;
+        for (Cookie cookie : request.getCookies()) {
+            if ("token".equals(cookie.getName())) {
+                token = cookie.getValue();
+                break;
+            }
+        }
+        if (token == null) {
+            return ResponseEntity.ok(false);
+        }
+        if (!jwtUtil.validarToken(token)) {
+            return ResponseEntity.ok(false);
+        }
+        try {
+            Claims claims = jwtUtil.extraerClaims(token);
+            String sessionId = claims.get("idsecion", String.class);
 
+            DatosSesiones datos = redisTemplate.opsForValue().get(sessionId);
+
+            // Fallback a MySQL cuando Redis perdió la sesión (restart, eviction, etc.)
+            if (datos == null) {
+                String dbNameFromJwt = claims.get("dbname", String.class);
+                try {
+                    if (dbNameFromJwt != null && !dbNameFromJwt.isEmpty()) {
+                        TenantContext.setCurrentTenant(dbNameFromJwt);
+                    }
+                    Optional<Sesiones> sesionDB =
+                            sessionRepository.findFirstByTokenAndEstado(token, "ACTIVO");
+                    if (sesionDB.isEmpty()) {
+                        System.out.println("[verificar] Sesión no encontrada en Redis ni en DB para sessionId=" + sessionId);
+                        return ResponseEntity.ok(false);
+                    }
+                    System.out.println("[verificar] Sesión recuperada desde DB (Redis caído). sessionId=" + sessionId);
+                    return ResponseEntity.ok(true);
+                } finally {
+                    TenantContext.clear();
+                }
+            }
+
+            String dbName = datos.getDbName();
+            if (dbName != null && !dbName.equals("cavsystems")) {
+                Map<String, Object> validacionEmpresa = validarEmpresa(dbName);
+                if (!(boolean) validacionEmpresa.get("valido")) {
+                    return ResponseEntity.ok(false);
+                }
+            }
+            return ResponseEntity.ok(true);
+        } catch (Exception e) {
+            System.out.println("[verificar] Error: " + e.getMessage());
+            return ResponseEntity.ok(false);
+        }
     }
     // ──────────────────────────────────────────────────────────────────────────
     // /logout  →  cierra sesión de caja (si es cajero) y elimina sesión Redis
