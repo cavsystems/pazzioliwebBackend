@@ -45,6 +45,7 @@ public interface CotizacionMapper {
     @Mapping(target = "observaciones", source = "observaciones")
     @Mapping(target = "gravada", source = "subtotal")
     @Mapping(target = "iva", source = "iva")
+    @Mapping(target = "descuentos", ignore = true)
     @Mapping(target = "totalCotizacion", source = "total")
     @Mapping(target = "usuarioCreacion", source = "usuarioCreacion")
     @Mapping(target = "fechaCreacion", source = "fechaCreacion")

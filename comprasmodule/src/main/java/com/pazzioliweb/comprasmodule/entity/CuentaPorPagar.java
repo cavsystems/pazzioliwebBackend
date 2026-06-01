@@ -37,6 +37,15 @@ public class CuentaPorPagar {
     private BigDecimal saldo = BigDecimal.ZERO;
 
     @Column(nullable = false)
+    private BigDecimal retefuente = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private BigDecimal reteiva = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private BigDecimal reteica = BigDecimal.ZERO;
+
+    @Column(nullable = false)
     private String estado = "PENDIENTE";
 
     @Column(name = "fecha_creacion", nullable = false)

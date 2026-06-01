@@ -267,7 +267,13 @@ public class VentaServiceImpl implements VentaService {
         venta.setGravada(subtotal.subtract(ivaTotal));
         venta.setIva(ivaTotal);
         venta.setDescuentos(descuentosTotal);
-        venta.setTotalVenta(subtotal);
+        venta.setTotalVenta(subtotal); // BRUTO (gravada + IVA). El neto a pagar = bruto − retenciones.
+
+        // Normalizar retenciones sufridas (el cliente nos retiene). El mapper puede
+        // dejarlas en null si el DTO no las trae → forzamos ZERO para no violar NOT NULL.
+        venta.setRetefuente(venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO);
+        venta.setReteiva(venta.getReteiva() != null ? venta.getReteiva() : BigDecimal.ZERO);
+        venta.setReteica(venta.getReteica() != null ? venta.getReteica() : BigDecimal.ZERO);
 
         // ─── Asignación de comprobante: solo si ya sabemos los métodos de pago.
         //     Si la venta se crea sin métodos (modo "abrir → agregar items → cobrar"),
@@ -378,8 +384,19 @@ public class VentaServiceImpl implements VentaService {
                 .map(VentaMetodoPagoDTO::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        if (totalPagado.compareTo(venta.getTotalVenta()) < 0) {
-            throw new VentaException("El total pagado (" + totalPagado + ") no cubre el total de la venta (" + venta.getTotalVenta() + ")");
+        // Las retenciones que el cliente nos practica (sufridas) reducen lo que él
+        // paga: el cliente paga el NETO (= bruto − retenciones) y la diferencia la
+        // declara como retención. Por eso el pago neto + retenciones debe cubrir el
+        // total BRUTO de la venta.
+        BigDecimal reteF = venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO;
+        BigDecimal reteI = venta.getReteiva() != null ? venta.getReteiva() : BigDecimal.ZERO;
+        BigDecimal reteC = venta.getReteica() != null ? venta.getReteica() : BigDecimal.ZERO;
+        BigDecimal totalRetenciones = reteF.add(reteI).add(reteC);
+        BigDecimal totalCubierto = totalPagado.add(totalRetenciones);
+
+        if (totalCubierto.compareTo(venta.getTotalVenta()) < 0) {
+            throw new VentaException("El total pagado (" + totalPagado + ") más retenciones ("
+                    + totalRetenciones + ") no cubre el total de la venta (" + venta.getTotalVenta() + ")");
         }
 
         // ✅ Validar permisos y cupo si hay método de pago a Crédito
@@ -610,6 +627,38 @@ public class VentaServiceImpl implements VentaService {
                     lineas.add(AsientoContableService.LineaDTO.debito(cta.getId(), vmp.getMonto(),
                             "Cobro contado por " + metodo.getDescripcion()));
                 }
+            }
+
+            // ── Débitos por RETENCIONES SUFRIDAS (el cliente nos retuvo) ──
+            // Son anticipos de impuestos (activo, grupo 1355). El cliente paga el
+            // NETO y aquí cuadramos: débitos (caja/CxC neta + retenciones) = créditos
+            // (ingresos + IVA generado), todo sobre el BRUTO de la venta.
+            BigDecimal vReteF = venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO;
+            BigDecimal vReteI = venta.getReteiva()    != null ? venta.getReteiva()    : BigDecimal.ZERO;
+            BigDecimal vReteC = venta.getReteica()    != null ? venta.getReteica()    : BigDecimal.ZERO;
+            if (vReteF.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable cta = configContable.anticipoRetefuente().orElseThrow(() -> new IllegalStateException(
+                        "La venta " + venta.getNumeroVenta() + " tiene Retefuente sufrida pero la cuenta '135515' no está en el PUC."));
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .debito(cta.getId(), vReteF, "Retefuente que nos practicaron venta " + venta.getNumeroVenta());
+                if (venta.getCliente() != null) l.conTercero(venta.getCliente().getTerceroId(), nombreCliente);
+                lineas.add(l);
+            }
+            if (vReteI.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable cta = configContable.anticipoReteiva().orElseThrow(() -> new IllegalStateException(
+                        "La venta " + venta.getNumeroVenta() + " tiene ReteIVA sufrida pero la cuenta '135517' no está en el PUC."));
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .debito(cta.getId(), vReteI, "ReteIVA que nos practicaron venta " + venta.getNumeroVenta());
+                if (venta.getCliente() != null) l.conTercero(venta.getCliente().getTerceroId(), nombreCliente);
+                lineas.add(l);
+            }
+            if (vReteC.compareTo(BigDecimal.ZERO) > 0) {
+                CuentaContable cta = configContable.anticipoReteica().orElseThrow(() -> new IllegalStateException(
+                        "La venta " + venta.getNumeroVenta() + " tiene ReteICA sufrida pero la cuenta '135518' no está en el PUC."));
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .debito(cta.getId(), vReteC, "ReteICA que nos practicaron venta " + venta.getNumeroVenta());
+                if (venta.getCliente() != null) l.conTercero(venta.getCliente().getTerceroId(), nombreCliente);
+                lineas.add(l);
             }
 
             // Créditos: Ingresos y IVA

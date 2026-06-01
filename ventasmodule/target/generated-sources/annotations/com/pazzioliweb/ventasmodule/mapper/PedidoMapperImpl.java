@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-05-25T23:31:04-0500",
+    date = "2026-06-01T08:00:26-0500",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.2 (Oracle Corporation)"
 )
 @Component
@@ -52,6 +52,10 @@ public class PedidoMapperImpl implements PedidoMapper {
         pedidoDTO.setObservaciones( pedido.getObservaciones() );
         pedidoDTO.setSubtotal( pedido.getGravada() );
         pedidoDTO.setIva( pedido.getIva() );
+        pedidoDTO.setDescuentos( pedido.getDescuentos() );
+        pedidoDTO.setRetefuente( pedido.getRetefuente() );
+        pedidoDTO.setReteiva( pedido.getReteiva() );
+        pedidoDTO.setReteica( pedido.getReteica() );
         pedidoDTO.setTotal( pedido.getTotalPedido() );
         pedidoDTO.setUsuarioCreacion( pedido.getUsuarioCreacion() );
         pedidoDTO.setFechaCreacion( pedido.getFechaCreacion() );
@@ -77,6 +81,10 @@ public class PedidoMapperImpl implements PedidoMapper {
         pedido.setObservaciones( pedidoDTO.getObservaciones() );
         pedido.setGravada( pedidoDTO.getSubtotal() );
         pedido.setIva( pedidoDTO.getIva() );
+        pedido.setDescuentos( pedidoDTO.getDescuentos() );
+        pedido.setRetefuente( pedidoDTO.getRetefuente() );
+        pedido.setReteiva( pedidoDTO.getReteiva() );
+        pedido.setReteica( pedidoDTO.getReteica() );
         pedido.setTotalPedido( pedidoDTO.getTotal() );
         pedido.setUsuarioCreacion( pedidoDTO.getUsuarioCreacion() );
         pedido.setFechaCreacion( pedidoDTO.getFechaCreacion() );

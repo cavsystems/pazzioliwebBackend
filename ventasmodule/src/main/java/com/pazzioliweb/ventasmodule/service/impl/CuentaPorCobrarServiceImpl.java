@@ -106,6 +106,12 @@ public class CuentaPorCobrarServiceImpl implements CuentaPorCobrarService {
         dto.setPlazoDias(cxc.getPlazoDias());
         dto.setEstado(cxc.getEstado());
         dto.setFechaCreacion(cxc.getFechaCreacion());
+        Venta venta = cxc.getVenta();
+        if (venta != null) {
+            dto.setRetefuente(venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO);
+            dto.setReteiva(venta.getReteiva() != null ? venta.getReteiva() : BigDecimal.ZERO);
+            dto.setReteica(venta.getReteica() != null ? venta.getReteica() : BigDecimal.ZERO);
+        }
         return dto;
     }
 }

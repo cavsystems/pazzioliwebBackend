@@ -65,6 +65,7 @@
         <class>com.pazzioliweb.comprobantesmodule.entity.AsientoContableLinea</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.PeriodoContable</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.AsientoFallido</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.ConfiguracionContableMapa</class>
         <!-- Cajas -->
         <class>com.pazzioliweb.cajasmodule.entity.Cajas</class>
         

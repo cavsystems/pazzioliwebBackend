@@ -305,6 +305,58 @@ public class DevolucionServiceImpl implements DevolucionService {
                 }
             }
 
+            // ─── Reversa de RETENCIONES sufridas (proporcional a lo devuelto) ───
+            // En la venta, las retenciones que el cliente nos practicó se debitaron a
+            // anticipos (135515 Retefuente / 135517 ReteIVA / 135518 ReteICA) y el
+            // cliente pagó solo el NETO. Al devolver se reversan (crédito) en proporción
+            // a lo devuelto; así la caja/CxC refleja únicamente el NETO realmente
+            // reembolsado y el anticipo no queda colgado en los libros.
+            BigDecimal totalVentaBruto = (venta.getTotalVenta() != null && venta.getTotalVenta().compareTo(BigDecimal.ZERO) > 0)
+                    ? venta.getTotalVenta() : totalDevuelto;
+            BigDecimal proporcion = totalDevuelto.divide(totalVentaBruto, 6, java.math.RoundingMode.HALF_UP);
+            BigDecimal retefuenteRev = (venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO)
+                    .multiply(proporcion).setScale(2, java.math.RoundingMode.HALF_UP);
+            BigDecimal reteivaRev = (venta.getReteiva() != null ? venta.getReteiva() : BigDecimal.ZERO)
+                    .multiply(proporcion).setScale(2, java.math.RoundingMode.HALF_UP);
+            BigDecimal reteicaRev = (venta.getReteica() != null ? venta.getReteica() : BigDecimal.ZERO)
+                    .multiply(proporcion).setScale(2, java.math.RoundingMode.HALF_UP);
+            String nombreTerceroRet = venta.getCliente() != null
+                    ? (venta.getCliente().getRazonSocial() != null && !venta.getCliente().getRazonSocial().isBlank()
+                        ? venta.getCliente().getRazonSocial() : venta.getCliente().getNombre1())
+                    : null;
+            if (retefuenteRev.compareTo(BigDecimal.ZERO) > 0) {
+                com.pazzioliweb.comprobantesmodule.entity.CuentaContable cta = configContable.anticipoRetefuente().orElse(null);
+                if (cta != null) {
+                    com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO l =
+                            com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(
+                                    cta.getId(), retefuenteRev, "Reversa Retefuente por devolución " + devolucion.getNumeroDevolucion());
+                    if (venta.getCliente() != null) l.conTercero(venta.getCliente().getTerceroId(), nombreTerceroRet);
+                    lineas.add(l);
+                }
+            }
+            if (reteivaRev.compareTo(BigDecimal.ZERO) > 0) {
+                com.pazzioliweb.comprobantesmodule.entity.CuentaContable cta = configContable.anticipoReteiva().orElse(null);
+                if (cta != null) {
+                    com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO l =
+                            com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(
+                                    cta.getId(), reteivaRev, "Reversa ReteIVA por devolución " + devolucion.getNumeroDevolucion());
+                    if (venta.getCliente() != null) l.conTercero(venta.getCliente().getTerceroId(), nombreTerceroRet);
+                    lineas.add(l);
+                }
+            }
+            if (reteicaRev.compareTo(BigDecimal.ZERO) > 0) {
+                com.pazzioliweb.comprobantesmodule.entity.CuentaContable cta = configContable.anticipoReteica().orElse(null);
+                if (cta != null) {
+                    com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO l =
+                            com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(
+                                    cta.getId(), reteicaRev, "Reversa ReteICA por devolución " + devolucion.getNumeroDevolucion());
+                    if (venta.getCliente() != null) l.conTercero(venta.getCliente().getTerceroId(), nombreTerceroRet);
+                    lineas.add(l);
+                }
+            }
+            // Lo que realmente se reembolsa (caja) o se reversa de CxC = bruto − retenciones reversadas
+            BigDecimal montoContrapartida = totalDevuelto.subtract(retefuenteRev).subtract(reteivaRev).subtract(reteicaRev);
+
             // CRÉDITO: contrapartida según si la venta fue contado o crédito
             boolean ventaFueCredito = venta.getComprobante() != null
                     && venta.getComprobante().getTipoMovimiento() != null
@@ -331,7 +383,7 @@ public class DevolucionServiceImpl implements DevolucionService {
             }
             com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO creditoLinea =
                     com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(
-                            contrapartida.getId(), totalDevuelto, descContrapartida);
+                            contrapartida.getId(), montoContrapartida, descContrapartida);
             if (venta.getCliente() != null) {
                 creditoLinea.conTercero(venta.getCliente().getTerceroId(),
                         venta.getCliente().getRazonSocial() != null && !venta.getCliente().getRazonSocial().isBlank()

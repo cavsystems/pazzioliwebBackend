@@ -20,5 +20,8 @@ public class CuentaPorCobrarDTO {
     private Integer plazoDias;
     private String estado;
     private LocalDate fechaCreacion;
+    private BigDecimal retefuente = BigDecimal.ZERO;
+    private BigDecimal reteiva = BigDecimal.ZERO;
+    private BigDecimal reteica = BigDecimal.ZERO;
 }
 

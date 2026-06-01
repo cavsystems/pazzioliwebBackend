@@ -837,6 +837,18 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         cuenta.setEstado("PENDIENTE");
         cuenta.setProveedorId(request.getProvedor().getTerceroId());
 
+        // Retenciones proporcionales al saldo pendiente vs total NETO de la orden
+        BigDecimal totalNeto = orden.getTotalOrdenCompra();
+        if (totalNeto != null && totalNeto.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal prop = saldoPendiente.divide(totalNeto, 10, java.math.RoundingMode.HALF_UP);
+            BigDecimal rf = orden.getRetefuente() != null ? orden.getRetefuente() : BigDecimal.ZERO;
+            BigDecimal rv = orden.getReteiva() != null ? orden.getReteiva() : BigDecimal.ZERO;
+            BigDecimal rc = orden.getReteica() != null ? orden.getReteica() : BigDecimal.ZERO;
+            cuenta.setRetefuente(rf.multiply(prop).setScale(2, java.math.RoundingMode.HALF_UP));
+            cuenta.setReteiva(rv.multiply(prop).setScale(2, java.math.RoundingMode.HALF_UP));
+            cuenta.setReteica(rc.multiply(prop).setScale(2, java.math.RoundingMode.HALF_UP));
+        }
+
         cuentaPorPagarService.crear(cuenta);
     }
 

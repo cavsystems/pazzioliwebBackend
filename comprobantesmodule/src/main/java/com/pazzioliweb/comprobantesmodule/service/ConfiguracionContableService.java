@@ -1,6 +1,7 @@
 package com.pazzioliweb.comprobantesmodule.service;
 
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
+import com.pazzioliweb.comprobantesmodule.repositori.ConfiguracionContableMapaRepository;
 import com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,9 +26,20 @@ public class ConfiguracionContableService {
     private static final Logger log = LoggerFactory.getLogger(ConfiguracionContableService.class);
 
     private final CuentaContableRepository cuentaRepo;
+    private final ConfiguracionContableMapaRepository mapaRepo;
 
-    public ConfiguracionContableService(CuentaContableRepository cuentaRepo) {
+    public ConfiguracionContableService(CuentaContableRepository cuentaRepo,
+                                        ConfiguracionContableMapaRepository mapaRepo) {
         this.cuentaRepo = cuentaRepo;
+        this.mapaRepo = mapaRepo;
+    }
+
+    private String cod(String clave, String fallback) {
+        try {
+            return mapaRepo.findByClave(clave).map(m -> m.getCodigoCuenta()).orElse(fallback);
+        } catch (Exception e) {
+            return fallback;
+        }
     }
 
     /** Códigos del PUC colombiano estándar. */
@@ -107,23 +119,23 @@ public class ConfiguracionContableService {
         return r;
     }
 
-    public Optional<CuentaContable> cajaGeneral() { return buscarPorCodigo(COD_CAJA_GENERAL); }
-    public Optional<CuentaContable> cxcClientes()  { return buscarPorCodigo(COD_CXC_CLIENTES); }
-    public Optional<CuentaContable> inventarios()  { return buscarPorCodigo(COD_INVENTARIOS); }
-    public Optional<CuentaContable> ivaDescontable(){ return buscarPorCodigo(COD_IVA_DESCONTABLE); }
-    public Optional<CuentaContable> cxpProveedores(){ return buscarPorCodigo(COD_CXP_PROVEEDORES); }
-    public Optional<CuentaContable> ivaGenerado()  { return buscarPorCodigo(COD_IVA_GENERADO); }
-    public Optional<CuentaContable> ingresosVentas(){ return buscarPorCodigo(COD_INGRESOS_VENTAS); }
-    public Optional<CuentaContable> gastosGenerales(){ return buscarPorCodigo(COD_GASTOS_GENERALES); }
-    public Optional<CuentaContable> devolucionVentas(){ return buscarPorCodigo(COD_DEVOLUCION_VENTAS); }
-    public Optional<CuentaContable> costoVentas()  { return buscarPorCodigo(COD_COSTO_VENTAS); }
-    public Optional<CuentaContable> ajusteEntradaInventario(){ return buscarPorCodigo(COD_AJUSTE_ENTRADA_INV); }
-    public Optional<CuentaContable> ajusteSalidaInventario() { return buscarPorCodigo(COD_AJUSTE_SALIDA_INV); }
-    public Optional<CuentaContable> retefuentePagar() { return buscarPorCodigo(COD_RETEFUENTE_PAGAR); }
-    public Optional<CuentaContable> reteivaPagar()    { return buscarPorCodigo(COD_RETEIVA_PAGAR); }
-    public Optional<CuentaContable> reteicaPagar()    { return buscarPorCodigo(COD_RETEICA_PAGAR); }
-    public Optional<CuentaContable> resultadoEjercicio() { return buscarPorCodigo(COD_RESULTADO_EJERCICIO); }
-    public Optional<CuentaContable> anticipoRetefuente() { return buscarPorCodigo(COD_ANTICIPO_RETEFUENTE); }
-    public Optional<CuentaContable> anticipoReteiva()    { return buscarPorCodigo(COD_ANTICIPO_RETEIVA); }
-    public Optional<CuentaContable> anticipoReteica()    { return buscarPorCodigo(COD_ANTICIPO_RETEICA); }
+    public Optional<CuentaContable> cajaGeneral()          { return buscarPorCodigo(cod("COD_CAJA_GENERAL",         COD_CAJA_GENERAL)); }
+    public Optional<CuentaContable> cxcClientes()          { return buscarPorCodigo(cod("COD_CXC_CLIENTES",         COD_CXC_CLIENTES)); }
+    public Optional<CuentaContable> inventarios()          { return buscarPorCodigo(cod("COD_INVENTARIOS",          COD_INVENTARIOS)); }
+    public Optional<CuentaContable> ivaDescontable()       { return buscarPorCodigo(cod("COD_IVA_DESCONTABLE",      COD_IVA_DESCONTABLE)); }
+    public Optional<CuentaContable> cxpProveedores()       { return buscarPorCodigo(cod("COD_CXP_PROVEEDORES",      COD_CXP_PROVEEDORES)); }
+    public Optional<CuentaContable> ivaGenerado()          { return buscarPorCodigo(cod("COD_IVA_GENERADO",         COD_IVA_GENERADO)); }
+    public Optional<CuentaContable> ingresosVentas()       { return buscarPorCodigo(cod("COD_INGRESOS_VENTAS",      COD_INGRESOS_VENTAS)); }
+    public Optional<CuentaContable> gastosGenerales()      { return buscarPorCodigo(cod("COD_GASTOS_GENERALES",     COD_GASTOS_GENERALES)); }
+    public Optional<CuentaContable> devolucionVentas()     { return buscarPorCodigo(cod("COD_DEVOLUCION_VENTAS",    COD_DEVOLUCION_VENTAS)); }
+    public Optional<CuentaContable> costoVentas()          { return buscarPorCodigo(cod("COD_COSTO_VENTAS",         COD_COSTO_VENTAS)); }
+    public Optional<CuentaContable> ajusteEntradaInventario(){ return buscarPorCodigo(cod("COD_AJUSTE_ENTRADA_INV", COD_AJUSTE_ENTRADA_INV)); }
+    public Optional<CuentaContable> ajusteSalidaInventario() { return buscarPorCodigo(cod("COD_AJUSTE_SALIDA_INV",  COD_AJUSTE_SALIDA_INV)); }
+    public Optional<CuentaContable> retefuentePagar()      { return buscarPorCodigo(cod("COD_RETEFUENTE_PAGAR",     COD_RETEFUENTE_PAGAR)); }
+    public Optional<CuentaContable> reteivaPagar()         { return buscarPorCodigo(cod("COD_RETEIVA_PAGAR",        COD_RETEIVA_PAGAR)); }
+    public Optional<CuentaContable> reteicaPagar()         { return buscarPorCodigo(cod("COD_RETEICA_PAGAR",        COD_RETEICA_PAGAR)); }
+    public Optional<CuentaContable> resultadoEjercicio()   { return buscarPorCodigo(cod("COD_RESULTADO_EJERCICIO",  COD_RESULTADO_EJERCICIO)); }
+    public Optional<CuentaContable> anticipoRetefuente()   { return buscarPorCodigo(cod("COD_ANTICIPO_RETEFUENTE",  COD_ANTICIPO_RETEFUENTE)); }
+    public Optional<CuentaContable> anticipoReteiva()      { return buscarPorCodigo(cod("COD_ANTICIPO_RETEIVA",     COD_ANTICIPO_RETEIVA)); }
+    public Optional<CuentaContable> anticipoReteica()      { return buscarPorCodigo(cod("COD_ANTICIPO_RETEICA",     COD_ANTICIPO_RETEICA)); }
 }

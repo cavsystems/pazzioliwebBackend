@@ -18,4 +18,7 @@ public class CuentaPorPagarDTO {
     private LocalDate fechaCreacion;
     private Integer proveedorId;
     private String numeroFacturaProveedor;
+    private BigDecimal retefuente = BigDecimal.ZERO;
+    private BigDecimal reteiva = BigDecimal.ZERO;
+    private BigDecimal reteica = BigDecimal.ZERO;
 }
