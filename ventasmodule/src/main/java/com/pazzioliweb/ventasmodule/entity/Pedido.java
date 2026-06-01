@@ -54,6 +54,15 @@ public class Pedido {
     @Column(name = "total_pedido", nullable = false)
     private BigDecimal totalPedido = BigDecimal.ZERO;
 
+    @Column(nullable = false)
+    private BigDecimal retefuente = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private BigDecimal reteiva = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private BigDecimal reteica = BigDecimal.ZERO;
+
     @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetallePedido> items;
 

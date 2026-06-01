@@ -54,6 +54,17 @@ public class Venta {
     @Column(name = "total_venta", nullable = false)
     private BigDecimal totalVenta = BigDecimal.ZERO;
 
+    // ── Retenciones que el CLIENTE nos practica (retenciones sufridas).
+    //    total_venta sigue siendo el BRUTO (gravada + IVA). El cliente paga
+    //    neto = bruto − retenciones; la diferencia se registra como anticipo
+    //    de impuestos (1355) en el asiento. ──
+    @Column(name = "retefuente", nullable = false)
+    private BigDecimal retefuente = BigDecimal.ZERO;
+    @Column(name = "reteiva", nullable = false)
+    private BigDecimal reteiva = BigDecimal.ZERO;
+    @Column(name = "reteica", nullable = false)
+    private BigDecimal reteica = BigDecimal.ZERO;
+
     @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetalleVenta> items;
 

@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-05-25T23:31:05-0500",
+    date = "2026-06-01T08:00:26-0500",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.2 (Oracle Corporation)"
 )
 @Component
@@ -53,7 +53,11 @@ public class VentaMapperImpl implements VentaMapper {
         ventaDTO.setObservaciones( venta.getObservaciones() );
         ventaDTO.setSubtotal( venta.getGravada() );
         ventaDTO.setIva( venta.getIva() );
+        ventaDTO.setDescuentos( venta.getDescuentos() );
         ventaDTO.setTotal( venta.getTotalVenta() );
+        ventaDTO.setRetefuente( venta.getRetefuente() );
+        ventaDTO.setReteiva( venta.getReteiva() );
+        ventaDTO.setReteica( venta.getReteica() );
         ventaDTO.setUsuarioCreacion( venta.getUsuarioCreacion() );
         ventaDTO.setFechaCreacion( venta.getFechaCreacion() );
         ventaDTO.setItems( toDetalleDtoList( venta.getItems() ) );
@@ -80,7 +84,11 @@ public class VentaMapperImpl implements VentaMapper {
         venta.setObservaciones( ventaDTO.getObservaciones() );
         venta.setGravada( ventaDTO.getSubtotal() );
         venta.setIva( ventaDTO.getIva() );
+        venta.setDescuentos( ventaDTO.getDescuentos() );
         venta.setTotalVenta( ventaDTO.getTotal() );
+        venta.setRetefuente( ventaDTO.getRetefuente() );
+        venta.setReteiva( ventaDTO.getReteiva() );
+        venta.setReteica( ventaDTO.getReteica() );
         venta.setUsuarioCreacion( ventaDTO.getUsuarioCreacion() );
         venta.setFechaCreacion( ventaDTO.getFechaCreacion() );
         venta.setItems( detalleVentaDTOListToDetalleVentaList( ventaDTO.getItems() ) );

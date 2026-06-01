@@ -302,12 +302,54 @@ public class ComprobanteEgresoService {
                 System.out.println("[AsientoCE] Sin cuenta contrapartida. Configure 2205 Proveedores en el PUC.");
                 return;
             }
+
+            // Determinar si hay retenciones practicadas al proveedor
+            boolean esCA = Boolean.TRUE.equals(egreso.getConceptoAbierto());
+            java.math.BigDecimal rf = egreso.getRetefuente() != null ? egreso.getRetefuente() : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal rv = egreso.getReteiva()    != null ? egreso.getReteiva()    : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal rc = egreso.getReteica()    != null ? egreso.getReteica()    : java.math.BigDecimal.ZERO;
+            boolean hayRet = !esCA && (rf.compareTo(java.math.BigDecimal.ZERO) > 0
+                                    || rv.compareTo(java.math.BigDecimal.ZERO) > 0
+                                    || rc.compareTo(java.math.BigDecimal.ZERO) > 0);
+
+            // DÉBITO CxP: si hay retenciones usamos BRUTO (subtotal), si no usamos NETO (total)
+            java.math.BigDecimal montoDebitoContrapartida = hayRet ? egreso.getSubtotal() : egreso.getTotal();
             AsientoContableService.LineaDTO debitoLinea = AsientoContableService.LineaDTO
-                    .debito(contrapartida.getId(), egreso.getTotal(), desc);
+                    .debito(contrapartida.getId(), montoDebitoContrapartida, desc);
             if (egreso.getTercero() != null) {
                 debitoLinea.conTercero(egreso.getTercero().getTerceroId(), egreso.getTerceroNombre());
             }
             lineas.add(debitoLinea);
+
+            // CRÉDITO retenciones a pagar (236505, 236540, 236570) cuando practicamos retención al proveedor
+            if (hayRet) {
+                Integer tercId = egreso.getTercero() != null ? egreso.getTercero().getTerceroId() : null;
+                String tercNom = egreso.getTerceroNombre();
+                if (rf.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    configContable.retefuentePagar().ifPresent(cta -> {
+                        AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                                .credito(cta.getId(), rf, "ReteFuente retenida a proveedor");
+                        if (tercId != null) l.conTercero(tercId, tercNom);
+                        lineas.add(l);
+                    });
+                }
+                if (rv.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    configContable.reteivaPagar().ifPresent(cta -> {
+                        AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                                .credito(cta.getId(), rv, "ReteIVA retenida a proveedor");
+                        if (tercId != null) l.conTercero(tercId, tercNom);
+                        lineas.add(l);
+                    });
+                }
+                if (rc.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    configContable.reteicaPagar().ifPresent(cta -> {
+                        AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                                .credito(cta.getId(), rc, "ReteICA retenida a proveedor");
+                        if (tercId != null) l.conTercero(tercId, tercNom);
+                        lineas.add(l);
+                    });
+                }
+            }
 
             asientoService.generarAsiento(
                     egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : ("CE-" + egreso.getConsecutivo()),

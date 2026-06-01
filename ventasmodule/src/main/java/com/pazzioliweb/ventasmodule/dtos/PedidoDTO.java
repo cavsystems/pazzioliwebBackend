@@ -34,6 +34,10 @@ public class PedidoDTO {
     private String observaciones;
     private BigDecimal subtotal;
     private BigDecimal iva;
+    private BigDecimal descuentos;
+    private BigDecimal retefuente;
+    private BigDecimal reteiva;
+    private BigDecimal reteica;
     private BigDecimal total;
     private String usuarioCreacion;
     private LocalDate fechaCreacion;

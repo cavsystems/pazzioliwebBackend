@@ -130,10 +130,17 @@ public class PedidoServiceImpl implements PedidoService {
             ivaTotal = ivaTotal.add(detalle.getIva());
             descuentosTotal = descuentosTotal.add(detalle.getDescuento());
         }
+        BigDecimal retefuente = pedidoDTO.getRetefuente() != null ? pedidoDTO.getRetefuente() : BigDecimal.ZERO;
+        BigDecimal reteiva    = pedidoDTO.getReteiva()    != null ? pedidoDTO.getReteiva()    : BigDecimal.ZERO;
+        BigDecimal reteica    = pedidoDTO.getReteica()    != null ? pedidoDTO.getReteica()    : BigDecimal.ZERO;
+
         pedido.setGravada(subtotal.subtract(ivaTotal));
         pedido.setIva(ivaTotal);
         pedido.setDescuentos(descuentosTotal);
-        pedido.setTotalPedido(subtotal);
+        pedido.setRetefuente(retefuente);
+        pedido.setReteiva(reteiva);
+        pedido.setReteica(reteica);
+        pedido.setTotalPedido(subtotal.subtract(retefuente).subtract(reteiva).subtract(reteica));
 
         Pedido guardado = pedidoRepository.save(pedido);
 
@@ -241,6 +248,10 @@ public class PedidoServiceImpl implements PedidoService {
         ventaDTO.setObservaciones("Generado desde pedido: " + pedido.getNumeroPedido());
         ventaDTO.setSubtotal(pedido.getGravada());
         ventaDTO.setIva(pedido.getIva());
+        ventaDTO.setDescuentos(pedido.getDescuentos());
+        ventaDTO.setRetefuente(pedido.getRetefuente() != null ? pedido.getRetefuente() : BigDecimal.ZERO);
+        ventaDTO.setReteiva(pedido.getReteiva()       != null ? pedido.getReteiva()    : BigDecimal.ZERO);
+        ventaDTO.setReteica(pedido.getReteica()       != null ? pedido.getReteica()    : BigDecimal.ZERO);
         ventaDTO.setTotal(pedido.getTotalPedido());
         ventaDTO.setUsuarioCreacion(pedido.getUsuarioCreacion());
         ventaDTO.setMetodosPago(metodosPago);

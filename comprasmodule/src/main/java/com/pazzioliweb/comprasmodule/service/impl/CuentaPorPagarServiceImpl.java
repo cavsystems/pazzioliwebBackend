@@ -36,6 +36,9 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
         cuenta.setValorNeto(cuentaPorPagarDTO.getValorNeto());
         cuenta.setSaldo(cuentaPorPagarDTO.getValorNeto());
         cuenta.setEstado(cuentaPorPagarDTO.getEstado() != null ? cuentaPorPagarDTO.getEstado() : "PENDIENTE");
+        if (cuentaPorPagarDTO.getRetefuente() != null) cuenta.setRetefuente(cuentaPorPagarDTO.getRetefuente());
+        if (cuentaPorPagarDTO.getReteiva() != null) cuenta.setReteiva(cuentaPorPagarDTO.getReteiva());
+        if (cuentaPorPagarDTO.getReteica() != null) cuenta.setReteica(cuentaPorPagarDTO.getReteica());
 
         if (cuentaPorPagarDTO.getProveedorId() != null) {
             Terceros proveedor = tercerosRepository.findById(cuentaPorPagarDTO.getProveedorId()).orElse(null);
@@ -124,6 +127,9 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
         if (cuenta.getProveedor() != null) {
             dto.setProveedorId(cuenta.getProveedor().getTerceroId());
         }
+        dto.setRetefuente(cuenta.getRetefuente() != null ? cuenta.getRetefuente() : java.math.BigDecimal.ZERO);
+        dto.setReteiva(cuenta.getReteiva() != null ? cuenta.getReteiva() : java.math.BigDecimal.ZERO);
+        dto.setReteica(cuenta.getReteica() != null ? cuenta.getReteica() : java.math.BigDecimal.ZERO);
         return dto;
     }
 }
