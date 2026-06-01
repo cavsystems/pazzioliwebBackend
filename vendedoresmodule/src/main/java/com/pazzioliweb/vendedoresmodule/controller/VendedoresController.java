@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.pazzioliweb.vendedoresmodule.dtos.VendedorCreateRequest;
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorDTO;
 import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
 import com.pazzioliweb.vendedoresmodule.service.VendedoresService;
@@ -37,7 +38,7 @@ public class VendedoresController {
             @RequestParam(defaultValue = "vendedor_id") String sortField,
             @RequestParam(defaultValue = "asc") String sortDirection) {
 
-        Page<Vendedores> vendedoresPage = vendedorService.listar(page, size, sortField, sortDirection);
+        Page<VendedorDTO> vendedoresPage = vendedorService.listar(page, size, sortField, sortDirection);
 
         Map<String, Object> response = new HashMap<>();
         response.put("content", vendedoresPage.getContent());
@@ -66,9 +67,15 @@ public class VendedoresController {
     }
 
     @PostMapping
-    public ResponseEntity<Vendedores> crear(@RequestBody Vendedores vendedor) {
-    	Vendedores guardado = vendedorService.guardar(vendedor);
-        return ResponseEntity.status(HttpStatus.CREATED).body(guardado);
+    public ResponseEntity<?> crear(@RequestBody VendedorCreateRequest request) {
+        try {
+            Vendedores guardado = vendedorService.crearVendedor(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(guardado);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
     }
 
     @PutMapping("/{id}")

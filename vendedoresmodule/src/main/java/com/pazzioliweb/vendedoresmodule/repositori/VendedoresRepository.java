@@ -13,17 +13,24 @@ import java.util.List;
 
 public interface VendedoresRepository extends JpaRepository<Vendedores, Integer>{
 	@Query(value = """
-	           SELECT DISTINCT v.* 
+	           SELECT DISTINCT 
+	               v.vendedor_id,
+	               v.nombre,
+	               v.direccion,
+	               v.telefono,
+	               v.estado,
+	               v.codigo_usuario_creo,
+	               v.fechacreado,
+	               u.codigo,
+	               u.nombre,
+	               r.nombre
 	           FROM vendedores v
-	           INNER JOIN usuarios_vendedor uv ON v.vendedor_id = uv.vendedor_id
+	           LEFT JOIN usuarios_vendedor uv ON v.vendedor_id = uv.vendedor_id
+	           LEFT JOIN usuarios u ON uv.usuario_id = u.codigo
+	           LEFT JOIN roles r ON u.codigorol = r.codigo
 	           """,
-	           nativeQuery = true,
-	           countQuery = """
-	           SELECT COUNT(DISTINCT v.vendedor_id) 
-	           FROM vendedores v 
-	           INNER JOIN usuarios_vendedor uv ON v.vendedor_id = uv.vendedor_id
-	           """)
-	    Page<Vendedores> listarVendedoresDTO(Pageable pageable);
+	           nativeQuery = true)
+	Page<Object[]> listarVendedoresDTO(Pageable pageable);
 
 	/*
 	query para buscar todos los vendedores pertenecientes a una sede

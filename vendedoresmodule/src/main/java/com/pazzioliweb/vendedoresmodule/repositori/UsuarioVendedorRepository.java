@@ -26,6 +26,18 @@ public interface UsuarioVendedorRepository extends JpaRepository<Usuariosvendedo
     java.util.List<Usuariosvendedor> findAllByUsuarioCodigo(@Param("usuarioCodigo") Integer usuarioCodigo);
 
     /**
+     * Consulta las relaciones por vendedor ID
+     */
+    @Query("SELECT uv FROM Usuariosvendedor uv WHERE uv.vendedor.vendedor_id = :vendedorId")
+    java.util.List<Usuariosvendedor> findByVendedorId(@Param("vendedorId") Integer vendedorId);
+
+    /**
+     * Verifica si un usuario ya está relacionado con algún vendedor
+     */
+    @Query("SELECT COUNT(uv) > 0 FROM Usuariosvendedor uv WHERE uv.usuario.codigo = :usuarioCodigo")
+    boolean existsByUsuarioCodigo(@Param("usuarioCodigo") Integer usuarioCodigo);
+
+    /**
      * Consulta si existe una relación entre un usuario y un vendedor
      */
     @Query("SELECT uv FROM Usuariosvendedor uv WHERE uv.usuario.codigo = :usuarioCodigo AND uv.vendedor.vendedor_id = :vendedorId")
