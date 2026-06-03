@@ -22,5 +22,8 @@ public interface ProductoVarianteDetalleRepository extends JpaRepository<Product
 	@Query("SELECT pv FROM ProductoVarianteDetalle pv")
 	Page<ProductoVarianteDetalle> traerProductosVariantesDetalles(Pageable pageable);
 	Page<ProductoVarianteDetalle> findByProductoVariante_ProductoVarianteId(Long varianteId, Pageable pageable);
-	
+
+	@EntityGraph(attributePaths = { "caracteristica", "caracteristica.tipo" })
+	List<ProductoVarianteDetalle> findByProductoVariante_ProductoVarianteId(Long varianteId);
+
 }

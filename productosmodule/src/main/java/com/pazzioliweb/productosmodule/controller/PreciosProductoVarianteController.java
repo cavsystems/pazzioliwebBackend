@@ -1,11 +1,13 @@
 package com.pazzioliweb.productosmodule.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -76,9 +78,16 @@ public class PreciosProductoVarianteController {
     		}
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(@PathVariable Long id) {
-        boolean eliminado = service.eliminar(id);
-        return eliminado ? ResponseEntity.ok().build() : ResponseEntity.notFound().build();
+    public ResponseEntity<?> eliminar(@PathVariable Long id) {
+        try {
+            System.out.println("Entro aqui: ");
+            boolean eliminado = service.eliminar(id);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            System.out.println("Error al eliminar el registro: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
     
     @GetMapping("/variante/{varianteId}")

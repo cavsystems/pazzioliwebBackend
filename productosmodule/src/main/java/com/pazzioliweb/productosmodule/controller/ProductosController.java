@@ -22,6 +22,7 @@ import com.pazzioliweb.productosmodule.dtos.ProductoCreateDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoResponseDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoUpdateDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoActualizarCrearDTO;
+import com.pazzioliweb.productosmodule.dtos.ProductoConVariantesDTO;
 import com.pazzioliweb.productosmodule.entity.Productos;
 import com.pazzioliweb.productosmodule.service.ProductosService;
 
@@ -221,5 +222,14 @@ public class ProductosController {
         productosService.actualizarInventario(codigoProducto, codigoVariante, cantidad, bodegaId);
         return ResponseEntity.ok().build();
     }
-    
+
+    // ------------------------------------------------------
+    // LISTAR PRODUCTOS CON VARIANTES Y CARACTERISTICAS
+    // ------------------------------------------------------
+    @GetMapping("/con-variantes-caracteristicas")
+    public ResponseEntity<List<ProductoConVariantesDTO>> listarProductosConVariantesYCaracteristicas() {
+        List<ProductoConVariantesDTO> resultados = productosService.listarTodosProductosConVariantesYCaracteristicas();
+        return ResponseEntity.ok(resultados);
+    }
+
 }

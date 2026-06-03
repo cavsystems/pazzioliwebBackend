@@ -1,43 +1,43 @@
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\DashboardResumenDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorMetodoPagoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\impl\MisReportesServiceImpl.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\AnulacionDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorCajeroDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\MisReportesService.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\HistoricoProductoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CarteraAgingDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\RentabilidadProductoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ValorizacionInventarioDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorPeriodoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorVendedorDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\repository\ReportesRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ComprasVsVentasDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\InventarioCompletoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ProductoStockBajoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\controller\ReportesController.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiVentaDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\ReportesService.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VarianteVendidaDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\repository\MisReportesRepository.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ProductoSinMovimientoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CuentasPorPagarResumenDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CuentaPorPagarDetalleDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiEgresoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorCategoriaDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ComprasPorProveedorDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\StockProductoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MovimientoCajaTipoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\SabanaReporteDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorClienteDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ConceptoAbiertoUsoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ProductoMasVendidoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\impl\ReportesServiceImpl.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\DevolucionDetalladaDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\AbcProductoDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\controller\MisReportesController.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiResumenHoyDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ComparativoPeriodosDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiReciboDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ReporteCarteraDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CarteraDetalleDTO.java
-D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\TicketPromedioDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ComprasPorProveedorDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\TicketPromedioDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiEgresoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\MisReportesService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ComparativoPeriodosDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\impl\ReportesServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\DevolucionDetalladaDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorVendedorDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\DashboardResumenDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\InventarioCompletoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\repository\ReportesRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\AnulacionDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MovimientoCajaTipoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ConceptoAbiertoUsoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CuentasPorPagarResumenDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiResumenHoyDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ProductoStockBajoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CuentaPorPagarDetalleDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\StockProductoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorCategoriaDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ProductoSinMovimientoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ComprasVsVentasDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\ReportesService.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ReporteCarteraDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VarianteVendidaDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CarteraDetalleDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\HistoricoProductoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\impl\MisReportesServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\SabanaReporteDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiVentaDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\controller\ReportesController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\repository\MisReportesRepository.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\controller\MisReportesController.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\AbcProductoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CarteraAgingDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\MiReciboDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ValorizacionInventarioDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorPeriodoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\RentabilidadProductoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ProductoMasVendidoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorMetodoPagoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorClienteDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorCajeroDTO.java
