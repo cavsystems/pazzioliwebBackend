@@ -162,6 +162,33 @@ public class ProductoVarianteController {
 
         return ResponseEntity.ok(PaginationResponse.of(resultado));
     }
+
+
+
+    @GetMapping("/listarInventarioBasicoentraexcel")
+    public ResponseEntity<PaginationResponse<ProductoInventarioDTO>> listarInventarioBasicoentraexcel(
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "10") int size,
+            @RequestParam(name = "descripproduct", defaultValue = "") String descripproduct,
+            @RequestParam(name = "estadoproducto", defaultValue = "ACTIVO") String estadoproducto,
+            @RequestParam(name = "estadova", defaultValue = "1") String estadova,
+            @RequestParam(name = "bodega", defaultValue = "0") String bodega,
+            @RequestParam(name = "consultarentradasalida", defaultValue = "NO") String consultarentradasalida,
+            @RequestParam(name = "sortField", defaultValue = "productoVarianteId") String sortField,
+            @RequestParam(name = "sortDirection", defaultValue = "asc") String sortDirection
+    ){
+        System.out.println("pagina actual es esta"+page+" "+estadoproducto+" "+estadova);
+
+        Sort sort = sortDirection.equalsIgnoreCase("asc")
+                ? Sort.by(sortField).ascending()
+                : Sort.by(sortField).descending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<ProductoInventarioDTO> resultado =
+                varianteService.listarInventarioBasicoexcel(Integer.parseInt(estadova),estadoproducto,descripproduct,pageable);
+        return ResponseEntity.ok(PaginationResponse.of(resultado));
+    }
     
     @GetMapping("/detalles-producto/{productoId}")
     public ResponseEntity<PaginationResponse<ProductoVarianteConDetallesDTO>> listarConDetallesPorProducto(

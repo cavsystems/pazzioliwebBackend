@@ -444,6 +444,11 @@ public class ProductosServiceImpl implements ProductosService{
                 // Handle attributes
                 if (varianteDto.getAtributos() != null) {
                     for (ProductoActualizarCrearDTO.AtributoDTO attrDto : varianteDto.getAtributos()) {
+                        // Skip if attribute name is "descripcion"
+                        if ("descripcion".equalsIgnoreCase(attrDto.getNombre())) {
+                            continue;
+                        }
+
                         TipoCaracteristica tipo = tipoCaracteristicaRepository.findByNombre(attrDto.getNombre())
                                 .orElse(null); // Or throw if needed
 
@@ -461,7 +466,7 @@ public class ProductosServiceImpl implements ProductosService{
                         detalle.setProductoVariante(variante);
                         detalle.setCaracteristica(caracteristica);
 
-                        productoVarianteDetalleRepository.save(detalle);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+                        productoVarianteDetalleRepository.save(detalle);
                     }
                 }
             }
