@@ -20,6 +20,7 @@ public class ProductoVarianteMapper {
     // ---------------------------------------------------------
     public ProductoVariante fromCreateDto(ProductoVarianteCreateDTO dto, Productos producto) {
         ProductoVariante pv = new ProductoVariante();
+        System.out.println("dto.getPredeterminada(): " + dto.getPredeterminada() + !dto.getPredeterminada());
         pv.setProducto(producto);
         pv.setSku(dto.getSku());
         pv.setReferenciaVariantes(dto.getReferenciaVariantes());

@@ -131,9 +131,13 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
     @Transactional
     public boolean eliminar(Long id) {
         return repository.findById(id).map(entity -> {
-            repository.delete(entity);
-            return true;
-        }).orElse(false);
+            try {
+                repository.delete(entity);
+                return true;
+            } catch (Exception e) {
+                throw new RuntimeException("Error al eliminar el registro: " + e.getMessage());
+            }
+        }).orElseThrow(() -> new RuntimeException("Registro con id " + id + " no encontrado"));
     }
     
     @Override

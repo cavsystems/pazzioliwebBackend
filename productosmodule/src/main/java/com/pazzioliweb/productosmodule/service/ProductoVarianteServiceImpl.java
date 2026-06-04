@@ -127,6 +127,21 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
     	return pagina;
     }
 
+
+
+    @Override
+    public Page<ProductoInventarioDTO> listarInventarioBasicoexcel( int activo,String estadoproduct,String productodes,Pageable pageable){
+        Page<ProductoInventarioDTO>  pagina;
+        System.out.println("estado variante actul: " + activo);
+
+            pagina=varianteRepository.listarInventarioentradasalidaexcel(activo, productodes, pageable);
+
+
+        return pagina;
+    }
+
+
+
     @Override
     public List<ProductoInventarioDTO> listarInventarioBasicoPorDescripciones(List<String> descripciones, int estadova, String estadoproduct) {
         return varianteRepository.listarInventarioPorDescripciones(descripciones, estadova);

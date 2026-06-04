@@ -16,8 +16,10 @@ import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorCreateRequest;
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorDTO;
+import com.pazzioliweb.vendedoresmodule.dtos.VendedorUpdateRequest;
 import com.pazzioliweb.vendedoresmodule.entity.Usuariosvendedor;
 import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
+import com.pazzioliweb.vendedoresmodule.exception.UsuarioYaAsignadoException;
 import com.pazzioliweb.vendedoresmodule.repositori.UsuarioVendedorRepository;
 import com.pazzioliweb.vendedoresmodule.repositori.VendedoresRepository;
 
@@ -112,5 +114,53 @@ public class VendedoresService {
 
     public void eliminar(Integer id) {
     	vendedorRepository.deleteById(id);
+    }
+
+    public Vendedores actualizarVendedor(Integer id, VendedorUpdateRequest request) {
+        Vendedores vendedor = vendedorRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("vendedor no encontrado"));
+
+        // Actualizar campos del vendedor
+        vendedor.setNombre(request.getNombre());
+        vendedor.setDireccion(request.getDireccion());
+        vendedor.setTelefono(request.getTelefono());
+        vendedor.setEstado(Vendedores.Estado.valueOf(request.getEstado()));
+
+        // Manejar la relación con el usuario
+        if (request.getUsuarioid() != null && request.getUsuarioid() != 0) {
+            // Verificar si el usuario ya está relacionado con otro vendedor
+            java.util.List<Usuariosvendedor> relacionesUsuario = usuarioVendedorRepository.findAllByUsuarioCodigo(request.getUsuarioid());
+            if (!relacionesUsuario.isEmpty() && relacionesUsuario.get(0).getVendedor().getVendedor_id() != id) {
+                throw new UsuarioYaAsignadoException("usuario ya asignado a un vendedor");
+            }
+
+            // Buscar si el vendedor ya tiene una relación con algún usuario
+            java.util.List<Usuariosvendedor> relacionesVendedor = usuarioVendedorRepository.findByVendedorId(id);
+            Usuariosvendedor relacionVendedorActual = relacionesVendedor.isEmpty() ? null : relacionesVendedor.get(0);
+
+            // Si el vendedor ya tiene una relación con un usuario diferente, eliminarla
+            if (relacionVendedorActual != null && relacionVendedorActual.getUsuario().getCodigo() != request.getUsuarioid()) {
+                usuarioVendedorRepository.delete(relacionVendedorActual);
+            }
+
+            // Si no existe relación o fue eliminada, crear la nueva relación
+            if (relacionVendedorActual == null || relacionVendedorActual.getUsuario().getCodigo() != request.getUsuarioid()) {
+                Usuario usuario = usuarioRepository.findById(request.getUsuarioid())
+                        .orElseThrow(() -> new RuntimeException("usuario no encontrado"));
+
+                Usuariosvendedor nuevaRelacion = new Usuariosvendedor();
+                nuevaRelacion.setUsuario(usuario);
+                nuevaRelacion.setVendedor(vendedor);
+                usuarioVendedorRepository.save(nuevaRelacion);
+            }
+        } else {
+            // Si usuarioid es null o 0, eliminar la relación existente si la hay
+            java.util.List<Usuariosvendedor> relacionesVendedor = usuarioVendedorRepository.findByVendedorId(id);
+            if (!relacionesVendedor.isEmpty()) {
+                usuarioVendedorRepository.delete(relacionesVendedor.get(0));
+            }
+        }
+
+        return vendedorRepository.save(vendedor);
     }
 }

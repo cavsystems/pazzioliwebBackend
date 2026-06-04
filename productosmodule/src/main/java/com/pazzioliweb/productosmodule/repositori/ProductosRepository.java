@@ -96,4 +96,29 @@ public interface ProductosRepository extends JpaRepository<Productos, Integer>{
 	
 	boolean existsByUnidadesMedidaProducto_UnidadMedida_UnidadMedidaId(Integer unidadMedidaId);
 
+	@EntityGraph(attributePaths = {
+		"grupo",
+		"linea",
+		"impuestos",
+		"usuario",
+		"tipoProducto",
+		"variantes",
+		"variantes.detalles",
+		"variantes.detalles.caracteristica",
+		"variantes.detalles.caracteristica.tipo"
+	})
+	@Query("SELECT p FROM Productos p")
+	Page<Productos> findAllWithVariantesAndCaracteristicas(Pageable pageable);
+
+	@EntityGraph(attributePaths = {
+		"grupo",
+		"linea",
+		"impuestos",
+		"usuario",
+		"tipoProducto",
+		"variantes"
+	})
+	@Query("SELECT p FROM Productos p")
+	List<Productos> findAllWithVariantes();
+
 }

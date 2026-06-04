@@ -1,7 +1,18 @@
-/target/
+# Maven build outputs — todos los módulos
+target/
+**/target/
 
 /common/src/main/java/com/pazzioliweb/commonbacken/conexiondb/
 
 .idea/
 .metadata/
 .settings/
+
+# IntelliJ
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.classpath
+.project

@@ -33,4 +33,6 @@ public interface ProductoVarianteService {
 
     List<ProductoInventarioDTO> listarInventarioBasicoPorDescripciones(List<String> descripciones, int estadova, String estadoproduct);
 
+     Page<ProductoInventarioDTO> listarInventarioBasicoexcel( int activo,String estadoproduct,String productodes,Pageable pageable);
+
 }

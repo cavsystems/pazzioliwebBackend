@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorCreateRequest;
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorDTO;
+import com.pazzioliweb.vendedoresmodule.dtos.VendedorUpdateRequest;
 import com.pazzioliweb.vendedoresmodule.entity.Vendedores;
+import com.pazzioliweb.vendedoresmodule.exception.UsuarioYaAsignadoException;
 import com.pazzioliweb.vendedoresmodule.service.VendedoresService;
 
 @RestController
@@ -79,13 +81,19 @@ public class VendedoresController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Vendedores> actualizar(@PathVariable Integer id, @RequestBody Vendedores vendedor) {
-    	return vendedorService.buscarPorId(id)
-                .map(actual -> {
-                	vendedor.setVendedor_id(id);
-                    return ResponseEntity.ok(vendedorService.guardar(vendedor));
-                })
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> actualizar(@PathVariable Integer id, @RequestBody VendedorUpdateRequest request) {
+        try {
+            Vendedores actualizado = vendedorService.actualizarVendedor(id, request);
+            return ResponseEntity.ok(actualizado);
+        } catch (UsuarioYaAsignadoException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
     }
 
     @DeleteMapping("/{id}")

@@ -2,6 +2,7 @@ package com.pazzioliweb.productosmodule.service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -20,6 +21,10 @@ import com.pazzioliweb.productosmodule.dtos.ProductoCreateDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoResponseDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoUpdateDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoActualizarCrearDTO;
+import com.pazzioliweb.productosmodule.dtos.ProductoConVariantesDTO;
+import com.pazzioliweb.productosmodule.dtos.VarianteDTO;
+import com.pazzioliweb.productosmodule.dtos.CaracteristicaDetalleDTO;
+import com.pazzioliweb.productosmodule.dtos.TipoCaracteristicaDTO;
 import com.pazzioliweb.productosmodule.mapper.ProductoMapper;
 import com.pazzioliweb.productosmodule.repositori.GrupoRepositori;
 import com.pazzioliweb.productosmodule.repositori.LineasRepositori;
@@ -316,7 +321,10 @@ public class ProductosServiceImpl implements ProductosService{
         producto.setEstado("Activo");
 
         // Set maneja variantes
-        producto.setManejaVariantes(dto.getVariantes() != null && !dto.getVariantes().isEmpty());
+        boolean tieneAtributoDescripcion = dto.getVariantes() != null && dto.getVariantes().stream()
+            .anyMatch(v -> v.getAtributos() != null && v.getAtributos().stream()
+                .anyMatch(a -> "descripcion".equalsIgnoreCase(a.getNombre())));
+        producto.setManejaVariantes(dto.getVariantes() != null && !dto.getVariantes().isEmpty() && !tieneAtributoDescripcion);
 
         // Set relations
         Grupos grupo = grupoRepository.findByDescripcion(dto.getGrupo())
@@ -436,6 +444,11 @@ public class ProductosServiceImpl implements ProductosService{
                 // Handle attributes
                 if (varianteDto.getAtributos() != null) {
                     for (ProductoActualizarCrearDTO.AtributoDTO attrDto : varianteDto.getAtributos()) {
+                        // Skip if attribute name is "descripcion"
+                        if ("descripcion".equalsIgnoreCase(attrDto.getNombre())) {
+                            continue;
+                        }
+
                         TipoCaracteristica tipo = tipoCaracteristicaRepository.findByNombre(attrDto.getNombre())
                                 .orElse(null); // Or throw if needed
 
@@ -453,7 +466,7 @@ public class ProductosServiceImpl implements ProductosService{
                         detalle.setProductoVariante(variante);
                         detalle.setCaracteristica(caracteristica);
 
-                        productoVarianteDetalleRepository.save(detalle);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+                        productoVarianteDetalleRepository.save(detalle);
                     }
                 }
             }
@@ -513,5 +526,97 @@ public class ProductosServiceImpl implements ProductosService{
       
 
         existenciasRepository.save(existencia);
+    }
+
+    @Override
+    public Page<ProductoConVariantesDTO> listarProductosConVariantesYCaracteristicas(Pageable pageable) {
+        Page<Productos> productosPage = productosRepository.findAllWithVariantesAndCaracteristicas(pageable);
+        return productosPage.map(this::convertirAProductoConVariantesDTO);
+    }
+
+    @Override
+    public List<ProductoConVariantesDTO> listarTodosProductosConVariantesYCaracteristicas() {
+        List<Productos> productos = productosRepository.findAllWithVariantes();
+        return productos.stream()
+                .map(this::convertirAProductoConVariantesDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Productos> findAllWithVariantes() {
+        return productosRepository.findAllWithVariantes();
+    }
+
+    private ProductoConVariantesDTO convertirAProductoConVariantesDTO(Productos producto) {
+        ProductoConVariantesDTO dto = new ProductoConVariantesDTO();
+        dto.setProductoId(producto.getProductoId());
+        dto.setCodigoContable(producto.getCodigoContable());
+        dto.setCodigoBarras(producto.getCodigoBarras());
+        dto.setReferencia(producto.getReferencia());
+        dto.setDescripcion(producto.getDescripcion());
+        dto.setCosto(producto.getCosto());
+        dto.setEstado(producto.getEstado());
+        dto.setImagen(producto.getImagen());
+        dto.setManejaVariantes(producto.getManejaVariantes());
+        dto.setGrupo(producto.getGrupo() != null ? producto.getGrupo().getDescripcion() : null);
+        dto.setLinea(producto.getLinea() != null ? producto.getLinea().getDescripcion() : null);
+        dto.setImpuesto(producto.getImpuestos() != null ? String.valueOf(producto.getImpuestos().getTarifa()) : null);
+        dto.setTipoProducto(producto.getTipoProducto() != null ? producto.getTipoProducto().getNombre() : null);
+
+        List<VarianteDTO> variantesDTO = producto.getVariantes().stream()
+                .map(this::convertirAVarianteDTO)
+                .collect(Collectors.toList());
+        dto.setVariantes(variantesDTO);
+
+        return dto;
+    }
+
+    private VarianteDTO convertirAVarianteDTO(ProductoVariante variante) {
+        VarianteDTO dto = new VarianteDTO();
+        dto.setProductoVarianteId(variante.getProductoVarianteId());
+        dto.setSku(variante.getSku());
+        dto.setReferenciaVariantes(variante.getReferenciaVariantes());
+        dto.setCodigoBarras(variante.getCodigoBarras());
+        dto.setPrecio(variante.getPrecio());
+        dto.setActivo(variante.getActivo());
+        dto.setPredeterminada(variante.getPredeterminada());
+        dto.setImagen(variante.getImagen());
+
+        // Fetch detalles separately to avoid MultipleBagFetchException
+        List<ProductoVarianteDetalle> detalles = productoVarianteDetalleRepository
+                .findByProductoVariante_ProductoVarianteId(variante.getProductoVarianteId());
+
+        List<CaracteristicaDetalleDTO> caracteristicasDTO = detalles.stream()
+                .map(detalle -> {
+                    CaracteristicaDetalleDTO caracteristicaDTO = new CaracteristicaDetalleDTO();
+                    if (detalle.getCaracteristica() != null) {
+                        caracteristicaDTO.setCaracteristicaId(detalle.getCaracteristica().getCaracteristicaId());
+                        caracteristicaDTO.setNombre(detalle.getCaracteristica().getNombre());
+                        if (detalle.getCaracteristica().getTipo() != null) {
+                            TipoCaracteristicaDTO tipoDTO = new TipoCaracteristicaDTO();
+                            tipoDTO.setTipoCaracteristicaId(detalle.getCaracteristica().getTipo().getTipoCaracteristicaId());
+                            tipoDTO.setNombre(detalle.getCaracteristica().getTipo().getNombre());
+                            caracteristicaDTO.setTipo(tipoDTO);
+                        }
+                    }
+                    return caracteristicaDTO;
+                })
+                .collect(Collectors.toList());
+        dto.setCaracteristicas(caracteristicasDTO);
+
+        // Fetch existencias
+        List<com.pazzioliweb.productosmodule.dtos.ExistenciasBodegaDTO> existenciasDTO = 
+            existenciasRepository.listadoExistenciasNombreBodegaVariante(variante.getProductoVarianteId());
+        dto.setExistencias(existenciasDTO);
+
+        // Fetch precios
+        List<com.pazzioliweb.productosmodule.dtos.PreciosProductoVarianteDTO> preciosDTO = 
+            preciosProductoVarianteRepository.preciosPrpductoVariante(
+                variante.getProductoVarianteId().intValue(), 
+                org.springframework.data.domain.Pageable.unpaged()
+            ).getContent();
+        dto.setPrecios(preciosDTO);
+
+        return dto;
     }
 }

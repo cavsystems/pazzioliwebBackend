@@ -278,6 +278,85 @@ AND t.bodegaid = :bodega
 			)
 			Page<ProductoInventarioDTO> listarInventarioentradasalida( @Param("activo") int activo, @Param("bodega") int bodega,@Param("productodes") String desproduct,Pageable pageable);
 
+
+
+
+
+
+
+	@Query(
+			value = """
+			  	SELECT *
+FROM (
+    SELECT
+        pv.producto_variantes_id AS productoVarianteId,
+        pv.activo AS activo,
+        pv.codigo_barras AS codigobarras,
+        p.producto_id AS productoId,
+        p.referencia,
+        p.estado,
+        p.grupo_id AS grupoid,
+        p.linea_id AS lineaid,
+        p.maneja_variantes AS manejavariante,
+        p.tipo_producto_id AS tipoproductid,
+        p.impuesto_id AS impuestoid,
+        p.codigo_contable AS codigoContable,
+        IF(
+          pv.predeterminada = 0,
+          CONCAT(p.descripcion, '-', pv.referencia_variantes),
+          p.descripcion
+        ) AS descripcion,
+       
+        0 AS totalGlobalInventario,
+        p.costo AS costo,
+        u.sigla AS unidadMedida,
+        l.descripcion AS linea,
+        g.descripcion AS grupo,
+        COALESCE(i.tarifa, 0) AS tarifa,
+        p.fecha_ultima_compra AS fechaUltimaCompra,
+        p.fecha_ultima_venta AS fechaUltimaVenta,
+        COALESCE(pv.imagen, p.imagen) AS imagen
+    FROM producto_variantes pv
+    JOIN productos p ON p.producto_id = pv.producto_id
+    LEFT JOIN impuestos i ON i.codigo = p.impuesto_id
+    LEFT JOIN unidades_medida_producto ump ON ump.producto_id = p.producto_id
+    LEFT JOIN unidades_medida u ON u.unidad_medida_id = ump.unidad_medida_id
+    LEFT JOIN lineas l ON l.linea_id = p.linea_id
+    LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
+ 
+) t
+WHERE (
+    LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.codigoContable) LIKE LOWER(CONCAT('%', :productodes, '%'))
+    OR LOWER(t.referencia) LIKE LOWER(CONCAT('%', :productodes, '%'))
+)
+AND t.estado = 'ACTIVO'
+AND t.activo = :activo
+
+			        """,
+			countQuery = """
+			      SELECT COUNT(*) FROM (
+			          SELECT pv.producto_variantes_id
+			          FROM producto_variantes pv
+			          JOIN productos p ON p.producto_id = pv.producto_id
+			   
+			          WHERE (
+			              LOWER(IF(pv.predeterminada = 0, CONCAT(p.descripcion, '-', pv.referencia_variantes), p.descripcion)) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(p.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(pv.codigo_contable) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			              OR LOWER(p.referencia) LIKE LOWER(CONCAT('%', :productodes, '%'))
+			          )
+			          AND p.estado = 'ACTIVO'
+			          AND pv.activo = :activo
+			        
+			      ) cnt
+			      """,
+			nativeQuery = true
+	)
+	Page<ProductoInventarioDTO> listarInventarioentradasalidaexcel( @Param("activo") int activo,@Param("productodes") String desproduct,Pageable pageable);
+
+
 	@Query(
 			value = """
 		  		SELECT *

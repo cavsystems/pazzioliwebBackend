@@ -3,15 +3,11 @@ package com.pazzioliweb.productosmodule.service;
 import java.util.List;
 import java.util.Optional;
 
+import com.pazzioliweb.productosmodule.dtos.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import com.pazzioliweb.productosmodule.dtos.LineaProductosDTO;
-import com.pazzioliweb.productosmodule.dtos.ProductoCreateDTO;
-import com.pazzioliweb.productosmodule.dtos.ProductoResponseDTO;
-import com.pazzioliweb.productosmodule.dtos.ProductoUpdateDTO;
 import com.pazzioliweb.productosmodule.entity.Productos;
-import com.pazzioliweb.productosmodule.dtos.ProductoActualizarCrearDTO;
 
 public interface ProductosService {
 
@@ -40,4 +36,10 @@ public interface ProductosService {
     void actualizarOCrearProducto(List<ProductoActualizarCrearDTO> dtos);
 
     void actualizarInventario(String codigoProducto, String codigoVariante, Integer cantidad, Integer bodegaId);
+
+    Page<ProductoConVariantesDTO> listarProductosConVariantesYCaracteristicas(Pageable pageable);
+
+    List<ProductoConVariantesDTO> listarTodosProductosConVariantesYCaracteristicas();
+
+    List<Productos> findAllWithVariantes();
 }
