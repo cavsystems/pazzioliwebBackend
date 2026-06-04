@@ -1,7 +1,9 @@
 package com.pazzioliweb.comprasmodule.controller;
 
 import com.pazzioliweb.comprasmodule.dtos.DetalleOrdenCompraDTO;
+import com.pazzioliweb.comprasmodule.dtos.FinalizarCompraDTO;
 import com.pazzioliweb.comprasmodule.dtos.OrdenCompraDTO;
+import com.pazzioliweb.comprasmodule.service.EmailOrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.OrdenCompraService;
 import com.pazzioliweb.comprasmodule.dtos.CuentaPorPagarDTO;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
@@ -28,11 +30,15 @@ public class OrdenCompraController {
 
     private final OrdenCompraService ordenCompraService;
     private final CuentaPorPagarService cuentaPorPagarService;
+    private final EmailOrdenCompraService emailService;
 
     @Autowired
-    public OrdenCompraController(OrdenCompraService ordenCompraService, CuentaPorPagarService cuentaPorPagarService) {
+    public OrdenCompraController(OrdenCompraService ordenCompraService,
+                                  CuentaPorPagarService cuentaPorPagarService,
+                                  EmailOrdenCompraService emailService) {
         this.ordenCompraService = ordenCompraService;
         this.cuentaPorPagarService = cuentaPorPagarService;
+        this.emailService = emailService;
     }
 
     @GetMapping
@@ -111,6 +117,42 @@ public class OrdenCompraController {
     public ResponseEntity<OrdenCompraDTO> realizarOrden(@RequestBody RealizarOrdenRequestDTO request) {
         OrdenCompraDTO ordenCreada = ordenCompraService.realizarOrden(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ordenCreada);
+    }
+
+    /** Nuevo endpoint — Orden simple sin contabilidad (Flujo: Orden → Ingreso). */
+    @PostMapping("/realizar-orden-simple")
+    public ResponseEntity<OrdenCompraDTO> realizarOrdenSimple(@RequestBody RealizarOrdenRequestDTO request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ordenCompraService.realizarOrdenSimple(request));
+    }
+
+    /** Actualiza una orden PENDIENTE en su totalidad (items, totales, retenciones, métodos de pago). */
+    @PutMapping("/{id}/actualizar-completo")
+    public ResponseEntity<OrdenCompraDTO> actualizarCompleto(
+            @PathVariable("id") Long id,
+            @RequestBody RealizarOrdenRequestDTO request) {
+        return ResponseEntity.ok(ordenCompraService.actualizarCompleto(id, request));
+    }
+
+    /** Finaliza el ingreso de una orden PENDIENTE: precios definitivos, retenciones, pagos, asiento, CxP. */
+    @PostMapping("/{id}/finalizar-ingreso")
+    public ResponseEntity<OrdenCompraDTO> finalizarIngreso(
+            @PathVariable("id") Long ordenId,
+            @RequestBody FinalizarCompraDTO dto) {
+        return ResponseEntity.ok(ordenCompraService.finalizarIngreso(ordenId, dto));
+    }
+
+    /** Envía la orden de compra por email al proveedor. Requiere el correo destino. */
+    @PostMapping("/{id}/enviar-email")
+    public ResponseEntity<java.util.Map<String, Object>> enviarEmail(
+            @PathVariable("id") Long ordenId,
+            @RequestParam String correo) {
+        OrdenCompraDTO orden = ordenCompraService.obtenerPorId(ordenId)
+                .orElseThrow(() -> new com.pazzioliweb.comprasmodule.exception.OrdenCompraException("Orden no encontrada"));
+        boolean enviado = emailService.enviarOrden(orden, correo);
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("enviado", enviado);
+        resp.put("mensaje", enviado ? "Email enviado a " + correo : "Servicio de email no configurado. Configure spring.mail.* en application-prod.yaml");
+        return ResponseEntity.ok(resp);
     }
 
     @PostMapping

@@ -3,6 +3,7 @@ package com.pazzioliweb.ventasmodule.controller;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaMetodoPagoDTO;
+import com.pazzioliweb.ventasmodule.service.EmailVentaService;
 import com.pazzioliweb.ventasmodule.service.VentaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,9 @@ import java.util.List;
 public class VentaController {
 
     private final VentaService ventaService;
+
+    @Autowired
+    private EmailVentaService emailVentaService;
 
     @Autowired
     public VentaController(VentaService ventaService) {
@@ -75,6 +79,21 @@ obtener el id de la ultima venta
     public ResponseEntity<Void> anularVenta(@PathVariable Long ventaId) {
         ventaService.anularVenta(ventaId);
         return ResponseEntity.ok().build();
+    }
+
+    /** Envía el recibo de venta por email al cliente. */
+    @PostMapping("/{ventaId}/enviar-email")
+    public ResponseEntity<java.util.Map<String, Object>> enviarEmail(
+            @PathVariable Long ventaId,
+            @RequestParam String correo) {
+        VentaDTO venta = ventaService.getVentaById(ventaId);
+        boolean enviado = emailVentaService.enviarRecibo(venta, correo);
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("enviado", enviado);
+        resp.put("mensaje", enviado
+                ? "Recibo enviado a " + correo
+                : "Servicio de email no configurado. Configure spring.mail.* en application.properties.");
+        return ResponseEntity.ok(resp);
     }
 
     @GetMapping("/reportes/total-ventas")

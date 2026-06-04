@@ -1053,6 +1053,14 @@ public class VentaServiceImpl implements VentaService {
         return ventaRepository.getUltimaVentaId();
     }
 
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public VentaDTO getVentaById(Long ventaId) {
+        com.pazzioliweb.ventasmodule.entity.Venta venta = ventaRepository.findById(ventaId)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada: " + ventaId));
+        return ventaMapper.toDto(venta);
+    }
+
     /**
      * Obtiene la sesión activa del usuario desde Redis a través del SecurityContextHolder.
      * Retorna null si no hay sesión o si no se puede obtener.

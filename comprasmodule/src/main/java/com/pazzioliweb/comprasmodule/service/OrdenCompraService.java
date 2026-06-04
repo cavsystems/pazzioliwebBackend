@@ -1,6 +1,7 @@
 package com.pazzioliweb.comprasmodule.service;
 
 import com.pazzioliweb.comprasmodule.dtos.DetalleOrdenCompraDTO;
+import com.pazzioliweb.comprasmodule.dtos.FinalizarCompraDTO;
 import com.pazzioliweb.comprasmodule.dtos.ItemRecibidoDTO;
 import com.pazzioliweb.comprasmodule.dtos.OrdenCompraDTO;
 import com.pazzioliweb.comprasmodule.dtos.RealizarOrdenRequestDTO;
@@ -45,5 +46,25 @@ public interface OrdenCompraService {
      * @return El siguiente ID (máximo ID actual + 1)
      */
     Long obtenerSiguienteId();
+
+    /**
+     * Crea una orden de compra simple (sin contabilidad, sin CxP, sin métodos de pago).
+     * Úsese para el flujo: Orden → Ingreso de Compra.
+     * El asiento contable y la CxP se generan después en finalizarIngreso().
+     */
+    OrdenCompraDTO realizarOrdenSimple(RealizarOrdenRequestDTO request);
+
+    /**
+     * Finaliza el ingreso de una orden PENDIENTE con los datos reales de la factura del proveedor.
+     * Actualiza precios, asigna comprobante CC/CR, procesa métodos de pago,
+     * crea el asiento contable y crea CxP solo si hay métodos de pago a crédito.
+     */
+    OrdenCompraDTO finalizarIngreso(Long ordenId, FinalizarCompraDTO dto);
+
+    /**
+     * Actualiza una orden PENDIENTE en su totalidad: items, totales, retenciones y métodos de pago.
+     * NO reasigna comprobante ni genera asiento contable (sigue siendo PENDIENTE).
+     */
+    OrdenCompraDTO actualizarCompleto(Long id, RealizarOrdenRequestDTO request);
 
 }

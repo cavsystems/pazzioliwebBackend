@@ -66,8 +66,8 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
     public OrdenCompraDTO getOrdenCompraByNumero(String numeroOrden) {
         OrdenCompra orden = ordenCompraRepository.findByNumeroOrdenWithItems(numeroOrden)
                 .orElseThrow(() -> new OrdenCompraException("Orden de compra no encontrada"));
-        if (!"PENDIENTE".equals(orden.getEstado())) {
-            throw new OrdenCompraException("La orden de compra no está en estado PENDIENTE");
+        if (!"PENDIENTE".equals(orden.getEstado()) && !"RECIBIDA_PARCIAL".equals(orden.getEstado())) {
+            throw new OrdenCompraException("La orden de compra no está en estado PENDIENTE o RECIBIDA_PARCIAL");
         }
         return ordenCompraMapper.toDto(orden);
     }

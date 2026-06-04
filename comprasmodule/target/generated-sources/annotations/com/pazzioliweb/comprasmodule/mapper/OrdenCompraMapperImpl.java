@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-06-01T09:33:44-0500",
+    date = "2026-06-04T10:45:38-0500",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.2 (Oracle Corporation)"
 )
 @Component
@@ -46,12 +46,12 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
         ordenCompraDTO.setSubtotal( ordenCompra.getGravada() );
         ordenCompraDTO.setIva( ordenCompra.getIva() );
         ordenCompraDTO.setTotal( ordenCompra.getTotalOrdenCompra() );
-        ordenCompraDTO.setUsuarioCreacion( ordenCompra.getUsuarioCreacion() );
-        ordenCompraDTO.setFechaCreacion( ordenCompra.getFechaCreacion() );
-        ordenCompraDTO.setItems( toDetalleDtoList( ordenCompra.getItems() ) );
         ordenCompraDTO.setRetefuente( ordenCompra.getRetefuente() );
         ordenCompraDTO.setReteiva( ordenCompra.getReteiva() );
         ordenCompraDTO.setReteica( ordenCompra.getReteica() );
+        ordenCompraDTO.setUsuarioCreacion( ordenCompra.getUsuarioCreacion() );
+        ordenCompraDTO.setFechaCreacion( ordenCompra.getFechaCreacion() );
+        ordenCompraDTO.setItems( toDetalleDtoList( ordenCompra.getItems() ) );
 
         return ordenCompraDTO;
     }
@@ -73,12 +73,12 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
         ordenCompra.setGravada( ordenCompraDTO.getSubtotal() );
         ordenCompra.setIva( ordenCompraDTO.getIva() );
         ordenCompra.setTotalOrdenCompra( ordenCompraDTO.getTotal() );
-        ordenCompra.setUsuarioCreacion( ordenCompraDTO.getUsuarioCreacion() );
-        ordenCompra.setFechaCreacion( ordenCompraDTO.getFechaCreacion() );
-        ordenCompra.setItems( detalleOrdenCompraDTOListToDetalleOrdenCompraList( ordenCompraDTO.getItems() ) );
         ordenCompra.setRetefuente( ordenCompraDTO.getRetefuente() );
         ordenCompra.setReteiva( ordenCompraDTO.getReteiva() );
         ordenCompra.setReteica( ordenCompraDTO.getReteica() );
+        ordenCompra.setUsuarioCreacion( ordenCompraDTO.getUsuarioCreacion() );
+        ordenCompra.setFechaCreacion( ordenCompraDTO.getFechaCreacion() );
+        ordenCompra.setItems( detalleOrdenCompraDTOListToDetalleOrdenCompraList( ordenCompraDTO.getItems() ) );
 
         setOrdenCompraInDetalles( ordenCompra );
 

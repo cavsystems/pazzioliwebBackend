@@ -222,7 +222,7 @@ public class TerceroimplemenDTO  implements TerceroDtoresponse{
 	            Set<Retenciones> retencionesEntity = this.retenciones.stream()
 	                .map(r -> {
 	                    Retenciones ret = new Retenciones();
-	                    ret.setRetencion_id(r.getRetencionId());
+	                    ret.setRetencionId(r.getRetencionId());
 	                    ret.setCodigo(r.getCodigo());
 	                    ret.setNombre(r.getNombre());
 	                    ret.setBase(r.getBase());

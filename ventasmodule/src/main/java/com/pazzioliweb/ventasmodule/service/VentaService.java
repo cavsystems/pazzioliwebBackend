@@ -22,5 +22,7 @@ public interface VentaService {
                                       LocalDate fechaInicio, LocalDate fechaFin);
     Long getUltimaVentaId();
 
+    /** Obtiene una venta por su ID primario. */
+    VentaDTO getVentaById(Long ventaId);
 
 }

@@ -281,7 +281,7 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
             Set<Retenciones> retencionesEntity = this.retenciones.stream()
                 .map(r -> {
                     Retenciones ret = new Retenciones();
-                    ret.setRetencion_id(r.getRetencionId());
+                    ret.setRetencionId(r.getRetencionId());
                     ret.setCodigo(r.getCodigo());
                     ret.setNombre(r.getNombre());
                     ret.setBase(r.getBase());

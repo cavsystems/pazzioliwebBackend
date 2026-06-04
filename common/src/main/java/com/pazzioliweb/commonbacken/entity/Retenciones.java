@@ -23,8 +23,8 @@ public class Retenciones {
 	 public Integer getRetencionId() {
 		 return retencionId;
 	 }
-	 public void setRetencion_id(Integer retencion_id) {
-		 this.retencionId = retencion_id;
+	 public void setRetencionId(Integer retencionId) {
+		 this.retencionId = retencionId;
 	 }
 	 public Integer getCodigo() {
 		 return codigo;

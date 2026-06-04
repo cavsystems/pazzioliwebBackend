@@ -2,6 +2,7 @@ package com.pazzioliweb.comprasmodule.service.impl;
 
 import com.pazzioliweb.comprasmodule.client.ProductoClient;
 import com.pazzioliweb.comprasmodule.dtos.*;
+import com.pazzioliweb.comprasmodule.dtos.FinalizarCompraDTO;
 import com.pazzioliweb.comprasmodule.entity.DetalleOrdenCompra;
 import com.pazzioliweb.comprasmodule.entity.OrdenCompra;
 import com.pazzioliweb.comprasmodule.entity.OrdenCompraMetodoPago;
@@ -56,6 +57,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final ConfiguracionComprasService configCompras;
     private final ComprobanteContableRepository comprobanteRepository;
     private final com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository metodosPagoRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService movimientoInventarioAutoService;
 
     @Autowired
     public OrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
@@ -938,5 +941,467 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     public Long obtenerSiguienteId() {
         Optional<Long> maxId = ordenCompraRepository.findMaxId();
         return maxId.orElse(0L) + 1;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // NUEVO FLUJO: Orden Simple → Ingreso con Finalización
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    @Override
+    @Transactional
+    public OrdenCompraDTO realizarOrdenSimple(RealizarOrdenRequestDTO request) {
+        if (request.getFechainicial() != null && !request.getFechainicial().isEmpty()) {
+            try {
+                LocalDate fecha = LocalDate.parse(request.getFechainicial(),
+                        java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                periodoContableService.validarPeriodoAbierto(fecha);
+            } catch (java.time.format.DateTimeParseException ignore) {}
+        }
+
+        // 1. Crear/actualizar productos en catálogo
+        procesarProductosDesdeRequest(request.getOrden_compra().getProducts());
+
+        // 2. Construir la orden SIN comprobante ni contabilidad
+        OrdenCompra orden = new OrdenCompra();
+        orden.setEstado("PENDIENTE");
+        orden.setUsuarioCreacion(obtenerUsuarioAutenticado());
+        orden.setFechaCreacion(LocalDate.now());
+
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy");
+        LocalDate fechaEmision = (request.getFechainicial() != null && !request.getFechainicial().isBlank())
+                ? LocalDate.parse(request.getFechainicial(), fmt)
+                : LocalDate.now();
+        orden.setFechaEmision(fechaEmision);
+
+        LocalDate fechaEntrega = (request.getFechafinal() != null && !request.getFechafinal().isBlank())
+                ? LocalDate.parse(request.getFechafinal(), fmt)
+                : fechaEmision.plusDays(request.getPlazo() != null ? request.getPlazo() : 0);
+        orden.setFechaEntregaEsperada(fechaEntrega);
+
+        orden.setGravada(request.getOrden_compra().getGravada());
+        orden.setIva(request.getOrden_compra().getIva());
+        orden.setDescuentos(request.getOrden_compra().getDescuentos());
+        orden.setTotalOrdenCompra(request.getOrden_compra().getTotalOrdenCompra());
+        orden.setRetefuente(parseMoneyOrZero(request.getOrden_compra().getRetefuente()));
+        orden.setReteiva(parseMoneyOrZero(request.getOrden_compra().getReteiva()));
+        orden.setReteica(parseMoneyOrZero(request.getOrden_compra().getReteica()));
+        orden.setCajeroId(request.getCajeroId());
+
+        orden.setProveedor(tercerosRepository.findById(request.getProvedor().getTerceroId())
+                .orElseThrow(() -> new OrdenCompraException("Proveedor no encontrado")));
+        orden.setBodega(bodegasRepository.findByCodigo(request.getBodegaId())
+                .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
+
+        // 3. Guardar para obtener el ID y generar número OC
+        OrdenCompra ordenGuardada = ordenCompraRepository.save(orden);
+
+        // Generar número de orden secuencial (se reemplazará al finalizar con el número del comprobante)
+        ordenGuardada.setNumeroOrden("OC-" + String.format("%06d", ordenGuardada.getId()));
+
+        // 4. Crear detalles
+        List<DetalleOrdenCompra> detalles = crearDetallesDesdeRequest(ordenGuardada, request.getOrden_compra().getProducts());
+        ordenGuardada.setItems(detalles);
+        ordenGuardada = ordenCompraRepository.save(ordenGuardada);
+
+        return ordenCompraMapper.toDto(ordenGuardada);
+    }
+
+    @Override
+    @Transactional
+    public OrdenCompraDTO finalizarIngreso(Long ordenId, FinalizarCompraDTO dto) {
+        OrdenCompra orden = ordenCompraRepository.findById(ordenId)
+                .orElseThrow(() -> new OrdenCompraException("Orden de compra no encontrada: " + ordenId));
+
+        if ("RECIBIDA".equals(orden.getEstado()) || "ANULADA".equals(orden.getEstado())) {
+            throw new OrdenCompraException("La orden ya fue recibida o está anulada");
+        }
+
+        // Validar periodo contable
+        LocalDate fechaRef = orden.getFechaEmision() != null ? orden.getFechaEmision() : LocalDate.now();
+        if (dto.getFechaFactura() != null && !dto.getFechaFactura().isBlank()) {
+            try {
+                fechaRef = LocalDate.parse(dto.getFechaFactura(),
+                        java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+            } catch (Exception ignore) {}
+        }
+        periodoContableService.validarPeriodoAbierto(fechaRef);
+
+        // 1. Actualizar items con precios y cantidades definitivas
+        BigDecimal gravada = BigDecimal.ZERO;
+        BigDecimal ivaTotal = BigDecimal.ZERO;
+        BigDecimal descuentosTotal = BigDecimal.ZERO;
+
+        if (dto.getItems() != null) {
+            for (FinalizarCompraDTO.ItemFinalDTO itemDto : dto.getItems()) {
+                if (itemDto.getDetalleId() == null) continue;
+                DetalleOrdenCompra detalle = orden.getItems().stream()
+                        .filter(d -> d.getId().equals(itemDto.getDetalleId()))
+                        .findFirst()
+                        .orElse(null);
+                if (detalle == null) continue;
+
+                if (itemDto.getPrecioUnitario() != null) detalle.setPrecioUnitario(itemDto.getPrecioUnitario());
+                if (itemDto.getIvaPorcentaje() != null)  detalle.setIva(itemDto.getIvaPorcentaje());
+                if (itemDto.getDescuento() != null)      detalle.setDescuento(itemDto.getDescuento());
+                if (itemDto.getManifiesto() != null)     detalle.setManifiesto(itemDto.getManifiesto());
+
+                Integer cant = itemDto.getCantidadRecibida() != null ? itemDto.getCantidadRecibida() : 0;
+                detalle.setCantidadRecibida(cant);
+                detalle.setRecibido(Boolean.TRUE.equals(itemDto.getRecibido()));
+
+                // Recalcular total del item
+                BigDecimal precio = detalle.getPrecioUnitario() != null ? detalle.getPrecioUnitario() : BigDecimal.ZERO;
+                BigDecimal desc   = detalle.getDescuento() != null ? detalle.getDescuento() : BigDecimal.ZERO;
+                BigDecimal ivaPct = detalle.getIva() != null ? detalle.getIva() : BigDecimal.ZERO;
+                BigDecimal base   = precio.multiply(BigDecimal.valueOf(cant)).subtract(desc).max(BigDecimal.ZERO);
+                BigDecimal ivaAmt = base.multiply(ivaPct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+                detalle.setTotal(base.add(ivaAmt));
+
+                gravada = gravada.add(base);
+                ivaTotal = ivaTotal.add(ivaAmt);
+                descuentosTotal = descuentosTotal.add(desc);
+            }
+        }
+
+        // Usar totales del DTO si vienen (el frontend ya los calculó), de lo contrario usar los calculados
+        BigDecimal gravadaFinal = dto.getGravada() != null ? dto.getGravada() : gravada;
+        BigDecimal ivaFinal     = dto.getIva()     != null ? dto.getIva()     : ivaTotal;
+        BigDecimal rf = dto.getRetefuente() != null ? dto.getRetefuente() : BigDecimal.ZERO;
+        BigDecimal rv = dto.getReteiva()    != null ? dto.getReteiva()    : BigDecimal.ZERO;
+        BigDecimal ric = dto.getReteica()   != null ? dto.getReteica()    : BigDecimal.ZERO;
+        BigDecimal descFinal = dto.getDescuentos() != null ? dto.getDescuentos() : BigDecimal.ZERO;
+
+        BigDecimal totalBruto = gravadaFinal.add(ivaFinal);
+        BigDecimal totalNeto  = dto.getTotalFinal() != null ? dto.getTotalFinal()
+                : totalBruto.subtract(rf).subtract(rv).subtract(ric).subtract(descFinal).max(BigDecimal.ZERO);
+
+        // Actualizar totales en la orden
+        orden.setGravada(gravadaFinal);
+        orden.setIva(ivaFinal);
+        orden.setDescuentos(descFinal);
+        orden.setRetefuente(rf);
+        orden.setReteiva(rv);
+        orden.setReteica(ric);
+        orden.setTotalOrdenCompra(totalNeto);
+
+        // 2. Determinar tipo de comprobante (CC contado / CR crédito)
+        boolean esCredito = tienePagoCredito(dto.getMetodosPago());
+        TipoMovimientoComprobante tipo = esCredito ? TipoMovimientoComprobante.CR : TipoMovimientoComprobante.CC;
+        Integer cajeroId = dto.getCajeroId() != null ? dto.getCajeroId() : orden.getCajeroId();
+        Integer cajeroEfectivo = resolverCajeroParaComprobante(cajeroId, tipo);
+
+        try {
+            AsignacionComprobanteService.Resultado r = asignacionComprobante.asignar(cajeroEfectivo, tipo);
+            orden.setComprobante(r.getComprobante());
+            orden.setConsecutivoComprobante(r.getConsecutivo());
+            // Reemplazar número de orden OC con el número del comprobante definitivo
+            orden.setNumeroOrden(r.getNumeroDocumento());
+            orden.setCajeroId(cajeroEfectivo);
+        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new OrdenCompraException(ex.getMessage());
+        }
+
+        // 3. Procesar métodos de pago
+        BigDecimal totalPagado = procesarMetodosPagoFinalizar(orden, dto.getMetodosPago());
+
+        // 4. Estado de la orden
+        boolean allReceived = orden.getItems().stream()
+                .allMatch(d -> d.getCantidadRecibida() != null && d.getCantidadRecibida() >= d.getCantidad());
+        orden.setEstado(allReceived ? "RECIBIDA" : "RECIBIDA_PARCIAL");
+
+        // 5. Guardar orden con todos los cambios
+        ordenCompraRepository.save(orden);
+
+        // 6. Crear CxP solo si hay saldo pendiente (crédito no cubierto por pagos de contado)
+        BigDecimal saldoCxP = totalNeto.subtract(totalPagado);
+        if (saldoCxP.compareTo(new BigDecimal("0.01")) > 0) {
+            CuentaPorPagarDTO cxp = new CuentaPorPagarDTO();
+            cxp.setNit(orden.getProveedor().getIdentificacion());
+            cxp.setNombre(orden.getProveedor().getRazonSocial() != null
+                    ? orden.getProveedor().getRazonSocial()
+                    : orden.getProveedor().getNombre1());
+            cxp.setNumeroFactura(orden.getNumeroOrden());
+            cxp.setNumeroFacturaProveedor(dto.getNumeroFacturaProveedor());
+            cxp.setFechaVencimiento(orden.getFechaEntregaEsperada());
+            cxp.setValorNeto(saldoCxP);
+            cxp.setEstado("PENDIENTE");
+            cxp.setProveedorId(dto.getProveedorId() != null ? dto.getProveedorId()
+                    : orden.getProveedor().getTerceroId());
+            // Retenciones proporcionales al saldo
+            if (totalNeto.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal prop = saldoCxP.divide(totalNeto, 10, java.math.RoundingMode.HALF_UP);
+                cxp.setRetefuente(rf.multiply(prop).setScale(2, java.math.RoundingMode.HALF_UP));
+                cxp.setReteiva(rv.multiply(prop).setScale(2, java.math.RoundingMode.HALF_UP));
+                cxp.setReteica(ric.multiply(prop).setScale(2, java.math.RoundingMode.HALF_UP));
+            }
+            cuentaPorPagarService.crear(cxp);
+        }
+
+        // 7. Generar asiento contable — igual que generarAsientoCompra pero con datos del DTO
+        try {
+            generarAsientoCompraFinalizar(orden, dto, totalPagado, totalNeto, totalBruto, gravadaFinal, ivaFinal, rf, rv, ric);
+        } catch (Exception ex) {
+            System.out.println("[FinalizarIngreso] Error asiento (no crítico): " + ex.getMessage());
+            asientoFallidoService.registrar("COMPRAS",
+                    orden.getComprobante() != null ? orden.getComprobante().getTipoMovimiento().name() : tipo.name(),
+                    orden.getId(), orden.getNumeroOrden(),
+                    "Error asiento finalización: " + ex.getMessage(), ex);
+        }
+
+        // 8. Actualizar inventario
+        for (DetalleOrdenCompra detalle : orden.getItems()) {
+            Integer cant = detalle.getCantidadRecibida();
+            if (cant == null || cant <= 0) continue;
+            try {
+                productoClient.actualizarInventario(
+                        detalle.getCodigoProducto(),
+                        detalle.getReferenciaVariantes(),
+                        cant,
+                        orden.getBodega().getCodigo());
+            } catch (Exception ex) {
+                throw new OrdenCompraException("Error actualizando inventario de "
+                        + detalle.getCodigoProducto() + ": " + ex.getMessage());
+            }
+        }
+
+        // 9. Movimiento inventario (Kardex)
+        try {
+            List<com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService.ItemMovimiento> kardexItems =
+                    com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService.nuevaLista();
+            for (DetalleOrdenCompra d : orden.getItems()) {
+                if (d.getCantidadRecibida() == null || d.getCantidadRecibida() <= 0) continue;
+                double costoUnit = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
+                double ivaPct    = d.getIva() != null ? d.getIva().doubleValue() : 0.0;
+                double base      = costoUnit * d.getCantidadRecibida();
+                kardexItems.add(new com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService.ItemMovimiento(
+                        d.getCodigoProducto(), d.getReferenciaVariantes(),
+                        d.getCantidadRecibida().doubleValue(), costoUnit,
+                        base * (1.0 + ivaPct / 100.0)));
+            }
+            if (!kardexItems.isEmpty()) {
+                String tipoComp = orden.getComprobante() != null
+                        && orden.getComprobante().getTipoMovimiento() != null
+                        ? orden.getComprobante().getTipoMovimiento().name() : "CC";
+                movimientoInventarioAutoService.registrarEntradaPorCompra(
+                        orden.getNumeroOrden(), orden.getId(),
+                        orden.getBodega().getCodigo(),
+                        orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                        kardexItems, tipoComp);
+            }
+        } catch (Exception ex) {
+            System.out.println("[FinalizarIngreso] Movimiento inventario (no crítico): " + ex.getMessage());
+        }
+
+        return ordenCompraMapper.toDto(orden);
+    }
+
+    private boolean tienePagoCredito(List<FinalizarCompraDTO.MetodoPagoDTO> metodosPago) {
+        if (metodosPago == null || metodosPago.isEmpty()) return false;
+        return metodosPago.stream().anyMatch(mp -> {
+            if (mp == null || mp.getMetodoPagoId() == null) return false;
+            try {
+                com.pazzioliweb.metodospagomodule.entity.MetodosPago m =
+                        metodosPagoRepository.findById(mp.getMetodoPagoId()).orElse(null);
+                return m != null && m.getTipoNegociacion() != null
+                        && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
+            } catch (Exception e) { return false; }
+        });
+    }
+
+    private BigDecimal procesarMetodosPagoFinalizar(OrdenCompra orden,
+                                                     List<FinalizarCompraDTO.MetodoPagoDTO> metodosPago) {
+        BigDecimal totalPagado = BigDecimal.ZERO;
+        if (metodosPago == null || metodosPago.isEmpty()) return totalPagado;
+        List<OrdenCompraMetodoPago> persistidos = new java.util.ArrayList<>();
+        for (FinalizarCompraDTO.MetodoPagoDTO mpDto : metodosPago) {
+            if (mpDto.getMetodoPagoId() == null || mpDto.getMonto() == null) continue;
+            if (mpDto.getMonto().compareTo(BigDecimal.ZERO) <= 0) continue;
+            try {
+                com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo =
+                        metodosPagoRepository.findById(mpDto.getMetodoPagoId()).orElse(null);
+                if (metodo == null) continue;
+                OrdenCompraMetodoPago mp = new OrdenCompraMetodoPago();
+                mp.setOrdenCompra(orden);
+                mp.setMetodoPago(metodo);
+                mp.setMonto(mpDto.getMonto());
+                mp.setReferencia(mpDto.getReferencia());
+                persistidos.add(mp);
+                boolean esCredito = metodo.getTipoNegociacion() != null
+                        && "Credito".equalsIgnoreCase(metodo.getTipoNegociacion().name());
+                if (!esCredito) totalPagado = totalPagado.add(mpDto.getMonto());
+            } catch (Exception ex) {
+                System.out.println("[FinalizarIngreso] Error método de pago: " + ex.getMessage());
+            }
+        }
+        orden.setMetodosPago(persistidos);
+        ordenCompraRepository.save(orden);
+        return totalPagado;
+    }
+
+    private void generarAsientoCompraFinalizar(OrdenCompra orden, FinalizarCompraDTO dto,
+                                                BigDecimal totalPagado, BigDecimal totalNeto,
+                                                BigDecimal totalBruto, BigDecimal gravada,
+                                                BigDecimal iva, BigDecimal rf, BigDecimal rv, BigDecimal ric) {
+        List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
+
+        BigDecimal baseInventario = totalBruto.subtract(iva).max(BigDecimal.ZERO);
+        CuentaContable inv = configContable.inventarios().orElse(null);
+        if (inv == null) { System.out.println("[AsientoFinalizar] Cuenta inventarios no configurada"); return; }
+        lineas.add(AsientoContableService.LineaDTO.debito(inv.getId(),
+                baseInventario.compareTo(BigDecimal.ZERO) > 0 ? baseInventario : totalBruto,
+                "Compra " + orden.getNumeroOrden()));
+
+        if (iva.compareTo(BigDecimal.ZERO) > 0) {
+            CuentaContable ivaDesc = configContable.ivaDescontable().orElse(null);
+            if (ivaDesc != null)
+                lineas.add(AsientoContableService.LineaDTO.debito(ivaDesc.getId(), iva,
+                        "IVA descontable " + orden.getNumeroOrden()));
+        }
+
+        // Créditos por métodos de pago de contado
+        if (orden.getMetodosPago() != null) {
+            for (OrdenCompraMetodoPago mp : orden.getMetodosPago()) {
+                BigDecimal monto = mp.getMonto() != null ? mp.getMonto() : BigDecimal.ZERO;
+                if (monto.compareTo(BigDecimal.ZERO) <= 0) continue;
+                com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo = mp.getMetodoPago();
+                boolean esCredito = metodo != null && metodo.getTipoNegociacion() != null
+                        && "Credito".equalsIgnoreCase(metodo.getTipoNegociacion().name());
+                if (esCredito) continue;
+                CuentaContable ctaMetodo = resolverCuentaMetodoPagoCompra(metodo);
+                if (ctaMetodo == null) ctaMetodo = configContable.cajaGeneral().orElse(null);
+                if (ctaMetodo == null) continue;
+                lineas.add(AsientoContableService.LineaDTO.credito(ctaMetodo.getId(), monto,
+                        "Pago " + (metodo != null ? metodo.getDescripcion() : "") + " " + orden.getNumeroOrden()));
+            }
+        }
+
+        // Créditos retenciones
+        Integer tercId = dto.getProveedorId() != null ? dto.getProveedorId()
+                : (orden.getProveedor() != null ? orden.getProveedor().getTerceroId() : null);
+        String tercNom = orden.getProveedor() != null ? orden.getProveedor().getRazonSocial() : null;
+
+        if (rf.compareTo(BigDecimal.ZERO) > 0) {
+            CuentaContable cta = configContable.retefuentePagar().orElse(null);
+            if (cta != null) {
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .credito(cta.getId(), rf, "ReteFuente compra " + orden.getNumeroOrden());
+                if (tercId != null) l.conTercero(tercId, tercNom);
+                lineas.add(l);
+            }
+        }
+        if (rv.compareTo(BigDecimal.ZERO) > 0) {
+            CuentaContable cta = configContable.reteivaPagar().orElse(null);
+            if (cta != null) {
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .credito(cta.getId(), rv, "ReteIVA compra " + orden.getNumeroOrden());
+                if (tercId != null) l.conTercero(tercId, tercNom);
+                lineas.add(l);
+            }
+        }
+        if (ric.compareTo(BigDecimal.ZERO) > 0) {
+            CuentaContable cta = configContable.reteicaPagar().orElse(null);
+            if (cta != null) {
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .credito(cta.getId(), ric, "ReteICA compra " + orden.getNumeroOrden());
+                if (tercId != null) l.conTercero(tercId, tercNom);
+                lineas.add(l);
+            }
+        }
+
+        // Crédito CxP por el saldo
+        BigDecimal saldoCxP = totalNeto.subtract(totalPagado);
+        if (saldoCxP.compareTo(new BigDecimal("0.01")) > 0) {
+            CuentaContable cxp = configContable.cxpProveedores().orElse(null);
+            if (cxp == null) { System.out.println("[AsientoFinalizar] Cuenta CxP no configurada"); return; }
+            AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                    .credito(cxp.getId(), saldoCxP, "CxP compra " + orden.getNumeroOrden());
+            if (tercId != null) l.conTercero(tercId, tercNom);
+            lineas.add(l);
+        }
+
+        String tipoDoc = orden.getComprobante() != null ? orden.getComprobante().getTipoMovimiento().name() : "CC";
+        asientoService.generarAsiento(
+                orden.getNumeroOrden(),
+                orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                "Compra " + orden.getNumeroOrden() + (orden.getProveedor() != null ? " - " + orden.getProveedor().getRazonSocial() : ""),
+                tipoDoc, orden.getId(), orden.getComprobante(), lineas);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Actualizar orden PENDIENTE en su totalidad (sin reasignar comprobante)
+    // ══════════════════════════════════════════════════════════════════════════════
+    @Override
+    @Transactional
+    public OrdenCompraDTO actualizarCompleto(Long id, RealizarOrdenRequestDTO request) {
+        OrdenCompra orden = ordenCompraRepository.findById(id)
+                .orElseThrow(() -> new OrdenCompraException("Orden no encontrada: " + id));
+
+        if (!"PENDIENTE".equals(orden.getEstado())) {
+            throw new OrdenCompraException("Solo se pueden editar órdenes en estado PENDIENTE. Estado actual: " + orden.getEstado());
+        }
+
+        // 1. Actualizar productos del catálogo
+        if (request.getOrden_compra() != null && request.getOrden_compra().getProducts() != null) {
+            procesarProductosDesdeRequest(request.getOrden_compra().getProducts());
+        }
+
+        // 2. Actualizar campos de la orden (sin tocar comprobante ni numeroOrden)
+        DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy");
+
+        if (request.getFechainicial() != null && !request.getFechainicial().isBlank()) {
+            try { orden.setFechaEmision(LocalDate.parse(request.getFechainicial(), formatter)); } catch (Exception ignore) {}
+        }
+
+        if (request.getFechafinal() != null && !request.getFechafinal().isBlank()) {
+            try { orden.setFechaEntregaEsperada(LocalDate.parse(request.getFechafinal(), formatter)); } catch (Exception ignore) {}
+        }
+
+        if (request.getBodegaId() != null) {
+            bodegasRepository.findByCodigo(request.getBodegaId()).ifPresent(orden::setBodega);
+        }
+
+        if (request.getOrden_compra() != null) {
+            RealizarOrdenRequestDTO.OrdenCompraDataDTO oc = request.getOrden_compra();
+            if (oc.getGravada() != null)           orden.setGravada(oc.getGravada());
+            if (oc.getIva() != null)               orden.setIva(oc.getIva());
+            if (oc.getDescuentos() != null)        orden.setDescuentos(oc.getDescuentos());
+            if (oc.getTotalOrdenCompra() != null)  orden.setTotalOrdenCompra(oc.getTotalOrdenCompra());
+            orden.setRetefuente(parseMoneyOrZero(oc.getRetefuente()));
+            orden.setReteiva(parseMoneyOrZero(oc.getReteiva()));
+            orden.setReteica(parseMoneyOrZero(oc.getReteica()));
+        }
+
+        // 3. Reemplazar detalles (items)
+        orden.getItems().clear();
+        if (request.getOrden_compra() != null && request.getOrden_compra().getProducts() != null) {
+            List<DetalleOrdenCompra> nuevosDetalles = crearDetallesDesdeRequest(orden, request.getOrden_compra().getProducts());
+            orden.getItems().addAll(nuevosDetalles);
+        }
+
+        // 4. Reemplazar métodos de pago
+        if (orden.getMetodosPago() != null) orden.getMetodosPago().clear();
+        if (request.getMetodosPago() != null && !request.getMetodosPago().isEmpty()) {
+            List<OrdenCompraMetodoPago> nuevosPagos = new java.util.ArrayList<>();
+            for (RealizarOrdenRequestDTO.MetodoPagoCompraDTO mpDto : request.getMetodosPago()) {
+                if (mpDto.getMetodoPagoId() == null || mpDto.getMonto() == null) continue;
+                if (mpDto.getMonto().compareTo(BigDecimal.ZERO) <= 0) continue;
+                metodosPagoRepository.findById(mpDto.getMetodoPagoId()).ifPresent(metodo -> {
+                    OrdenCompraMetodoPago mp = new OrdenCompraMetodoPago();
+                    mp.setOrdenCompra(orden);
+                    mp.setMetodoPago(metodo);
+                    mp.setMonto(mpDto.getMonto());
+                    mp.setReferencia(mpDto.getReferencia());
+                    nuevosPagos.add(mp);
+                });
+            }
+            if (orden.getMetodosPago() == null) {
+                orden.setMetodosPago(nuevosPagos);
+            } else {
+                orden.getMetodosPago().addAll(nuevosPagos);
+            }
+        }
+
+        OrdenCompra guardada = ordenCompraRepository.save(orden);
+        return ordenCompraMapper.toDto(guardada);
     }
 }
