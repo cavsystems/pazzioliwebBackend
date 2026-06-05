@@ -5,6 +5,7 @@ com\pazzioliweb\ventasmodule\dtos\PedidoDTO.class
 com\pazzioliweb\ventasmodule\controller\CotizacionController.class
 com\pazzioliweb\ventasmodule\dtos\DetalleCotizacionDTO.class
 com\pazzioliweb\ventasmodule\entity\Venta.class
+com\pazzioliweb\ventasmodule\service\EmailVentaService.class
 com\pazzioliweb\ventasmodule\dtos\DevolucionRequestDTO.class
 com\pazzioliweb\ventasmodule\dtos\VentaMetodoPagoDTO.class
 com\pazzioliweb\ventasmodule\repository\CotizacionSpecification.class

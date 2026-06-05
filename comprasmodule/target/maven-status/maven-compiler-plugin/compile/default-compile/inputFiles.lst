@@ -20,6 +20,7 @@ C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\compra
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\CuentaPorPagar.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\controller\ConfiguracionComprasController.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\DetalleOrdenCompra.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\EmailOrdenCompraService.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\LegalizacionService.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\ConfiguracionCompras.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\IngresoOrdenCompraService.java
@@ -35,6 +36,7 @@ C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\compra
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\ConfiguracionComprasService.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\CuentaPorPagarService.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\HistorialCompraServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\FinalizarCompraDTO.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\client\FeignConfig.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\OrdenCompraException.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\OrdenCompraRequestDTO.java

@@ -25,6 +25,7 @@ C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventas
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\mapper\PedidoMapper.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\repository\CotizacionRepository.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetallePedidoDTO.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\EmailVentaService.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\exception\PedidoException.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\Venta.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\CuentaPorCobrarController.java

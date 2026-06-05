@@ -1,6 +1,8 @@
 com\pazzioliweb\comprasmodule\service\impl\IngresoOrdenCompraServiceImpl.class
+com\pazzioliweb\comprasmodule\dtos\FinalizarCompraDTO$ItemFinalDTO.class
 com\pazzioliweb\comprasmodule\dtos\CuentaPorPagarDTO.class
 com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO$AtributoDTO.class
+com\pazzioliweb\comprasmodule\dtos\FinalizarCompraDTO.class
 com\pazzioliweb\comprasmodule\service\impl\HistorialCompraServiceImpl.class
 com\pazzioliweb\comprasmodule\mapper\ProveedorMapper.class
 com\pazzioliweb\comprasmodule\dtos\ItemRecibidoDTO.class
@@ -13,6 +15,7 @@ com\pazzioliweb\comprasmodule\repository\ConfiguracionComprasRepository.class
 com\pazzioliweb\comprasmodule\service\impl\OrdenCompraServiceImpl.class
 com\pazzioliweb\comprasmodule\dtos\OrdenCompraDTO.class
 com\pazzioliweb\comprasmodule\entity\OrdenCompraMetodoPago.class
+com\pazzioliweb\comprasmodule\dtos\FinalizarCompraDTO$MetodoPagoDTO.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$OrdenCompraDataDTO.class
 com\pazzioliweb\comprasmodule\entity\Legalizacion.class
 com\pazzioliweb\comprasmodule\service\IngresoOrdenCompraService.class
@@ -54,6 +57,7 @@ com\pazzioliweb\comprasmodule\repository\LegalizacionRepository.class
 com\pazzioliweb\comprasmodule\controller\OrdenCompraController.class
 com\pazzioliweb\comprasmodule\client\ProductoClient.class
 com\pazzioliweb\comprasmodule\service\ProductoService.class
+com\pazzioliweb\comprasmodule\service\EmailOrdenCompraService.class
 com\pazzioliweb\comprasmodule\controller\ConfiguracionComprasController.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$VariantePayloadDTO.class
 com\pazzioliweb\comprasmodule\dtos\HistorialCompraDTO.class

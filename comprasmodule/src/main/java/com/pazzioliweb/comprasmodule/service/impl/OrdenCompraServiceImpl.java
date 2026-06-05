@@ -964,7 +964,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // 2. Construir la orden SIN comprobante ni contabilidad
         OrdenCompra orden = new OrdenCompra();
         orden.setEstado("PENDIENTE");
+        System.out.println("creacion empresa simple");
         orden.setUsuarioCreacion(obtenerUsuarioAutenticado());
+        System.out.println("creacion empresa simple234555");
         orden.setFechaCreacion(LocalDate.now());
 
         java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy");
@@ -993,6 +995,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
 
         // 3. Guardar para obtener el ID y generar número OC
+        orden.setNumeroOrden("0");
         OrdenCompra ordenGuardada = ordenCompraRepository.save(orden);
 
         // Generar número de orden secuencial (se reemplazará al finalizar con el número del comprobante)
