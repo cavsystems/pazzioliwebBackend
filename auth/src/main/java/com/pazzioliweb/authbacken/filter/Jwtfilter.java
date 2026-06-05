@@ -59,13 +59,13 @@ public class Jwtfilter extends OncePerRequestFilter {
 			// etc. lógica de autenticación...
 			//registro el usuario en el serividor para reconocer un usuario como logueado en springsecurity y en el resto de la plicacion
 			Optional<Usuario> optional;
-			optional=usuarioRepository.findByUsuario(claims.getSubject());
+			/*optional=usuarioRepository.findByUsuario(claims.getSubject());
 			Usuario usuario;
 			if(optional.isPresent()) {
 				usuario=optional.get();
 			}else {
 				usuario=null;
-			}
+			}*/
 			String role=nivel;
 
 			List<SimpleGrantedAuthority> authorities = List.of(
@@ -80,9 +80,9 @@ public class Jwtfilter extends OncePerRequestFilter {
 			if (tenantDb != null && !tenantDb.isEmpty()) {
 				TenantContext.setCurrentTenant(tenantDb);
 			}
-			UsernamePasswordAuthenticationToken authToken =
+			/*UsernamePasswordAuthenticationToken authToken =
 					new UsernamePasswordAuthenticationToken(usuario, claims.get("idsecion",String.class), authorities);
-			SecurityContextHolder.getContext().setAuthentication(authToken);
+			SecurityContextHolder.getContext().setAuthentication(authToken);*/
 
 
 		}else {
