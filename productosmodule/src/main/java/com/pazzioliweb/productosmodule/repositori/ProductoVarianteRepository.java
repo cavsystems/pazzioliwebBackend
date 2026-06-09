@@ -370,6 +370,7 @@ AND t.activo = :activo
 		  		     p.grupo_id As grupoid,
 		  		     p.linea_id As lineaid,
 		  		     p.maneja_variantes As manejavariante,
+		  		     tp.nombre AS tipoproducto,
 		  		     p.tipo_producto_id As tipoproductid,
 		  		     p.impuesto_id As impuestoid,
 		  		     pi.tarifa AS tarifa,
@@ -388,6 +389,7 @@ AND t.activo = :activo
 		            COALESCE(pv.imagen, p.imagen) AS imagen
 		        FROM producto_variantes pv
 		        JOIN productos p ON p.producto_id = pv.producto_id
+		        JOIN tipo_producto tp ON tp.tipo_producto_id = p.tipo_producto_id
 		        JOIN impuestos pi ON pi.codigo=p.impuesto_id
 		        LEFT JOIN unidades_medida_producto ump 
 				       ON ump.producto_id = p.producto_id

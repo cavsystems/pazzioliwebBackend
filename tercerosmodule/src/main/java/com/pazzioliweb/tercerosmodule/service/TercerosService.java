@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.pazzioliweb.empresaback.dtos.EmpresaContactoDTO;
 import com.pazzioliweb.empresasback.entity.Empresa;
 import com.pazzioliweb.empresasback.entity.Empresas;
 import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
@@ -298,7 +299,7 @@ public class TercerosService {
         }
 
 
-        List<Empresa> empresas = empresaRepositori.findAll();
+        List<EmpresaContactoDTO> empresas = empresaRepositori.findAllContactoInfo();
 
         // Guardar en BD
 

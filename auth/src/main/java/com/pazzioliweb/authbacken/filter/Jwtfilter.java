@@ -56,33 +56,29 @@ public class Jwtfilter extends OncePerRequestFilter {
 		if (token != null && jwtUtil.validarToken(token)) {
 			Claims claims = jwtUtil.extraerClaims(token);
 			String nivel = claims.get("nivel", String.class);
-			// etc. lógica de autenticación...
-			//registro el usuario en el serividor para reconocer un usuario como logueado en springsecurity y en el resto de la plicacion
-			Optional<Usuario> optional;
-			/*optional=usuarioRepository.findByUsuario(claims.getSubject());
-			Usuario usuario;
-			if(optional.isPresent()) {
-				usuario=optional.get();
-			}else {
-				usuario=null;
-			}*/
-			String role=nivel;
 
-			List<SimpleGrantedAuthority> authorities = List.of(
-					new SimpleGrantedAuthority("ROLE_" + role)
-			);
+			// 1. Primero establecer el tenant correcto desde Redis o JWT
 			String db = claims.get("dbname", String.class);
-			DatosSesiones datos = redisTemplate.opsForValue().get( claims.get("idsecion",String.class));
-			// Si Redis está caído, usar el claim dbname del JWT como fallback de tenant
+			DatosSesiones datos = redisTemplate.opsForValue().get(claims.get("idsecion", String.class));
 			String tenantDb = (datos != null && datos.getDbName() != null && !datos.getDbName().isEmpty())
 					? datos.getDbName()
 					: db;
 			if (tenantDb != null && !tenantDb.isEmpty()) {
 				TenantContext.setCurrentTenant(tenantDb);
 			}
-			/*UsernamePasswordAuthenticationToken authToken =
-					new UsernamePasswordAuthenticationToken(usuario, claims.get("idsecion",String.class), authorities);
-			SecurityContextHolder.getContext().setAuthentication(authToken);*/
+
+			// 2. Ahora buscar el usuario en el tenant correcto
+			Optional<Usuario> optional = usuarioRepository.findByUsuario(claims.getSubject());
+			Usuario usuario = optional.orElse(null);
+
+			// 3. Establecer la autenticación en Spring Security
+			String role = nivel;
+			List<SimpleGrantedAuthority> authorities = List.of(
+					new SimpleGrantedAuthority("ROLE_" + role)
+			);
+			UsernamePasswordAuthenticationToken authToken =
+					new UsernamePasswordAuthenticationToken(usuario, claims.get("idsecion", String.class), authorities);
+			SecurityContextHolder.getContext().setAuthentication(authToken);
 
 
 		}else {

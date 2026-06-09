@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 public interface ProductoInventarioDTO {
 	Integer getProductoId();
 	String getCodigoContable();
-
+   String getTipoProducto();
 	String getReferencia();
 	String getCodigobarras();
 	String getDescripcion();

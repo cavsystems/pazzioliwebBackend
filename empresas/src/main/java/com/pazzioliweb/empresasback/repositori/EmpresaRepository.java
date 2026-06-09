@@ -22,4 +22,5 @@ public interface EmpresaRepository extends JpaRepository<Empresas, Long> {
 	
 
   
+
 }
