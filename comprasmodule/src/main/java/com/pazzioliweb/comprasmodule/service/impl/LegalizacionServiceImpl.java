@@ -63,21 +63,19 @@ public class LegalizacionServiceImpl implements LegalizacionService {
             } catch (java.time.format.DateTimeParseException ignored) { /* dejar validar por realizarOrden */ }
 
             RealizarOrdenRequestDTO realizarRequest = request.getOrdenCompraData();
-            // 1. Realizar la orden de compra (crea orden, productos, cuenta por pagar)
+            // 1. Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
             OrdenCompraDTO ordenCreada = ordenCompraService.realizarOrden(realizarRequest);
-            // 2. Ingresar la orden (recibir productos)
 
-        List<DetalleOrdenCompraDTO> datlles=ordenCreada.getItems();
-        ArrayList<DetalleOrdenCompraDTO> nuevodetalles=new ArrayList<>();
-        for (DetalleOrdenCompraDTO e: datlles){
-            e.setCantidadRecibida(e.getCantidad());
-            e.setRecibido(true);
-            e.setManifiesto(e.getManifiesto());
-            nuevodetalles.add(e);
-        }
+            // 2. Marcar todos los items como 100% recibidos (es una compra directa, llega todo)
+            List<DetalleOrdenCompraDTO> itemsRecibidos = ordenCreada.getItems().stream()
+                    .peek(e -> {
+                        e.setCantidadRecibida(e.getCantidad());
+                        e.setRecibido(true);
+                    })
+                    .collect(Collectors.toList());
 
-            // List<DetalleOrdenCompraDTO> detallesRecibidos = crearDetallesRecibidos(request.getOrdenCompraData().getOrden_compra().getProducts());
-            ingresoOrdenCompraService.ingresarOrdenCompra(ordenCreada.getId(), nuevodetalles, request.getNumeroFactura());
+            // 3. Ingresar la orden con las cantidades completas
+            ingresoOrdenCompraService.ingresarOrdenCompra(ordenCreada.getId(), itemsRecibidos, request.getNumeroFactura());
 
             // 3. Crear registro de legalización
             crearLegalizacion(request, ordenCreada);
@@ -86,31 +84,26 @@ return ordenCreada;
     }
 
     private void crearLegalizacion(LegalizacionRequestDTO request, OrdenCompraDTO ordenCreada) {
-        try {
-            Legalizacion legalizacion = new Legalizacion();
-            // Cargar la orden persistida para heredar el comprobante asignado por realizarOrden()
-            OrdenCompra ordenPersistida = ordenCompraRepository.findById(ordenCreada.getId())
-                    .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada: " + ordenCreada.getId()));
-            legalizacion.setOrdenCompra(ordenPersistida);
-            legalizacion.setNumeroFacturaProveedor(request.getNumeroFactura());
-            legalizacion.setFechaFactura(LocalDate.parse(request.getFechaFactura(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
-            legalizacion.setTotalFactura(request.getOrdenCompraData().getOrden_compra().getTotalOrdenCompra());
-            legalizacion.setProveedorId(request.getOrdenCompraData().getProvedor().getTerceroId().longValue());
-            legalizacion.setEstado("LEGALIZADA");
-            legalizacion.setUsuarioCreacion(obtenerUsuarioAutenticado());
+        // Sin try/catch genérico: si falla, la transacción @Transactional revierte todo.
+        Legalizacion legalizacion = new Legalizacion();
 
-            // ─── Heredar el comprobante contable de la orden (CC o CR según el caso) ───
-            if (ordenPersistida.getComprobante() != null) {
-                legalizacion.setComprobante(ordenPersistida.getComprobante());
-                legalizacion.setConsecutivoComprobante(ordenPersistida.getConsecutivoComprobante());
-            }
+        OrdenCompra ordenPersistida = ordenCompraRepository.findById(ordenCreada.getId())
+                .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada al crear legalización: " + ordenCreada.getId()));
 
-            legalizacionRepository.save(legalizacion);
-        } catch (Exception e) {
-           System.out.println(e.getMessage());
-           e.printStackTrace();
+        legalizacion.setOrdenCompra(ordenPersistida);
+        legalizacion.setNumeroFacturaProveedor(request.getNumeroFactura());
+        legalizacion.setFechaFactura(LocalDate.parse(request.getFechaFactura(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+        legalizacion.setTotalFactura(request.getOrdenCompraData().getOrden_compra().getTotalOrdenCompra());
+        legalizacion.setProveedorId(request.getOrdenCompraData().getProvedor().getTerceroId().longValue());
+        legalizacion.setEstado("LEGALIZADA");
+        legalizacion.setUsuarioCreacion(obtenerUsuarioAutenticado());
+
+        if (ordenPersistida.getComprobante() != null) {
+            legalizacion.setComprobante(ordenPersistida.getComprobante());
+            legalizacion.setConsecutivoComprobante(ordenPersistida.getConsecutivoComprobante());
         }
 
+        legalizacionRepository.save(legalizacion);
     }
 
     /** Username autenticado actual; "SYSTEM" si no hay sesión válida. */
@@ -173,27 +166,36 @@ return ordenCreada;
 
     private LegalizacionDTO mapToDTO(Legalizacion legalizacion) {
         LegalizacionDTO dto = new LegalizacionDTO();
-        Optional<Terceros> tercero= terrepo.findByTerceroId((legalizacion.getProveedorId().intValue()));
-          Optional<OrdenCompra> ord=ordenCompraRepository.findById(legalizacion.getOrdenCompra().getId());
+
+        Terceros tercero = terrepo.findByTerceroId(legalizacion.getProveedorId().intValue())
+                .orElse(null);
+        OrdenCompra ord = ordenCompraRepository.findById(legalizacion.getOrdenCompra().getId())
+                .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada: " + legalizacion.getOrdenCompra().getId()));
+
         DateTimeFormatter formato = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-        String fechainicial = ord.get().getFechaCreacion().format(formato);
-        String fechafinal = ord.get().getFechaEntregaEsperada().format(formato);
-        dto.setFechainicial(fechainicial);
-        dto.setFechafinal(fechafinal);
+        dto.setFechainicial(ord.getFechaCreacion() != null ? ord.getFechaCreacion().format(formato) : null);
+        dto.setFechafinal(ord.getFechaEntregaEsperada() != null ? ord.getFechaEntregaEsperada().format(formato) : null);
 
         dto.setId(legalizacion.getId());
         dto.setOrdenCompraId(legalizacion.getOrdenCompra().getId());
-        dto.setNumeroOrden(ord.get().getNumeroOrden());
-        dto.setFechaCreacion(ord.get().getFechaCreacion());
-        dto.setItems(legalizacion.getOrdenCompra().getItems().stream().map(detallemaper::detalleToDto).collect(Collectors.toList()));
+        dto.setNumeroOrden(ord.getNumeroOrden());
+        dto.setFechaCreacion(ord.getFechaCreacion());
+        dto.setItems(legalizacion.getOrdenCompra().getItems() != null
+                ? legalizacion.getOrdenCompra().getItems().stream().map(detallemaper::detalleToDto).collect(Collectors.toList())
+                : java.util.Collections.emptyList());
         dto.setNumeroFacturaProveedor(legalizacion.getNumeroFacturaProveedor());
         dto.setFechaFactura(legalizacion.getFechaFactura());
-        dto.setProveedorNombre(tercero.get().getRazonSocial());
+        dto.setProveedorNombre(tercero != null ? tercero.getRazonSocial() : "—");
         dto.setTotalFactura(legalizacion.getTotalFactura());
         dto.setTotal(legalizacion.getTotalFactura());
         dto.setProveedorId(legalizacion.getProveedorId());
         dto.setEstado(legalizacion.getEstado());
         dto.setUsuarioCreacion(legalizacion.getUsuarioCreacion());
+
+        // Retenciones (desde la orden)
+        dto.setRetefuente(ord.getRetefuente());
+        dto.setReteiva(ord.getReteiva());
+        dto.setReteica(ord.getReteica());
 
         // Comprobante contable (heredado de la orden)
         if (legalizacion.getComprobante() != null) {

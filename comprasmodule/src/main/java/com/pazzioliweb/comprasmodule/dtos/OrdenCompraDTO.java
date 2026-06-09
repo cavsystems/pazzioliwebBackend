@@ -11,6 +11,7 @@ import java.util.List;
 public class OrdenCompraDTO {
     private Long id;
     private String numeroOrden;
+    private String numeroOc;
     private Long proveedorId;
     private String proveedorNombre;
     private Long bodegaId;
