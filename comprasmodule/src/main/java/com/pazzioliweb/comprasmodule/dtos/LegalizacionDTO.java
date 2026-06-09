@@ -33,6 +33,11 @@ public class LegalizacionDTO {
     /** Consecutivo asignado al ejecutar el movimiento. */
     private Integer consecutivoComprobante;
 
+    /** Retenciones aplicadas al proveedor (tomadas de la orden de compra). */
+    private java.math.BigDecimal retefuente;
+    private java.math.BigDecimal reteiva;
+    private java.math.BigDecimal reteica;
+
     public String getPrefijoComprobante() { return prefijoComprobante; }
     public void setPrefijoComprobante(String p) { this.prefijoComprobante = p; }
 
@@ -44,6 +49,15 @@ public class LegalizacionDTO {
 
     public Integer getConsecutivoComprobante() { return consecutivoComprobante; }
     public void setConsecutivoComprobante(Integer c) { this.consecutivoComprobante = c; }
+
+    public java.math.BigDecimal getRetefuente() { return retefuente; }
+    public void setRetefuente(java.math.BigDecimal retefuente) { this.retefuente = retefuente; }
+
+    public java.math.BigDecimal getReteiva() { return reteiva; }
+    public void setReteiva(java.math.BigDecimal reteiva) { this.reteiva = reteiva; }
+
+    public java.math.BigDecimal getReteica() { return reteica; }
+    public void setReteica(java.math.BigDecimal reteica) { this.reteica = reteica; }
 
     public String getNumeroOrden() { return numeroOrden; }
     public void setNumeroOrden(String numeroOrden) { this.numeroOrden = numeroOrden; }

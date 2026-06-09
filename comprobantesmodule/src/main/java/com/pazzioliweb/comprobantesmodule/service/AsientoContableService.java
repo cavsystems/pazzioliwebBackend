@@ -90,7 +90,7 @@ public class AsientoContableService {
      * Genera un asiento contable con las líneas dadas. Valida partida doble.
      * Si ya existe un asiento para el documento origen, NO crea otro (idempotente).
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public AsientoContable generarAsiento(String numeroAsiento, LocalDate fecha, String descripcion,
                                            String documentoOrigenTipo, Long documentoOrigenId,
                                            ComprobanteContable comprobante,

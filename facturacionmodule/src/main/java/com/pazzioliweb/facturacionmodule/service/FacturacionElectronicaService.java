@@ -845,6 +845,8 @@ public class FacturacionElectronicaService {
             log.warn("[DS] Error persistiendo (no crítico): {}", ex.getMessage());
         }
 
+        // Incluir el número DS en la respuesta para mostrarlo en el frontend
+        resp.setNumero("DS-" + consec);
         return resp;
     }
 

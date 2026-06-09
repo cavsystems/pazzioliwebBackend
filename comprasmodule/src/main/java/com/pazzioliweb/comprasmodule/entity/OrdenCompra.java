@@ -21,6 +21,11 @@ public class OrdenCompra {
     @Column(name = "numero_orden", nullable = false)
     private String numeroOrden;
 
+    /** Número de orden de compra (OC-000001). Permanente; nunca cambia aunque luego
+     *  se asigne comprobante contable. Solo se usa en el flujo realizarOrdenSimple. */
+    @Column(name = "numero_oc")
+    private String numeroOc;
+
     @ManyToOne
     @JoinColumn(name = "proveedor_id", nullable = false)
     private Terceros proveedor;

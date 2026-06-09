@@ -13,6 +13,7 @@ import java.util.List;
 public interface OrdenCompraMapper {
     @Mapping(target = "id", source = "id")
     @Mapping(target = "numeroOrden", source = "numeroOrden")
+    @Mapping(target = "numeroOc", source = "numeroOc")
     @Mapping(target = "proveedorId", source = "proveedor.terceroId")
     @Mapping(target = "proveedorNombre", source = "proveedor.razonSocial")
     @Mapping(target = "bodegaId", source = "bodega.codigo")
@@ -34,6 +35,7 @@ public interface OrdenCompraMapper {
 
     @Mapping(target = "id", source = "id")
     @Mapping(target = "numeroOrden", source = "numeroOrden")
+    @Mapping(target = "numeroOc", source = "numeroOc")
     @Mapping(target = "proveedor", ignore = true)
     @Mapping(target = "bodega", ignore = true)
     @Mapping(target = "fechaEmision", source = "fechaEmision")

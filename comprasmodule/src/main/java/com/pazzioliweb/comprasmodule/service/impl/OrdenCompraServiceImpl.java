@@ -964,9 +964,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // 2. Construir la orden SIN comprobante ni contabilidad
         OrdenCompra orden = new OrdenCompra();
         orden.setEstado("PENDIENTE");
-        System.out.println("creacion empresa simple");
         orden.setUsuarioCreacion(obtenerUsuarioAutenticado());
-        System.out.println("creacion empresa simple234555");
         orden.setFechaCreacion(LocalDate.now());
 
         java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy");
@@ -994,17 +992,23 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         orden.setBodega(bodegasRepository.findByCodigo(request.getBodegaId())
                 .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
 
-        // 3. Guardar para obtener el ID y generar número OC
-        orden.setNumeroOrden("0");
+        // 3. Guardar para obtener el ID y generar número OC.
+        // numero_orden es NOT NULL: se pone un placeholder antes del primer INSERT,
+        // luego se asigna el número secuencial usando el ID generado.
+        // numero_oc queda permanente; numero_orden se reemplazará con el comprobante al finalizar.
+        orden.setNumeroOrden("OC-TEMP");
         OrdenCompra ordenGuardada = ordenCompraRepository.save(orden);
-
-        // Generar número de orden secuencial (se reemplazará al finalizar con el número del comprobante)
-        ordenGuardada.setNumeroOrden("OC-" + String.format("%06d", ordenGuardada.getId()));
+        String numeroOc = "OC-" + String.format("%06d", ordenGuardada.getId());
+        ordenGuardada.setNumeroOrden(numeroOc);
+        ordenGuardada.setNumeroOc(numeroOc);
 
         // 4. Crear detalles
         List<DetalleOrdenCompra> detalles = crearDetallesDesdeRequest(ordenGuardada, request.getOrden_compra().getProducts());
         ordenGuardada.setItems(detalles);
         ordenGuardada = ordenCompraRepository.save(ordenGuardada);
+
+        // 5. Guardar métodos de pago — necesarios para determinar CC vs CR al hacer el ingreso
+        procesarMetodosPago(ordenGuardada, request);
 
         return ordenCompraMapper.toDto(ordenGuardada);
     }
@@ -1087,8 +1091,15 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         orden.setReteica(ric);
         orden.setTotalOrdenCompra(totalNeto);
 
-        // 2. Determinar tipo de comprobante (CC contado / CR crédito)
-        boolean esCredito = tienePagoCredito(dto.getMetodosPago());
+        // 2. Determinar tipo de comprobante (CC contado / CR crédito).
+        // Si el ingreso no trae métodos de pago (flujo normal: se definieron en la OC),
+        // se leen los métodos ya guardados en la orden para determinar CC vs CR.
+        boolean esCredito;
+        if (dto.getMetodosPago() != null && !dto.getMetodosPago().isEmpty()) {
+            esCredito = tienePagoCredito(dto.getMetodosPago());
+        } else {
+            esCredito = tieneMetodoPagoCreditoEnOrden(orden.getMetodosPago());
+        }
         TipoMovimientoComprobante tipo = esCredito ? TipoMovimientoComprobante.CR : TipoMovimientoComprobante.CC;
         Integer cajeroId = dto.getCajeroId() != null ? dto.getCajeroId() : orden.getCajeroId();
         Integer cajeroEfectivo = resolverCajeroParaComprobante(cajeroId, tipo);
@@ -1097,7 +1108,12 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             AsignacionComprobanteService.Resultado r = asignacionComprobante.asignar(cajeroEfectivo, tipo);
             orden.setComprobante(r.getComprobante());
             orden.setConsecutivoComprobante(r.getConsecutivo());
-            // Reemplazar número de orden OC con el número del comprobante definitivo
+            // Preservar el número OC original si aún no se había guardado
+            if (orden.getNumeroOc() == null && orden.getNumeroOrden() != null
+                    && orden.getNumeroOrden().startsWith("OC-")) {
+                orden.setNumeroOc(orden.getNumeroOrden());
+            }
+            // numero_orden pasa a ser el número del comprobante contable (CC-X / CR-X)
             orden.setNumeroOrden(r.getNumeroDocumento());
             orden.setCajeroId(cajeroEfectivo);
         } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
@@ -1198,6 +1214,16 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         return ordenCompraMapper.toDto(orden);
     }
 
+    /** Verifica si alguno de los métodos de pago YA GUARDADOS en la orden es de tipo Crédito. */
+    private boolean tieneMetodoPagoCreditoEnOrden(List<OrdenCompraMetodoPago> metodosPago) {
+        if (metodosPago == null || metodosPago.isEmpty()) return false;
+        return metodosPago.stream().anyMatch(mp -> {
+            com.pazzioliweb.metodospagomodule.entity.MetodosPago m = mp.getMetodoPago();
+            return m != null && m.getTipoNegociacion() != null
+                    && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
+        });
+    }
+
     private boolean tienePagoCredito(List<FinalizarCompraDTO.MetodoPagoDTO> metodosPago) {
         if (metodosPago == null || metodosPago.isEmpty()) return false;
         return metodosPago.stream().anyMatch(mp -> {
@@ -1278,8 +1304,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             }
         }
 
-        // Créditos retenciones
-        Integer tercId = dto.getProveedorId() != null ? dto.getProveedorId()
+        // Créditos retenciones — resuelve el tercero desde la orden si el DTO trae null o 0
+        Integer tercId = (dto.getProveedorId() != null && dto.getProveedorId() > 0)
+                ? dto.getProveedorId()
                 : (orden.getProveedor() != null ? orden.getProveedor().getTerceroId() : null);
         String tercNom = orden.getProveedor() != null ? orden.getProveedor().getRazonSocial() : null;
 

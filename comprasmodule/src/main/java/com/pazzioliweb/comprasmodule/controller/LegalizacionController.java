@@ -21,9 +21,8 @@ public class LegalizacionController {
     }
 
     @PostMapping
-    public ResponseEntity<Void> legalizarCompra(@RequestBody LegalizacionRequestDTO request) {
-        legalizacionService.legalizarCompra(request);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<OrdenCompraDTO> legalizarCompra(@RequestBody LegalizacionRequestDTO request) {
+        return ResponseEntity.ok(legalizacionService.legalizarCompra(request));
     }
     @GetMapping("provedor/by-proveedor")
     public ResponseEntity<List<LegalizacionDTO>> obtenerLegalizacionesPorProveedor(@RequestParam Long proveedorId) {
