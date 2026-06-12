@@ -214,8 +214,6 @@ FROM (
         p.tipo_producto_id AS tipoproductid,
         p.impuesto_id AS impuestoid,
         p.codigo_contable AS codigoContable,
-           p.fecha_ultima_compra AS fechaUltimaCompra,
-		            p.fecha_ultima_venta AS fechaUltimaVenta,
         IF(
           pv.predeterminada = 0,
           CONCAT(p.descripcion, '-', pv.referencia_variantes),
