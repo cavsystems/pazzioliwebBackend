@@ -12,4 +12,5 @@ public interface PreciosProductoVarianteDTO {
 	LocalDateTime getFechaCreacion();
 	LocalDateTime getFechaInicio();
 	LocalDateTime getFechaFin();
+	Boolean getPredeterminada();
 }

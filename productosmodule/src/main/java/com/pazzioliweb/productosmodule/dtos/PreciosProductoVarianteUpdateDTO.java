@@ -8,6 +8,7 @@ public class PreciosProductoVarianteUpdateDTO {
     private Double valor;
     private LocalDateTime fechaInicio;
     private LocalDateTime fechaFin;
+    private Boolean predeterminada;
     
 	public Long getPreciosProductoId() {
 		return preciosProductoId;
@@ -38,6 +39,12 @@ public class PreciosProductoVarianteUpdateDTO {
 	}
 	public void setFechaFin(LocalDateTime fechaFin) {
 		this.fechaFin = fechaFin;
+	}
+	public Boolean getPredeterminada() {
+		return predeterminada;
+	}
+	public void setPredeterminada(Boolean predeterminada) {
+		this.predeterminada = predeterminada;
 	}
     
     

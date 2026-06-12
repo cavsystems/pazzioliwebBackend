@@ -581,6 +581,7 @@ public class ProductosServiceImpl implements ProductosService{
         dto.setActivo(variante.getActivo());
         dto.setPredeterminada(variante.getPredeterminada());
         dto.setImagen(variante.getImagen());
+        dto.setUltimaFechaVenta(variante.getUltimaFechaVenta());
 
         // Fetch detalles separately to avoid MultipleBagFetchException
         List<ProductoVarianteDetalle> detalles = productoVarianteDetalleRepository

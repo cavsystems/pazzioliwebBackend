@@ -41,6 +41,10 @@ public class ProductoMasterController {
     	System.out.println("DTO PRODUCTO: " + dto.getProducto());
     	System.out.println("DTO PRODUCTO: " + dto.getProducto().getManejaVariantes());
     	System.out.println("DTO VARIANTES: " + dto.getVariantes().get(0));
+    	if (dto.getVariantes() != null && !dto.getVariantes().isEmpty() && dto.getVariantes().get(0).getPrecios() != null && !dto.getVariantes().get(0).getPrecios().isEmpty()) {
+    		System.out.println("DTO PRECIOS: " + dto.getVariantes().get(0).getPrecios().get(0));
+    		System.out.println("DTO PRECIOS predeterminada: " + dto.getVariantes().get(0).getPrecios().get(0).getPredeterminada());
+    	}
     	//ProductoResponseDTO
         // Llamamos al service con los dos argumentos que requiere
         Productos producto = productoMasterService.crearProductoMaster(

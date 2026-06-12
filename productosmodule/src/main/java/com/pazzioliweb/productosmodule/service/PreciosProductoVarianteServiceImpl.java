@@ -51,6 +51,9 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
         List<PreciosProductoVarianteResponseDTO> respuestas = new ArrayList<>();
 
         for (PreciosProductoVarianteCreateDTO dto : dtos) {
+            System.out.println("DTO precioId: " + dto.getPrecioId());
+            System.out.println("DTO valor: " + dto.getValor());
+            System.out.println("DTO predeterminada: " + dto.getPredeterminada());
 
             // 1. Verificar si ya existe un precio del mismo tipo para esta variante
             Optional<PreciosProductoVariante> existente =
@@ -66,7 +69,9 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
                 entity.setValor(dto.getValor());
                 entity.setFechaInicio(dto.getFechaInicio());
                 entity.setFechaFin(dto.getFechaFin());
+                entity.setPredeterminada(dto.getPredeterminada());
                 entity.setFechaModificacion(LocalDateTime.now());
+                System.out.println("Actualizando existente - predeterminada seteada: " + entity.getPredeterminada());
             } else {
                 // Si no existe, creamos
                 ProductoVariante pv = productoVarianteRepository.findById(dto.getProductoVarianteId())
@@ -76,6 +81,7 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
                         .orElseThrow(() -> new RuntimeException("Precio no encontrado"));
 
                 entity = mapper.toEntity(dto, pv, precio);
+                System.out.println("Creando nueva entidad - predeterminada: " + entity.getPredeterminada());
             }
 
             repository.save(entity);
@@ -116,6 +122,7 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
 	        if (dto.getValor() != null) entidad.setValor(dto.getValor());
 	        if (dto.getFechaInicio() != null) entidad.setFechaInicio(dto.getFechaInicio());
 	        if (dto.getFechaFin() != null) entidad.setFechaFin(dto.getFechaFin());
+	        if (dto.getPredeterminada() != null) entidad.setPredeterminada(dto.getPredeterminada());
 
 	        entidad.setFechaModificacion(LocalDateTime.now());
 

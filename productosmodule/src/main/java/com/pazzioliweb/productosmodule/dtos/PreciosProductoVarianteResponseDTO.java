@@ -15,6 +15,7 @@ public class PreciosProductoVarianteResponseDTO {
     private LocalDateTime fechaModificacion;
 
     private String precioDescripcion;
+    private Boolean predeterminada;
 
 	public Integer getPreciosProductoId() {
 		return preciosProductoId;
@@ -86,6 +87,14 @@ public class PreciosProductoVarianteResponseDTO {
 
 	public void setPrecioDescripcion(String precioDescripcion) {
 		this.precioDescripcion = precioDescripcion;
+	}
+
+	public Boolean getPredeterminada() {
+		return predeterminada;
+	}
+
+	public void setPredeterminada(Boolean predeterminada) {
+		this.predeterminada = predeterminada;
 	}
     
     

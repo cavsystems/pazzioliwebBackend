@@ -214,6 +214,8 @@ FROM (
         p.tipo_producto_id AS tipoproductid,
         p.impuesto_id AS impuestoid,
         p.codigo_contable AS codigoContable,
+           p.fecha_ultima_compra AS fechaUltimaCompra,
+		            p.fecha_ultima_venta AS fechaUltimaVenta,
         IF(
           pv.predeterminada = 0,
           CONCAT(p.descripcion, '-', pv.referencia_variantes),
@@ -236,7 +238,7 @@ FROM (
     LEFT JOIN unidades_medida u ON u.unidad_medida_id = ump.unidad_medida_id
     LEFT JOIN lineas l ON l.linea_id = p.linea_id
     LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
-    LEFT JOIN (
+     JOIN (
         SELECT
             e.producto_variantes_id AS varianteId,
             e.bodega_id AS bodegaid,

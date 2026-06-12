@@ -38,7 +38,8 @@ public interface PreciosProductoVarianteRepository extends JpaRepository<Precios
 	  		  		    p.descripcion as precio,
 	  		  		    pp.fecha_creacion as fechaCreacion,
 	  		  		    pp.fecha_inicio as fechaInicio,
-	  		  		    pp.fecha_fin as fechaFin
+	  		  		    pp.fecha_fin as fechaFin,
+	  		  		    pp.predeterminada
 	  		        FROM precios_producto_variante pp
 	  		        JOIN precios p ON p.precio_id = pp.precio_id
 	  		        WHERE pp.producto_variantes_id = :varianteId
@@ -58,7 +59,8 @@ public interface PreciosProductoVarianteRepository extends JpaRepository<Precios
 					   p.descripcion as precio,
 					   pp.fecha_creacion as fechaCreacion,
 					   pp.fecha_inicio as fechaInicio,
-					   pp.fecha_fin as fechaFin
+					   pp.fecha_fin as fechaFin,
+					   pp.predeterminada
 					   FROM precios_producto_variante pp
 					   JOIN precios p ON p.precio_id = pp.precio_id
 					   WHERE pp.producto_variantes_id IN :varianteIds

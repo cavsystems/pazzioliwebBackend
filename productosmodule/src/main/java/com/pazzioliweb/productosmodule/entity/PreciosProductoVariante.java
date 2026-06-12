@@ -45,6 +45,9 @@ public class PreciosProductoVariante {
     @Column(name = "fecha_fin")
     private LocalDateTime fechaFin;
 
+    @Column(name = "predeterminada")
+    private Boolean predeterminada = false;
+
 	public Integer getPreciosProductoId() {
 		return preciosProductoId;
 	}
@@ -107,5 +110,13 @@ public class PreciosProductoVariante {
 
 	public void setFechaFin(LocalDateTime fechaFin) {
 		this.fechaFin = fechaFin;
+	}
+
+	public Boolean getPredeterminada() {
+		return predeterminada;
+	}
+
+	public void setPredeterminada(Boolean predeterminada) {
+		this.predeterminada = predeterminada;
 	}
 }

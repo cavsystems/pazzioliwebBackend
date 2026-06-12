@@ -14,6 +14,7 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.ScopeMetadata;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -83,6 +84,8 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     @Autowired
     private ConfiguracionContableService configContable;
     @Autowired
+    private com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository comprobantesrepositori;
+    @Autowired
     private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
     @Autowired
     private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
@@ -119,6 +122,9 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                     .findTopByComprobanteOrderByConsecutivoDesc(comprobante)
                     .map(m -> m.getConsecutivo() + 1)
                     .orElse(1);
+            comprobante.setSiguienteConsecutivo(comprobante.getSiguienteConsecutivo()+1);
+
+
             createDto.setConsecutivo(nextConsecutivo);
         }
 

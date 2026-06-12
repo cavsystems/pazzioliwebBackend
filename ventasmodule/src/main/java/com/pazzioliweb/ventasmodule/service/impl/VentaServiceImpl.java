@@ -306,6 +306,10 @@ public class VentaServiceImpl implements VentaService {
             BigDecimal cantidadVendida = BigDecimal.valueOf(detalleDTO.getCantidad());
             existencia.setExistencia(existencia.getExistencia().subtract(cantidadVendida));
             existenciasRepository.save(existencia);
+
+            // Actualizar ultimaFechaVenta del producto variante
+            variante.setUltimaFechaVenta(LocalDateTime.now());
+            productoVarianteRepository.save(variante);
         }
 
         // Adjust prices if needed

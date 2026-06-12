@@ -3,6 +3,7 @@ package com.pazzioliweb.productosmodule.entity;
 import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.util.List;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.Lob;
 import jakarta.persistence.CascadeType;
@@ -55,6 +56,9 @@ public class ProductoVariante {
 	@Lob
 	@Column(columnDefinition = "LONGTEXT")
 	private String imagen;
+
+	@Column(name = "ultima_fecha_venta")
+	private LocalDateTime ultimaFechaVenta;
 	
 	public Long getProductoVarianteId() {
 		return productoVarianteId;
@@ -139,6 +143,14 @@ public class ProductoVariante {
 	public void setImagen(String imagen) {
 		this.imagen = imagen;
 	}
-    
-    
+
+	public LocalDateTime getUltimaFechaVenta() {
+		return ultimaFechaVenta;
+	}
+
+	public void setUltimaFechaVenta(LocalDateTime ultimaFechaVenta) {
+		this.ultimaFechaVenta = ultimaFechaVenta;
+	}
+
+
 }

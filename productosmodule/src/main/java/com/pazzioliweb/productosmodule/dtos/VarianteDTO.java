@@ -1,6 +1,7 @@
 package com.pazzioliweb.productosmodule.dtos;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
@@ -19,6 +20,7 @@ public class VarianteDTO {
     private Boolean activo;
     private Boolean predeterminada;
     private String imagen;
+    private LocalDateTime ultimaFechaVenta;
     private List<CaracteristicaDetalleDTO> caracteristicas;
     private List<ExistenciasBodegaDTO> existencias;
     private List<PreciosProductoVarianteDTO> precios;

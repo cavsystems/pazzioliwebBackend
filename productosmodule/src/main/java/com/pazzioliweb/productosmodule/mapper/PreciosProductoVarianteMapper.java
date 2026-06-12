@@ -15,16 +15,19 @@ import com.pazzioliweb.productosmodule.entity.ProductoVariante;
 public class PreciosProductoVarianteMapper {
 
     public PreciosProductoVariante toEntity(
-            PreciosProductoVarianteCreateDTO dto, 
+            PreciosProductoVarianteCreateDTO dto,
             ProductoVariante productoVariante,
             Precios precio
     ) {
+        System.out.println("Mapper toEntity - dto.getPredeterminada(): " + dto.getPredeterminada());
         PreciosProductoVariante entity = new PreciosProductoVariante();
         entity.setProductoVariante(productoVariante);
         entity.setPrecio(precio);
         entity.setValor(dto.getValor());
         entity.setFechaInicio(dto.getFechaInicio());
         entity.setFechaFin(dto.getFechaFin());
+        entity.setPredeterminada(dto.getPredeterminada() != null ? dto.getPredeterminada() : false);
+        System.out.println("Mapper toEntity - entity.getPredeterminada(): " + entity.getPredeterminada());
         entity.setFechaCreacion(LocalDateTime.now());
         return entity;
     }
@@ -38,6 +41,7 @@ public class PreciosProductoVarianteMapper {
         entity.setValor(dto.getValor());
         entity.setFechaInicio(dto.getFechaInicio());
         entity.setFechaFin(dto.getFechaFin());
+        if (dto.getPredeterminada() != null) entity.setPredeterminada(dto.getPredeterminada());
         entity.setFechaModificacion(LocalDateTime.now());
     }
 
@@ -52,6 +56,7 @@ public class PreciosProductoVarianteMapper {
         dto.setFechaCreacion(entity.getFechaCreacion());
         dto.setFechaModificacion(entity.getFechaModificacion());
         dto.setPrecioDescripcion(entity.getPrecio().getDescripcion());
+        dto.setPredeterminada(entity.getPredeterminada());
         return dto;
     }
 }
