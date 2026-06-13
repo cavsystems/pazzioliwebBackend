@@ -121,4 +121,7 @@ public interface ProductosRepository extends JpaRepository<Productos, Integer>{
 	@Query("SELECT p FROM Productos p")
 	List<Productos> findAllWithVariantes();
 
+	@Query("SELECT p.codigoContable FROM Productos p ORDER BY p.productoId DESC")
+	java.util.List<String> findUltimoCodigoContable();
+
 }

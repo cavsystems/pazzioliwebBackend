@@ -1,11 +1,6 @@
 package com.pazzioliweb.tercerosmodule.service;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.pazzioliweb.empresaback.dtos.EmpresaContactoDTO;
@@ -33,6 +28,7 @@ import com.pazzioliweb.empresasback.entity.Regimen;
 import com.pazzioliweb.productosmodule.entity.Precios;
 import com.pazzioliweb.tercerosmodule.entity.ClasificacionTercero;
 import com.pazzioliweb.tercerosmodule.entity.ContactoTercero;
+import com.pazzioliweb.tercerosmodule.entity.EstadoTercero;
 import com.pazzioliweb.tercerosmodule.entity.SedeTercero;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.tercerosmodule.entity.TipoContacto;
@@ -63,7 +59,7 @@ public class TercerosService {
     }
 
     @Transactional(readOnly = true)
-    public Page<TerceroDTOImpl> listar(int page, int size, String sortField, String sortDirection) {
+    public Map<String, Object> listar(int page, int size, String sortField, String sortDirection) {
         Sort sort = sortDirection.equalsIgnoreCase("asc")
                 ? Sort.by(sortField).ascending()
                 : Sort.by(sortField).descending();
@@ -72,7 +68,20 @@ public class TercerosService {
 
         Page<Terceros> tercerosPage = terceroRepository.findAll(pageable);
 
-        return tercerosPage.map(this::convertirADTO);
+        long totalGeneral = terceroRepository.countTotal();
+        long totalClientes = terceroRepository.countByClasificacionNombre("Cliente");
+        long totalProveedores = terceroRepository.countByClasificacionNombre("Proveedor");
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("content", tercerosPage.map(this::convertirADTO).getContent());
+        response.put("currentPage", tercerosPage.getNumber());
+        response.put("totalItems", tercerosPage.getTotalElements());
+        response.put("totalPages", tercerosPage.getTotalPages());
+        response.put("totalGeneral", totalGeneral);
+        response.put("totalClientes", totalClientes);
+        response.put("totalProveedores", totalProveedores);
+
+        return response;
     }
 
     public Page<TerceroResumenDTO> listarTerceroBasicos(int page, int size, String sortField, String sortDirection) {
@@ -204,6 +213,7 @@ public class TercerosService {
         tercero.setDireccion(dto.getDireccion());
         tercero.setPlazo(dto.getPlazo());
         tercero.setCupo(dto.getCupo());
+        tercero.setEstado(com.pazzioliweb.tercerosmodule.entity.EstadoTercero.ACTIVO);
 
         // Relaciones usando solo IDs
 
@@ -548,6 +558,14 @@ public class TercerosService {
         } catch (DataIntegrityViolationException e) {
             throw new IllegalStateException("Este tercero no puede ser eliminado, tiene movimientos asociados");
         }
+    }
+
+    @Transactional
+    public void actualizarEstado(Integer id, EstadoTercero estado) {
+        Terceros tercero = terceroRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tercero no encontrado con ID: " + id));
+        tercero.setEstado(estado);
+        terceroRepository.save(tercero);
     }
 
     private TerceroDTOImpl convertirADTO(Terceros t) {

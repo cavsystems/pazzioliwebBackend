@@ -67,13 +67,7 @@ public class TercerosController {
             @RequestParam(defaultValue = "asc") String sortDirection) {
         System.out.println("Método listar terceros ejecutado");
 
-        Page<TerceroDTOImpl> tercerosPage = terceroService.listar(page, size, sortField, sortDirection);
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("content", tercerosPage.getContent());
-        response.put("currentPage", tercerosPage.getNumber());
-        response.put("totalItems", tercerosPage.getTotalElements());
-        response.put("totalPages", tercerosPage.getTotalPages());
+        Map<String, Object> response = terceroService.listar(page, size, sortField, sortDirection);
 
         return ResponseEntity.ok(response);
     }
@@ -164,5 +158,19 @@ public class TercerosController {
     public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
         terceroService.eliminar(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/estado")
+    public ResponseEntity<Void> actualizarEstado(
+            @PathVariable Integer id,
+            @RequestParam String estado) {
+        try {
+            com.pazzioliweb.tercerosmodule.entity.EstadoTercero estadoEnum =
+                com.pazzioliweb.tercerosmodule.entity.EstadoTercero.valueOf(estado.toUpperCase());
+            terceroService.actualizarEstado(id, estadoEnum);
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 }

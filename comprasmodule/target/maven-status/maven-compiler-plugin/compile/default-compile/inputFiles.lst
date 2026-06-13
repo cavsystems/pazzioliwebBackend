@@ -14,6 +14,7 @@ C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\compra
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ProveedorDTO.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\exception\ComprasExceptionHandler.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\impl\ProductoServiceImpl.java
+C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\OrdenCompraRecienteDTO.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\LegalizacionRequestDTO.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\CuentaPorPagarDTO.java
 C:\Users\AUXPAZZIOLI\Desktop\pazzioliweb\pazzioliweb\pazzioli-web-backend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\ConfiguracionComprasDTO.java

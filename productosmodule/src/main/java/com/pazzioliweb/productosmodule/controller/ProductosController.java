@@ -232,4 +232,14 @@ public class ProductosController {
         return ResponseEntity.ok(resultados);
     }
 
+    // ------------------------------------------------------
+    // OBTENER ULTIMO CODIGO CONTABLE
+    // ------------------------------------------------------
+    @GetMapping("/ultimo-codigo-contable")
+    public ResponseEntity<String> obtenerUltimoCodigoContable() {
+        return productosService.obtenerUltimoCodigoContable()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
+
 }

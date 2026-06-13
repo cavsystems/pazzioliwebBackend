@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,23 +38,35 @@ public class ClasificacionTerceroController {
     public ResponseEntity<Map<String, Object>> listar(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "id") String sortField,
+            @RequestParam(defaultValue = "clasificacionTerceroId") String sortField,
             @RequestParam(defaultValue = "asc") String sortDirection) {
 
-        Sort sort = sortDirection.equalsIgnoreCase("asc")
-                ? Sort.by(sortField).ascending()
-                : Sort.by(sortField).descending();
+        String[] validSortFields = {"clasificacionTerceroId", "nombre"};
+        if (!java.util.Arrays.asList(validSortFields).contains(sortField)) {
+            sortField = "clasificacionTerceroId";
+        }
 
-        Pageable pageable = PageRequest.of(page, size, sort);
-        Page<ClasificacionTercero> pageResult = service.listar(pageable);
+        try {
+            Sort sort = sortDirection.equalsIgnoreCase("asc")
+                    ? Sort.by(sortField).ascending()
+                    : Sort.by(sortField).descending();
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("content", pageResult.getContent());
-        response.put("currentPage", pageResult.getNumber());
-        response.put("totalItems", pageResult.getTotalElements());
-        response.put("totalPages", pageResult.getTotalPages());
+            Pageable pageable = PageRequest.of(page, size, sort);
+            Page<ClasificacionTercero> pageResult = service.listar(pageable);
 
-        return ResponseEntity.ok(response);
+            Map<String, Object> response = new HashMap<>();
+            response.put("content", pageResult.getContent());
+            response.put("currentPage", pageResult.getNumber());
+            response.put("totalItems", pageResult.getTotalElements());
+            response.put("totalPages", pageResult.getTotalPages());
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("sortField", sortField);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     @GetMapping("/{id}")

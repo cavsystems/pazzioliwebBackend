@@ -82,6 +82,7 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
     private DepartamentoInfoDTOImpl departamento;
     private MunicipioInfoDTOImpl ciudad;
     private String codigoPostal;
+    private String estado;
     
     public List<RetencionesDTO> getRetenciones() {
 		return retenciones;
@@ -161,6 +162,9 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
 
 	public String getCodigoPostal() { return codigoPostal; }
 	public void setCodigoPostal(String codigoPostal) { this.codigoPostal = codigoPostal; }
+
+	public String getEstado() { return estado; }
+	public void setEstado(String estado) { this.estado = estado; }
 
 	private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	// Método helper para convertir desde la entidad
@@ -246,7 +250,11 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
         if(t.getCodigoPostal() != null) {
             dto.setCodigoPostal(t.getCodigoPostal());
         }
-        
+
+        if(t.getEstado() != null) {
+            dto.setEstado(t.getEstado().name());
+        }
+
         return dto;
     }
     
@@ -318,8 +326,12 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
         if(this.tipoPersona != null)
         	entidad.setTipoPersona(this.tipoPersona.toEntity());
 
+        if(this.estado != null) {
+            entidad.setEstado(com.pazzioliweb.tercerosmodule.entity.EstadoTercero.valueOf(this.estado));
+        }
+
         // departamento, ciudad, codigoPostal are set in the service layer
-        
+
         return entidad;
     }
 }

@@ -1434,4 +1434,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         OrdenCompra guardada = ordenCompraRepository.save(orden);
         return ordenCompraMapper.toDto(guardada);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<OrdenCompraRecienteDTO> obtenerOrdenCompraMasReciente() {
+        return ordenCompraRepository.findOrdenCompraMasReciente().stream().findFirst();
+    }
 }

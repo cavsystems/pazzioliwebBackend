@@ -4,6 +4,7 @@ import com.pazzioliweb.comprasmodule.dtos.DetalleOrdenCompraDTO;
 import com.pazzioliweb.comprasmodule.dtos.FinalizarCompraDTO;
 import com.pazzioliweb.comprasmodule.dtos.ItemRecibidoDTO;
 import com.pazzioliweb.comprasmodule.dtos.OrdenCompraDTO;
+import com.pazzioliweb.comprasmodule.dtos.OrdenCompraRecienteDTO;
 import com.pazzioliweb.comprasmodule.dtos.RealizarOrdenRequestDTO;
 import com.pazzioliweb.comprasmodule.entity.OrdenCompra;
 import org.springframework.data.domain.Page;
@@ -66,5 +67,11 @@ public interface OrdenCompraService {
      * NO reasigna comprobante ni genera asiento contable (sigue siendo PENDIENTE).
      */
     OrdenCompraDTO actualizarCompleto(Long id, RealizarOrdenRequestDTO request);
+
+    /**
+     * Obtiene la orden de compra más reciente con estado RECIBIDA o RECIBIDA_PARCIAL.
+     * Incluye fecha de emisión, proveedor/tercero, cajero y su usuario relacionado (left join).
+     */
+    Optional<OrdenCompraRecienteDTO> obtenerOrdenCompraMasReciente();
 
 }

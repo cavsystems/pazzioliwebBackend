@@ -15,17 +15,17 @@ public class ClasificacionTercero {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "clasificacion_tercero_id")
-	private Integer ClasificacionTerceroId;
+	private Integer clasificacionTerceroId;
 	
 	@Column(name = "nombre", length = 100)
 	private String nombre;
 
 	public Integer getClasificacionTerceroId() {
-		return ClasificacionTerceroId;
+		return clasificacionTerceroId;
 	}
 
 	public void setClasificacionTerceroId(Integer clasificacionTerceroId) {
-		ClasificacionTerceroId = clasificacionTerceroId;
+		this.clasificacionTerceroId = clasificacionTerceroId;
 	}
 
 	public String getNombre() {

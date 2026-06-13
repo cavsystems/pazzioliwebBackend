@@ -67,6 +67,7 @@ com\pazzioliweb\comprasmodule\service\ConfiguracionComprasService.class
 com\pazzioliweb\comprasmodule\dtos\ProductoRequestDTO$PrecioDTO.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$AtributoPayloadDTO.class
 com\pazzioliweb\comprasmodule\dtos\ConfiguracionComprasDTO.class
+com\pazzioliweb\comprasmodule\dtos\OrdenCompraRecienteDTO.class
 com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO$ExistenciaDTO.class
 com\pazzioliweb\comprasmodule\exception\OrdenCompraException.class
 com\pazzioliweb\comprasmodule\dtos\OrdenCompraRequestDTO.class

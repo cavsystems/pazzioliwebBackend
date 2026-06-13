@@ -42,4 +42,6 @@ public interface ProductosService {
     List<ProductoConVariantesDTO> listarTodosProductosConVariantesYCaracteristicas();
 
     List<Productos> findAllWithVariantes();
+
+    Optional<String> obtenerUltimoCodigoContable();
 }

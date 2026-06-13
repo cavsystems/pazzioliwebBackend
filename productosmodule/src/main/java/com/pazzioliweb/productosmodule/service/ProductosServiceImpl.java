@@ -620,4 +620,10 @@ public class ProductosServiceImpl implements ProductosService{
 
         return dto;
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> obtenerUltimoCodigoContable() {
+        return productosRepository.findUltimoCodigoContable().stream().findFirst();
+    }
 }

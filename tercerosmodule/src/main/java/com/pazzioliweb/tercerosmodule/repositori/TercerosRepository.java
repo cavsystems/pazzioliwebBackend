@@ -79,7 +79,7 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 			LEFT JOIN t.regimen r
 			WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
 			   OR LOWER(t.razonSocial) LIKE LOWER(:busqueda))
-			AND t.clasificacionTercero.ClasificacionTerceroId = :tipousuario
+			AND t.clasificacionTercero.clasificacionTerceroId = :tipousuario
 			""")
 	Page<Terceros> traerTercerosXFiltropro(@Param("busqueda") String busqueda,@Param("tipousuario") int tipousuario, Pageable pageable);
 
@@ -167,7 +167,7 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
     	    LEFT JOIN t.clasificacionTercero c
     	    LEFT JOIN t.regimen r
     		WHERE LOWER(t.identificacion) LIKE LOWER(:busqueda)
-    		OR LOWER(t.razonSocial) LIKE LOWER(:busqueda) and c.ClasificacionTerceroId=:tipousuario
+    		OR LOWER(t.razonSocial) LIKE LOWER(:busqueda) and c.clasificacionTerceroId=:tipousuario
     		""")
 	Page<TerceroResumenDTO> buscarPorIdentificacionORazonSocialTipo(@Param("busqueda") String busqueda,@Param("tipousuario") int tipousuario, Pageable pageable);
 
@@ -218,4 +218,10 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
     	    WHERE t.terceroId = :id
     	    """)
 	Optional<Terceros> buscarPorIdConDetalles(@Param("id") Integer id);
+
+	@Query("SELECT COUNT(t) FROM Terceros t")
+	long countTotal();
+
+	@Query("SELECT COUNT(t) FROM Terceros t WHERE LOWER(t.clasificacionTercero.nombre) = LOWER(:nombre)")
+	long countByClasificacionNombre(@Param("nombre") String nombre);
 }

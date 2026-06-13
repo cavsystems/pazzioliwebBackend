@@ -3,6 +3,7 @@ package com.pazzioliweb.comprasmodule.controller;
 import com.pazzioliweb.comprasmodule.dtos.DetalleOrdenCompraDTO;
 import com.pazzioliweb.comprasmodule.dtos.FinalizarCompraDTO;
 import com.pazzioliweb.comprasmodule.dtos.OrdenCompraDTO;
+import com.pazzioliweb.comprasmodule.dtos.OrdenCompraRecienteDTO;
 import com.pazzioliweb.comprasmodule.service.EmailOrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.OrdenCompraService;
 import com.pazzioliweb.comprasmodule.dtos.CuentaPorPagarDTO;
@@ -57,6 +58,13 @@ public class OrdenCompraController {
     @GetMapping("/pendientes")
     public ResponseEntity<List<OrdenCompraDTO>> obtenerOrdenesPendientes() {
         return ResponseEntity.ok(ordenCompraService.obtenerOrdenesPendientes());
+    }
+
+    @GetMapping("/reciente-recibida")
+    public ResponseEntity<OrdenCompraRecienteDTO> obtenerOrdenCompraMasReciente() {
+        return ordenCompraService.obtenerOrdenCompraMasReciente()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
     }
 
     @GetMapping("/{id}")

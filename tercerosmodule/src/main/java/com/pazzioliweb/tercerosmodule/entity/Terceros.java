@@ -12,19 +12,7 @@ import com.pazzioliweb.empresasback.entity.Regimen;
 import com.pazzioliweb.productosmodule.entity.Precios;
 import com.pazzioliweb.usuariosbacken.entity.Tipopersona;
 
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
@@ -96,6 +84,10 @@ public class Terceros {
 	@ManyToOne
 	@JoinColumn(name = "precio_id")
 	private Precios precio;
+
+	@Column(name = "estado", nullable = false)
+	@Enumerated(jakarta.persistence.EnumType.STRING)
+	private EstadoTercero estado = EstadoTercero.ACTIVO;
 
 	public Integer getTerceroId() {
 		return terceroId;
@@ -216,6 +208,14 @@ public class Terceros {
 
 	public void setPrecio(Precios precio) {
 		this.precio = precio;
+	}
+
+	public EstadoTercero getEstado() {
+		return estado;
+	}
+
+	public void setEstado(EstadoTercero estado) {
+		this.estado = estado;
 	}
 
 	@OneToMany(mappedBy = "tercero", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
