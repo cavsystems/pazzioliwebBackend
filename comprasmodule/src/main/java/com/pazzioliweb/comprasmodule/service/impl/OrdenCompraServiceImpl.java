@@ -1241,7 +1241,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                                                      List<FinalizarCompraDTO.MetodoPagoDTO> metodosPago) {
         BigDecimal totalPagado = BigDecimal.ZERO;
         if (metodosPago == null || metodosPago.isEmpty()) return totalPagado;
-        List<OrdenCompraMetodoPago> persistidos = new java.util.ArrayList<>();
+        // Usar la colección Hibernate-managed (clear + addAll) para que orphanRemoval
+        // elimine correctamente los métodos anteriores sin romper la transacción.
+        if (orden.getMetodosPago() == null) {
+            orden.setMetodosPago(new java.util.ArrayList<>());
+        }
+        orden.getMetodosPago().clear();
+
         for (FinalizarCompraDTO.MetodoPagoDTO mpDto : metodosPago) {
             if (mpDto.getMetodoPagoId() == null || mpDto.getMonto() == null) continue;
             if (mpDto.getMonto().compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -1254,7 +1260,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 mp.setMetodoPago(metodo);
                 mp.setMonto(mpDto.getMonto());
                 mp.setReferencia(mpDto.getReferencia());
-                persistidos.add(mp);
+                orden.getMetodosPago().add(mp);
                 boolean esCredito = metodo.getTipoNegociacion() != null
                         && "Credito".equalsIgnoreCase(metodo.getTipoNegociacion().name());
                 if (!esCredito) totalPagado = totalPagado.add(mpDto.getMonto());
@@ -1262,7 +1268,6 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 System.out.println("[FinalizarIngreso] Error método de pago: " + ex.getMessage());
             }
         }
-        orden.setMetodosPago(persistidos);
         ordenCompraRepository.save(orden);
         return totalPagado;
     }

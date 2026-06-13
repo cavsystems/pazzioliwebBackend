@@ -14,6 +14,7 @@ public interface OrdenCompraMapper {
     @Mapping(target = "id", source = "id")
     @Mapping(target = "numeroOrden", source = "numeroOrden")
     @Mapping(target = "numeroOc", source = "numeroOc")
+    @Mapping(target = "metodosPago", expression = "java(mapMetodosPago(ordenCompra))")
     @Mapping(target = "proveedorId", source = "proveedor.terceroId")
     @Mapping(target = "proveedorNombre", source = "proveedor.razonSocial")
     @Mapping(target = "bodegaId", source = "bodega.codigo")
@@ -100,5 +101,20 @@ public interface OrdenCompraMapper {
         if (ordenCompra.getItems() != null) {
             ordenCompra.getItems().forEach(detalle -> detalle.setOrdenCompra(ordenCompra));
         }
+    }
+
+    default java.util.List<OrdenCompraDTO.MetodoPagoOrdenDTO> mapMetodosPago(OrdenCompra orden) {
+        if (orden.getMetodosPago() == null) return java.util.Collections.emptyList();
+        return orden.getMetodosPago().stream().map(mp -> {
+            OrdenCompraDTO.MetodoPagoOrdenDTO dto = new OrdenCompraDTO.MetodoPagoOrdenDTO();
+            if (mp.getMetodoPago() != null) {
+                dto.setMetodoPagoId(mp.getMetodoPago().getMetodo_pago_id());
+                dto.setMetodoPagoNombre(mp.getMetodoPago().getDescripcion());
+                dto.setMetodoPagoSigla(mp.getMetodoPago().getSigla());
+            }
+            dto.setMonto(mp.getMonto());
+            dto.setReferencia(mp.getReferencia());
+            return dto;
+        }).collect(java.util.stream.Collectors.toList());
     }
 }

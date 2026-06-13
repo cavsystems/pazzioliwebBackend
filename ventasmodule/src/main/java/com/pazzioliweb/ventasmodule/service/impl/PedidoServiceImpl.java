@@ -124,11 +124,13 @@ public class PedidoServiceImpl implements PedidoService {
         BigDecimal ivaTotal = BigDecimal.ZERO;
         BigDecimal descuentosTotal = BigDecimal.ZERO;
 
+        if (pedido.getItems() != null) {
         for (DetallePedido detalle : pedido.getItems()) {
             detalle.setPedido(pedido);
             subtotal = subtotal.add(detalle.getTotal());
             ivaTotal = ivaTotal.add(detalle.getIva());
             descuentosTotal = descuentosTotal.add(detalle.getDescuento());
+        }
         }
         BigDecimal retefuente = pedidoDTO.getRetefuente() != null ? pedidoDTO.getRetefuente() : BigDecimal.ZERO;
         BigDecimal reteiva    = pedidoDTO.getReteiva()    != null ? pedidoDTO.getReteiva()    : BigDecimal.ZERO;
@@ -240,9 +242,13 @@ public class PedidoServiceImpl implements PedidoService {
         // Crear VentaDTO a partir del pedido
 
         VentaDTO ventaDTO = new VentaDTO();
-        ventaDTO.setClienteId(pedido.getCliente().getTerceroId().longValue());
+        if (pedido.getCliente() != null && pedido.getCliente().getTerceroId() != null) {
+            ventaDTO.setClienteId(pedido.getCliente().getTerceroId().longValue());
+        }
         ventaDTO.setNumeroVenta(String.valueOf(ventaService.getUltimaVentaId() + 1));
-        ventaDTO.setBodegaId(pedido.getBodega().getCodigo());
+        if (pedido.getBodega() != null) {
+            ventaDTO.setBodegaId(pedido.getBodega().getCodigo());
+        }
         ventaDTO.setFechaEmision(LocalDate.now());
         ventaDTO.setFechaEntregaEsperada(pedido.getFechaEntregaEsperada());
         ventaDTO.setObservaciones("Generado desde pedido: " + pedido.getNumeroPedido());

@@ -142,24 +142,26 @@ public class TercerosService {
                 ? Sort.by(sortField).ascending()
                 : Sort.by(sortField).descending();
 
-
-
         Pageable pageable = PageRequest.of(page, size, sort);
 
-        Page<Terceros> tercerosPage = terceroRepository.traerTercerosXFiltropronormal("%" + termino.trim().toLowerCase() + "%", pageable);
+        Page<Terceros> tercerosPage;
+        if (tipoprovedor > 0) {
+            // Filtrar incluyendo SOLO esta clasificación (ej: proveedores en compras tipoprovedor=2)
+            tercerosPage = terceroRepository.traerTercerosXFiltropro("%" + termino.trim().toLowerCase() + "%", tipoprovedor, pageable);
+        } else if (tipoprovedor < 0) {
+            // Filtrar EXCLUYENDO esa clasificación (ej: excluir proveedores en ventas tipoprovedor=-2)
+            tercerosPage = terceroRepository.traerTercerosXFiltroExcluir("%" + termino.trim().toLowerCase() + "%", Math.abs(tipoprovedor), pageable);
+        } else {
+            tercerosPage = terceroRepository.traerTercerosXFiltropronormal("%" + termino.trim().toLowerCase() + "%", pageable);
+        }
         tercerosPage.getContent().forEach(t -> {
             t.getContactos().size();
-
         });
 
         return tercerosPage.map(t -> {
             TerceroDTOImpl  dto = convertirADTO(t);
             return dto;
         });
-
-
-
-
     }
 
 

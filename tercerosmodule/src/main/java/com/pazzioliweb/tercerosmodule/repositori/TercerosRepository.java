@@ -90,9 +90,20 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 			LEFT JOIN t.regimen r
 			WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
 			   OR LOWER(t.razonSocial) LIKE LOWER(:busqueda))
-			
+
 			""")
 	Page<Terceros> traerTercerosXFiltropronormal(@Param("busqueda") String busqueda, Pageable pageable);
+
+	// Excluye una clasificación específica (ej: excluir proveedores de la búsqueda de clientes en ventas)
+	@Query("""
+			SELECT t
+			FROM Terceros t
+			LEFT JOIN t.regimen r
+			WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
+			   OR LOWER(t.razonSocial) LIKE LOWER(:busqueda))
+			AND t.clasificacionTercero.ClasificacionTerceroId != :tipousuario
+			""")
+	Page<Terceros> traerTercerosXFiltroExcluir(@Param("busqueda") String busqueda, @Param("tipousuario") int tipousuario, Pageable pageable);
 
 
 	@Query("""

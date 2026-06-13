@@ -35,4 +35,16 @@ public class OrdenCompraDTO {
     private LocalDate fechaCreacion;
     
     private List<DetalleOrdenCompraDTO> items;
+
+    /** Métodos de pago guardados en la orden (para mostrarlos editables en el ingreso). */
+    private List<MetodoPagoOrdenDTO> metodosPago;
+
+    @lombok.Data
+    public static class MetodoPagoOrdenDTO {
+        private Integer metodoPagoId;
+        private String  metodoPagoNombre;
+        private String  metodoPagoSigla;
+        private java.math.BigDecimal monto;
+        private String  referencia;
+    }
 }
