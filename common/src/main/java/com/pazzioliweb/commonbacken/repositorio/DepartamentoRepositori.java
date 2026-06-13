@@ -12,4 +12,5 @@ import com.pazzioliweb.commonbacken.entity.Sesiones;
 public interface DepartamentoRepositori extends  JpaRepository<Departamento, Long>{
 	public Optional<Departamento> findByCodigo(int codigo);
 	public List<Departamento> findByCodigopais(int codigoPais);
+	public Optional<Departamento> findFirstByDepartamentoContainingIgnoreCase(String nombre);
 }

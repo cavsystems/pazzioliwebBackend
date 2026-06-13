@@ -11,5 +11,6 @@ import com.pazzioliweb.commonbacken.entity.Municipio;
 public interface  MunicipioRepositori extends JpaRepository<Municipio, Long> {
  public Optional<Municipio> findByCodigo(int codigo);
  public List<Municipio> findByCodigoDepartamento(int codigodepartamento);
- 
+ public Optional<Municipio> findFirstByMunicipioContainingIgnoreCaseAndCodigoDepartamento(String nombre, int codigoDepartamento);
+ public Optional<Municipio> findFirstByMunicipioContainingIgnoreCase(String nombre);
 }

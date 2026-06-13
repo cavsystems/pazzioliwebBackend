@@ -91,6 +91,14 @@
     <!--configuracion para gestionar versiones de dependencias configuramos el bom bill
     el cual es org.springframework.boot  esto lo hacemos esto para gestionar  las versiones de despendencias
      más comunes en aplicaciones Spring.Al importar este BOM en tu proyecto, puedes añadir dependencias sin especificar sus versiones, ya que Maven las resolverá automáticamente desde el BOM.-->
+    <repositories>
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+    </repositories>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
