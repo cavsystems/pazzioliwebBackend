@@ -120,7 +120,7 @@ public interface OrdenCompraRepository extends JpaRepository<OrdenCompra, Long> 
     Optional<Long> findMaxId();
 
     @Query("SELECT NEW com.pazzioliweb.comprasmodule.dtos.OrdenCompraRecienteDTO(" +
-            "o.id, o.numeroOrden, o.fechaEmision, " +
+            "o.id, o.numeroOrden, o.fechaEmision, o.fechaRecibida, " +
             "o.proveedor.terceroId, o.proveedor.razonSocial, o.proveedor.razonSocial, " +
             "c.cajeroId, c.nombre, " +
             "u.codigo, u.nombre, u.usuario, " +
@@ -130,6 +130,6 @@ public interface OrdenCompraRepository extends JpaRepository<OrdenCompra, Long> 
             "LEFT JOIN com.pazzioliweb.cajerosmodule.entity.Cajero c ON c.cajeroId = o.cajeroId " +
             "LEFT JOIN c.usuario u " +
             "WHERE o.estado IN ('RECIBIDA', 'RECIBIDA_PARCIAL') " +
-            "ORDER BY o.fechaEmision DESC, o.id DESC")
+            "ORDER BY o.fechaRecibida DESC NULLS LAST, o.id DESC")
     java.util.List<com.pazzioliweb.comprasmodule.dtos.OrdenCompraRecienteDTO> findOrdenCompraMasReciente();
 }

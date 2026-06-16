@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 public class OrdenCompraRecienteDTO {
@@ -12,6 +13,9 @@ public class OrdenCompraRecienteDTO {
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate fechaEmision;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime fechaRecibida;
 
     // Proveedor/Tercero
     private Integer proveedorId;
@@ -31,7 +35,7 @@ public class OrdenCompraRecienteDTO {
 
     public OrdenCompraRecienteDTO() {}
 
-    public OrdenCompraRecienteDTO(Long id, String numeroOrden, LocalDate fechaEmision,
+    public OrdenCompraRecienteDTO(Long id, String numeroOrden, LocalDate fechaEmision, LocalDateTime fechaRecibida,
                                    Integer proveedorId, String proveedorNombre, String proveedorRazonSocial,
                                    Integer cajeroId, String cajeroNombre,
                                    Integer usuarioId, String usuarioNombre, String usuarioUsername,
@@ -39,6 +43,7 @@ public class OrdenCompraRecienteDTO {
         this.id = id;
         this.numeroOrden = numeroOrden;
         this.fechaEmision = fechaEmision;
+        this.fechaRecibida = fechaRecibida;
         this.proveedorId = proveedorId;
         this.proveedorNombre = proveedorNombre;
         this.proveedorRazonSocial = proveedorRazonSocial;

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
@@ -95,6 +96,9 @@ public class OrdenCompra {
 
     @Column(name = "consecutivo_comprobante")
     private Integer consecutivoComprobante;
+
+    @Column(name = "fecha_recibida")
+    private LocalDateTime fechaRecibida;
 
     // Getters y setters generados por Lombok
 }

@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -34,5 +35,20 @@ public class OrdenCompraDTO {
     private String usuarioCreacion;
     private LocalDate fechaCreacion;
     
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime fechaRecibida;
+    
     private List<DetalleOrdenCompraDTO> items;
+
+    /** Métodos de pago guardados en la orden (para mostrarlos editables en el ingreso). */
+    private List<MetodoPagoOrdenDTO> metodosPago;
+
+    @lombok.Data
+    public static class MetodoPagoOrdenDTO {
+        private Integer metodoPagoId;
+        private String  metodoPagoNombre;
+        private String  metodoPagoSigla;
+        private java.math.BigDecimal monto;
+        private String  referencia;
+    }
 }

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -147,6 +148,12 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
         boolean allReceived = orden.getItems().stream()
                 .allMatch(d -> d.getCantidadRecibida() != null && d.getCantidadRecibida().equals(d.getCantidad()));
         orden.setEstado(allReceived ? "RECIBIDA" : "RECIBIDA_PARCIAL");
+        
+        // Actualizar fecha_recibida cuando la orden pasa a RECIBIDA o RECIBIDA_PARCIAL
+        if ("RECIBIDA".equals(orden.getEstado()) || "RECIBIDA_PARCIAL".equals(orden.getEstado())) {
+            orden.setFechaRecibida(LocalDateTime.now());
+        }
+        
         log.info("Estado final: {}", orden.getEstado());
 
         // Paso 4: actualizar el numero_factura_proveedor en CuentaPorPagar

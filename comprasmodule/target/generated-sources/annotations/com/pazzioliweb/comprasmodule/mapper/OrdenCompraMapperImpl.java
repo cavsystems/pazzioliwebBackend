@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-06-16T08:22:17-0500",
+    date = "2026-06-16T14:50:27-0500",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
 )
 @Component
@@ -52,7 +52,10 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
         ordenCompraDTO.setReteica( ordenCompra.getReteica() );
         ordenCompraDTO.setUsuarioCreacion( ordenCompra.getUsuarioCreacion() );
         ordenCompraDTO.setFechaCreacion( ordenCompra.getFechaCreacion() );
+        ordenCompraDTO.setFechaRecibida( ordenCompra.getFechaRecibida() );
         ordenCompraDTO.setItems( toDetalleDtoList( ordenCompra.getItems() ) );
+
+        ordenCompraDTO.setMetodosPago( mapMetodosPago(ordenCompra) );
 
         return ordenCompraDTO;
     }
@@ -80,6 +83,7 @@ public class OrdenCompraMapperImpl implements OrdenCompraMapper {
         ordenCompra.setReteica( ordenCompraDTO.getReteica() );
         ordenCompra.setUsuarioCreacion( ordenCompraDTO.getUsuarioCreacion() );
         ordenCompra.setFechaCreacion( ordenCompraDTO.getFechaCreacion() );
+        ordenCompra.setFechaRecibida( ordenCompraDTO.getFechaRecibida() );
         ordenCompra.setItems( detalleOrdenCompraDTOListToDetalleOrdenCompraList( ordenCompraDTO.getItems() ) );
 
         setOrdenCompraInDetalles( ordenCompra );
