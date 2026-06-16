@@ -1,6 +1,7 @@
 package com.pazzioliweb.tercerosmodule.dtos;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
@@ -83,6 +84,7 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
     private MunicipioInfoDTOImpl ciudad;
     private String codigoPostal;
     private String estado;
+    private String ultimoMovimiento;
     
     public List<RetencionesDTO> getRetenciones() {
 		return retenciones;
@@ -165,6 +167,9 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
 
 	public String getEstado() { return estado; }
 	public void setEstado(String estado) { this.estado = estado; }
+
+	public String getUltimoMovimiento() { return ultimoMovimiento; }
+	public void setUltimoMovimiento(String ultimoMovimiento) { this.ultimoMovimiento = ultimoMovimiento; }
 
 	private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	// Método helper para convertir desde la entidad
@@ -255,6 +260,10 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
             dto.setEstado(t.getEstado().name());
         }
 
+        if(t.getUltimoMovimiento() != null) {
+            dto.setUltimoMovimiento(t.getUltimoMovimiento().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        }
+
         return dto;
     }
     
@@ -328,6 +337,10 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
 
         if(this.estado != null) {
             entidad.setEstado(com.pazzioliweb.tercerosmodule.entity.EstadoTercero.valueOf(this.estado));
+        }
+
+        if(this.ultimoMovimiento != null) {
+            entidad.setUltimoMovimiento(LocalDateTime.parse(this.ultimoMovimiento, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         }
 
         // departamento, ciudad, codigoPostal are set in the service layer

@@ -467,6 +467,16 @@ public class VentaServiceImpl implements VentaService {
         venta.setEstado("COMPLETADA");
         Venta ventaGuardada = ventaRepository.save(venta);
 
+        // Actualizar último movimiento del cliente
+        try {
+            if (ventaGuardada.getCliente() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        ventaGuardada.getCliente().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando cliente: " + ex.getMessage());
+        }
+
         // ✅ Registrar movimiento en cajero y generar CxC si hay crédito
         DatosSesiones sesionComp = obtenerSesionActiva();
         if (sesionComp == null || sesionComp.getDetalleCajeroId() == null) {

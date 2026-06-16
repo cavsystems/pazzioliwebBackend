@@ -71,6 +71,11 @@ public class TercerosService {
         long totalGeneral = terceroRepository.countTotal();
         long totalClientes = terceroRepository.countByClasificacionNombre("Cliente");
         long totalProveedores = terceroRepository.countByClasificacionNombre("Proveedor");
+        long totalEmpleados = terceroRepository.countByClasificacionNombre("Empleado");
+        long totalOtros = terceroRepository.countByClasificacionNombre("Otro");
+        
+        java.time.LocalDateTime fechaLimite = java.time.LocalDateTime.now().minusDays(90);
+        long totalSinActividad = terceroRepository.countSinActividad(fechaLimite);
 
         Map<String, Object> response = new HashMap<>();
         response.put("content", tercerosPage.map(this::convertirADTO).getContent());
@@ -80,6 +85,9 @@ public class TercerosService {
         response.put("totalGeneral", totalGeneral);
         response.put("totalClientes", totalClientes);
         response.put("totalProveedores", totalProveedores);
+        response.put("totalEmpleados", totalEmpleados);
+        response.put("totalOtros", totalOtros);
+        response.put("totalSinActividad", totalSinActividad);
 
         return response;
     }

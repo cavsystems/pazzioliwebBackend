@@ -372,6 +372,16 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // 4. Guardar la orden
         OrdenCompra ordenGuardada = ordenCompraRepository.save(ordenCompra);
 
+        // Actualizar último movimiento del proveedor
+        try {
+            if (ordenGuardada.getProveedor() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        ordenGuardada.getProveedor().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando proveedor: " + ex.getMessage());
+        }
+
         // 5. Procesar métodos de pago (si vienen) — pueden ser parciales
         BigDecimal totalPagado = procesarMetodosPago(ordenGuardada, request);
 
@@ -1007,6 +1017,16 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         ordenGuardada.setItems(detalles);
         ordenGuardada = ordenCompraRepository.save(ordenGuardada);
 
+        // Actualizar último movimiento del proveedor
+        try {
+            if (ordenGuardada.getProveedor() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        ordenGuardada.getProveedor().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando proveedor: " + ex.getMessage());
+        }
+
         // 5. Guardar métodos de pago — necesarios para determinar CC vs CR al hacer el ingreso
         procesarMetodosPago(ordenGuardada, request);
 
@@ -1130,6 +1150,16 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
 
         // 5. Guardar orden con todos los cambios
         ordenCompraRepository.save(orden);
+
+        // Actualizar último movimiento del proveedor
+        try {
+            if (orden.getProveedor() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        orden.getProveedor().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando proveedor: " + ex.getMessage());
+        }
 
         // 6. Crear CxP solo si hay saldo pendiente (crédito no cubierto por pagos de contado)
         BigDecimal saldoCxP = totalNeto.subtract(totalPagado);

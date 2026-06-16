@@ -274,6 +274,16 @@ public class ReciboCajaService {
 
         recibo = reciboRepository.save(recibo);
 
+        // Actualizar último movimiento del tercero
+        try {
+            if (recibo.getTercero() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        recibo.getTercero().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando tercero recibo caja: " + ex.getMessage());
+        }
+
         // Registrar movimiento en cajero si hay sesión activa
         registrarMovimientoCajero(recibo);
 

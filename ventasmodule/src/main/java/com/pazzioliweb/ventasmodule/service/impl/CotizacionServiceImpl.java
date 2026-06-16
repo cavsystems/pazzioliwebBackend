@@ -157,6 +157,16 @@ public class CotizacionServiceImpl implements CotizacionService {
 
         Cotizacion guardada = cotizacionRepository.save(cotizacion);
 
+        // Actualizar último movimiento del cliente
+        try {
+            if (guardada.getCliente() != null) {
+                terceroRepository.actualizarUltimoMovimiento(
+                        guardada.getCliente().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando cliente cotización: " + ex.getMessage());
+        }
+
         // ── Registrar movimiento COTIZACION en el cajero (informativo, no afecta caja) ──
         DatosSesiones sesion = obtenerSesionActiva();
         if (sesion != null && sesion.getDetalleCajeroId() != null) {

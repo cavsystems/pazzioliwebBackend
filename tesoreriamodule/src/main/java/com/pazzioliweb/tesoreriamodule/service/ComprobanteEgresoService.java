@@ -257,6 +257,16 @@ public class ComprobanteEgresoService {
 
         egreso = egresoRepository.save(egreso);
 
+        // Actualizar último movimiento del tercero
+        try {
+            if (egreso.getTercero() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        egreso.getTercero().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando tercero comprobante egreso: " + ex.getMessage());
+        }
+
         // Registrar movimiento en cajero si hay sesión activa
         registrarMovimientoCajero(egreso);
 

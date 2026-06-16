@@ -1,6 +1,7 @@
 package com.pazzioliweb.tercerosmodule.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -274,6 +275,9 @@ public class Terceros {
 	@Column(name = "actividad_economica_id")
 	private Integer actividadEconomicaId;
 
+	@Column(name = "ultimo_movimiento")
+	private LocalDateTime ultimoMovimiento;
+
 	public LocalDate getFechaNacimiento() {
 		return fechaNacimiento;
 	}
@@ -296,6 +300,14 @@ public class Terceros {
 
 	public void setActividadEconomicaId(Integer actividadEconomicaId) {
 		this.actividadEconomicaId = actividadEconomicaId;
+	}
+
+	public LocalDateTime getUltimoMovimiento() {
+		return ultimoMovimiento;
+	}
+
+	public void setUltimoMovimiento(LocalDateTime ultimoMovimiento) {
+		this.ultimoMovimiento = ultimoMovimiento;
 	}
 
 	@ManyToOne

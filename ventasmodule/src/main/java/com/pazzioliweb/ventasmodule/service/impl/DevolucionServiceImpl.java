@@ -63,6 +63,8 @@ public class DevolucionServiceImpl implements DevolucionService {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
     @Autowired
+    private com.pazzioliweb.tercerosmodule.repositori.TercerosRepository tercerosRepository;
+    @Autowired
     public DevolucionServiceImpl(
             VentaRepository ventaRepository,
             DevolucionRepository devolucionRepository,
@@ -205,6 +207,16 @@ public class DevolucionServiceImpl implements DevolucionService {
 
         // 7. Guardar la devolución
         Devolucion guardada = devolucionRepository.save(devolucion);
+
+        // Actualizar último movimiento del cliente de la venta
+        try {
+            if (venta.getCliente() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        venta.getCliente().getTerceroId(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando cliente devolución: " + ex.getMessage());
+        }
 
         // 8. Actualizar estado de la venta
         actualizarEstadoVenta(venta);

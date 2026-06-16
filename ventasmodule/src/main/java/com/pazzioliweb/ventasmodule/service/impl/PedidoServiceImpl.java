@@ -2,6 +2,7 @@ package com.pazzioliweb.ventasmodule.service.impl;
 
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
+import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.PedidoDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
@@ -45,6 +46,8 @@ public class PedidoServiceImpl implements PedidoService {
     private final CajeroRepository cajeroRepository;
     private final DetalleCajeroService detalleCajeroService;
     private final RedisTemplate<String, DatosSesiones> redisTemplate;
+    @Autowired
+    private TercerosRepository tercerosRepository;
 
     @Autowired
     public PedidoServiceImpl(PedidoRepository pedidoRepository,
@@ -143,6 +146,16 @@ public class PedidoServiceImpl implements PedidoService {
         pedido.setTotalPedido(subtotal.subtract(retefuente).subtract(reteiva).subtract(reteica));
 
         Pedido guardado = pedidoRepository.save(pedido);
+
+        // Actualizar último movimiento del cliente
+        try {
+            if (pedidoDTO.getClienteId() != null) {
+                tercerosRepository.actualizarUltimoMovimiento(
+                        pedidoDTO.getClienteId().intValue(), java.time.LocalDateTime.now());
+            }
+        } catch (Exception ex) {
+            System.out.println("[UltimoMovimiento] Error actualizando cliente pedido: " + ex.getMessage());
+        }
 
         final PedidoDTO pedidocreado= pedidoMapper.toDto(guardado);
 
