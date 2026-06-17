@@ -22,11 +22,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.pazzioliweb.commonbacken.events.MovimientoRegistradoEvent;
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
+import org.springframework.context.ApplicationEventPublisher;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
@@ -89,6 +91,8 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
     @Autowired
     private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
     @PersistenceContext
     private EntityManager entityManager;
     @Override
@@ -230,6 +234,17 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         // ── Asiento contable para entrada/salida manual de inventario ──
         // Traslado entre bodegas (TRASLADO) no genera asiento (neto cero).
         generarAsientoMovimientoInventario(movimiento, total);
+
+        // ── Broadcast WebSocket: notifica a todos los clientes conectados
+        // que el comprobante cambió (consecutivo avanzó). AFTER_COMMIT via evento.
+        if (movimiento.getComprobante() != null) {
+            eventPublisher.publishEvent(new MovimientoRegistradoEvent(
+                this,
+                movimiento.getComprobante().getId(),
+                movimiento.getMovimientoId(),
+                movimiento.getTipo() != null ? movimiento.getTipo().name() : null
+            ));
+        }
 
         return mapper.toResponse(movimiento, detalles);
     }

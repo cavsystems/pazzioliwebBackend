@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.pazzioliweb.tercerosmodule.dtos.SaldoTerceroDTO;
 import com.pazzioliweb.tercerosmodule.dtos.TerceroDTO;
 import com.pazzioliweb.tercerosmodule.dtos.TerceroDtoresponse;
 import com.pazzioliweb.tercerosmodule.dtos.TerceroResumenDTO;
@@ -243,4 +244,20 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 
 	@Query("SELECT COUNT(t) FROM Terceros t WHERE t.ultimoMovimiento IS NULL OR t.ultimoMovimiento < :fechaLimite")
 	long countSinActividad(@Param("fechaLimite") java.time.LocalDateTime fechaLimite);
+
+	@Query(value = """
+			SELECT t.razon_social AS razonSocial, t.tercero_id AS terceroId, SUM(c.saldo) AS saldo, 'Pagar' AS tipo
+			FROM cuentas_por_pagar c
+			JOIN terceros t ON c.proveedor_id = t.tercero_id
+			WHERE c.estado = 'PENDIENTE'
+			GROUP BY t.tercero_id, t.razon_social
+			UNION ALL
+			SELECT t.razon_social AS razonSocial, t.tercero_id AS terceroId, SUM(c.saldo) AS saldo, 'Cobrar' AS tipo
+			FROM cuentas_por_cobrar c
+			JOIN ventas v ON c.venta_id = v.id
+			JOIN terceros t ON t.tercero_id = v.cliente_id
+			WHERE c.estado = 'PENDIENTE'
+			GROUP BY t.tercero_id, t.razon_social
+			""", nativeQuery = true)
+	List<SaldoTerceroDTO> consultarSaldosPendientesPorTercero();
 }
