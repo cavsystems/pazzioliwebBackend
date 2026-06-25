@@ -1,10 +1,12 @@
 package com.pazzioliweb.comprobantesmodule.service;
 
+import com.pazzioliweb.commonbacken.events.ConsecutivoIncrementadoEvent;
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,9 +43,12 @@ public class AsignacionComprobanteService {
             );
 
     private final ComprobanteContableRepository repo;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public AsignacionComprobanteService(ComprobanteContableRepository repo) {
+    public AsignacionComprobanteService(ComprobanteContableRepository repo,
+                                         ApplicationEventPublisher eventPublisher) {
         this.repo = repo;
+        this.eventPublisher = eventPublisher;
     }
 
     /** Excepción específica cuando la resolución DIAN está vencida o se agotó el rango. */
@@ -77,6 +82,11 @@ public class AsignacionComprobanteService {
 
         c.setSiguienteConsecutivo(consecutivo + 1);
         repo.save(c);
+
+        // Publicar evento de WebSocket para notificar incremento de consecutivo
+        eventPublisher.publishEvent(new ConsecutivoIncrementadoEvent(
+            this, c.getId(), tipo.name(), consecutivo + 1
+        ));
 
         String numero = c.getPrefijo() + "-" + consecutivo;
         return new Resultado(c, numero, consecutivo);

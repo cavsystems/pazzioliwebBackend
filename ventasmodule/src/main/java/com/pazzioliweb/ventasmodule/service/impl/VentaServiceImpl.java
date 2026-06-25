@@ -44,6 +44,7 @@ import com.pazzioliweb.ventasmodule.repository.CuentaPorCobrarRepository;
 import com.pazzioliweb.ventasmodule.service.CuentaPorCobrarService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -1055,7 +1056,7 @@ public class VentaServiceImpl implements VentaService {
     public List<VentaDTO> getVentasByFiltros(String numeroventa,Long terceroId, Integer vendedorId, Integer cajeroId,
                                              LocalDate fechaInicio, LocalDate fechaFin) {
         return ventaRepository
-                .findAll(VentaSpecification.conFiltros(numeroventa,terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
+                .findAll(VentaSpecification.conFiltros(numeroventa,terceroId, vendedorId, cajeroId, fechaInicio, fechaFin), Sort.by(Sort.Direction.DESC, "fechaCreacion"))
                 .stream()
                 .map(ventaMapper::toDto)
                 .collect(Collectors.toList());
