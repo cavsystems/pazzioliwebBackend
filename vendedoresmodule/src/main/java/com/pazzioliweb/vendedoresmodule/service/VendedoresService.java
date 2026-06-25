@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import com.pazzioliweb.productosmodule.entity.Bodegas;
+import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorCreateRequest;
@@ -28,12 +30,14 @@ public class VendedoresService {
 	private final VendedoresRepository vendedorRepository;
 	private final UsuarioVendedorRepository usuarioVendedorRepository;
 	private final UsuarioRepository usuarioRepository;
+	private final BodegasRepository bodegasRepository;
 	
 	@Autowired
-	public VendedoresService(VendedoresRepository vendedorRepository, UsuarioVendedorRepository usuarioVendedorRepository, UsuarioRepository usuarioRepository) {
+	public VendedoresService(VendedoresRepository vendedorRepository, UsuarioVendedorRepository usuarioVendedorRepository, UsuarioRepository usuarioRepository, BodegasRepository bodegasRepository) {
 		this.vendedorRepository = vendedorRepository;
 		this.usuarioVendedorRepository = usuarioVendedorRepository;
 		this.usuarioRepository = usuarioRepository;
+		this.bodegasRepository = bodegasRepository;
 	}
 	
 	public Page<VendedorDTO> listar(int page, int size, String sortField, String sortDirection){
@@ -45,7 +49,7 @@ public class VendedoresService {
     	Page<Object[]> results = vendedorRepository.listarVendedoresDTO(pageable);
     	
     	List<VendedorDTO> dtoList = results.getContent().stream().map(row -> {
-    		java.sql.Date sqlDate = (java.sql.Date) row[6];
+    		java.sql.Date sqlDate = (java.sql.Date) row[11];
     		java.time.LocalDate localDate = sqlDate != null ? sqlDate.toLocalDate() : null;
     		
     		return new VendedorDTO(
@@ -53,12 +57,19 @@ public class VendedoresService {
     			(String) row[1],            // nombre
     			(String) row[2],            // direccion
     			(String) row[3],            // telefono
-    			(String) row[4],            // estado
-    			(Integer) row[5],           // codigo_usuario_creo
+    			(String) row[4],            // identificacion
+    			(String) row[5],            // correo
+    			(Double) row[6],            // comision
+    			(Double) row[7],            // meta_ventas
+    			(String) row[8],            // tipo_vendedor
+    			(String) row[9],            // estado
+    			(Integer) row[10],           // codigo_usuario_creo
     			localDate,                  // fechacreado
-    			(Integer) row[7],           // usuarioCodigo (can be null)
-    			(String) row[8],            // usuarioNombre (can be null)
-    			(String) row[9]             // rolNombre (can be null)
+    			(Integer) row[12],          // usuarioCodigo (can be null)
+    			(String) row[13],           // usuarioNombre (can be null)
+    			(String) row[14],           // rolNombre (can be null)
+    			(Integer) row[15],          // bodegaId (can be null)
+    			(String) row[16]            // bodegaNombre (can be null)
     		);
     	}).collect(Collectors.toList());
     	
@@ -80,10 +91,23 @@ public class VendedoresService {
 		vendedor.setNombre(request.getNombre());
 		vendedor.setDireccion(request.getDireccion());
 		vendedor.setTelefono(request.getTelefono());
+		vendedor.setIdentificacion(request.getIdentificacion());
+		vendedor.setCorreo(request.getCorreo());
+		vendedor.setComision(request.getComision() != null ? request.getComision() : 0.0);
+		vendedor.setMeta_ventas(request.getMeta_ventas() != null ? request.getMeta_ventas() : 0.0);
+		vendedor.setTipo_vendedor(request.getTipo_vendedor() != null ? 
+			Vendedores.TipoVendedor.valueOf(request.getTipo_vendedor().toUpperCase()) : Vendedores.TipoVendedor.INTERNO);
 		vendedor.setEstado(Vendedores.Estado.valueOf(request.getEstado()));
 		vendedor.setCodigo_usuario_creo(0); // Ajustar según lógica de negocio
 		vendedor.setFechacreado(java.time.LocalDate.now());
-		
+
+		// Si bodegaId es diferente de null y diferente de 0, asignar la bodega
+		if (request.getBodegaId() != null && request.getBodegaId() != 0) {
+			Bodegas bodega = bodegasRepository.findById(request.getBodegaId())
+				.orElseThrow(() -> new RuntimeException("bodega no encontrada"));
+			vendedor.setBodega(bodega);
+		}
+
 		// Guardar el vendedor primero
 		Vendedores vendedorGuardado = vendedorRepository.save(vendedor);
 		
@@ -112,8 +136,16 @@ public class VendedoresService {
         return vendedorRepository.save(vendedor);
     }
 
+    @jakarta.transaction.Transactional
     public void eliminar(Integer id) {
-    	vendedorRepository.deleteById(id);
+        Long registros = vendedorRepository.contarRegistrosAsociados(id);
+        if (registros != null && registros > 0) {
+            throw new RuntimeException(
+                "El vendedor tiene registros asociados en ventas, pedidos, cotizaciones o facturas y no puede eliminarse"
+            );
+        }
+        usuarioVendedorRepository.deleteByVendedorId(id);
+        vendedorRepository.deleteById(id);
     }
 
     public Vendedores actualizarVendedor(Integer id, VendedorUpdateRequest request) {
@@ -125,6 +157,15 @@ public class VendedoresService {
         vendedor.setDireccion(request.getDireccion());
         vendedor.setTelefono(request.getTelefono());
         vendedor.setEstado(Vendedores.Estado.valueOf(request.getEstado()));
+
+        // Manejar la relación con la bodega
+        if (request.getBodegaId() != null && request.getBodegaId() != 0) {
+            Bodegas bodega = bodegasRepository.findById(request.getBodegaId())
+                    .orElseThrow(() -> new RuntimeException("bodega no encontrada"));
+            vendedor.setBodega(bodega);
+        } else {
+            vendedor.setBodega(null);
+        }
 
         // Manejar la relación con el usuario
         if (request.getUsuarioid() != null && request.getUsuarioid() != 0) {

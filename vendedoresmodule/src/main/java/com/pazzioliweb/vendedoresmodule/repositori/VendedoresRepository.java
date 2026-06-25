@@ -11,23 +11,44 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
-public interface VendedoresRepository extends JpaRepository<Vendedores, Integer>{
+public interface VendedoresRepository extends JpaRepository<Vendedores, Integer> {
+
+	@Query(value = """
+	           SELECT (
+	               SELECT COUNT(*) FROM pedidos     WHERE vendedor_id = :vendedorId
+	           ) + (
+	               SELECT COUNT(*) FROM ventas       WHERE vendedor_id = :vendedorId
+	           ) + (
+	               SELECT COUNT(*) FROM cotizaciones WHERE vendedor_id = :vendedorId
+	           ) + (
+	               SELECT COUNT(*) FROM facturas     WHERE vendedor_id = :vendedorId
+	           ) AS total
+	           """, nativeQuery = true)
+	Long contarRegistrosAsociados(@Param("vendedorId") Integer vendedorId);
 	@Query(value = """
 	           SELECT DISTINCT 
 	               v.vendedor_id,
 	               v.nombre,
 	               v.direccion,
 	               v.telefono,
+	               v.identificacion,
+	               v.correo,
+	               v.comision,
+	               v.meta_ventas,
+	               v.tipo_vendedor,
 	               v.estado,
 	               v.codigo_usuario_creo,
 	               v.fechacreado,
 	               u.codigo,
 	               u.nombre,
-	               r.nombre
+	               r.nombre,
+	               b.codigo,
+	               b.nombre
 	           FROM vendedores v
 	           LEFT JOIN usuarios_vendedor uv ON v.vendedor_id = uv.vendedor_id
 	           LEFT JOIN usuarios u ON uv.usuario_id = u.codigo
 	           LEFT JOIN roles r ON u.codigorol = r.codigo
+	           LEFT JOIN bodegas b ON v.bodega_id = b.codigo
 	           """,
 	           nativeQuery = true)
 	Page<Object[]> listarVendedoresDTO(Pageable pageable);

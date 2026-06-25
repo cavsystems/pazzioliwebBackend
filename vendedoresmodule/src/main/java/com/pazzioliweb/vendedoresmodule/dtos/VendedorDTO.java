@@ -7,6 +7,11 @@ public class VendedorDTO {
 	private String nombre;
 	private String direccion;
 	private String telefono;
+	private String identificacion;
+	private String correo;
+	private Double comision;
+	private Double meta_ventas;
+	private String tipo_vendedor;
 	private String estado;
 	private Integer codigo_usuario_creo;
 	private LocalDate fechacreado;
@@ -16,19 +21,32 @@ public class VendedorDTO {
 	private String usuarioNombre;
 	private String rolNombre;
 
-	public VendedorDTO(Integer vendedor_id, String nombre, String direccion, String telefono, 
+	// Campo de bodega
+	private Integer bodegaId;
+	private String bodegaNombre;
+
+	public VendedorDTO(Integer vendedor_id, String nombre, String direccion, String telefono,
+	                   String identificacion, String correo, Double comision, Double meta_ventas, String tipo_vendedor,
 	                   String estado, Integer codigo_usuario_creo, LocalDate fechacreado,
-	                   Integer usuarioCodigo, String usuarioNombre, String rolNombre) {
+	                   Integer usuarioCodigo, String usuarioNombre, String rolNombre,
+	                   Integer bodegaId, String bodegaNombre) {
 		this.vendedor_id = vendedor_id;
 		this.nombre = nombre;
 		this.direccion = direccion;
 		this.telefono = telefono;
+		this.identificacion = identificacion;
+		this.correo = correo;
+		this.comision = comision;
+		this.meta_ventas = meta_ventas;
+		this.tipo_vendedor = tipo_vendedor;
 		this.estado = estado;
 		this.codigo_usuario_creo = codigo_usuario_creo;
 		this.fechacreado = fechacreado;
 		this.usuarioCodigo = usuarioCodigo;
 		this.usuarioNombre = usuarioNombre;
 		this.rolNombre = rolNombre;
+		this.bodegaId = bodegaId;
+		this.bodegaNombre = bodegaNombre;
 	}
 
 	public Integer getVendedor_id() {
@@ -61,6 +79,46 @@ public class VendedorDTO {
 
 	public void setTelefono(String telefono) {
 		this.telefono = telefono;
+	}
+
+	public String getIdentificacion() {
+		return identificacion;
+	}
+
+	public void setIdentificacion(String identificacion) {
+		this.identificacion = identificacion;
+	}
+
+	public String getCorreo() {
+		return correo;
+	}
+
+	public void setCorreo(String correo) {
+		this.correo = correo;
+	}
+
+	public Double getComision() {
+		return comision;
+	}
+
+	public void setComision(Double comision) {
+		this.comision = comision;
+	}
+
+	public Double getMeta_ventas() {
+		return meta_ventas;
+	}
+
+	public void setMeta_ventas(Double meta_ventas) {
+		this.meta_ventas = meta_ventas;
+	}
+
+	public String getTipo_vendedor() {
+		return tipo_vendedor;
+	}
+
+	public void setTipo_vendedor(String tipo_vendedor) {
+		this.tipo_vendedor = tipo_vendedor;
 	}
 
 	public String getEstado() {
@@ -109,5 +167,21 @@ public class VendedorDTO {
 
 	public void setRolNombre(String rolNombre) {
 		this.rolNombre = rolNombre;
+	}
+
+	public Integer getBodegaId() {
+		return bodegaId;
+	}
+
+	public void setBodegaId(Integer bodegaId) {
+		this.bodegaId = bodegaId;
+	}
+
+	public String getBodegaNombre() {
+		return bodegaNombre;
+	}
+
+	public void setBodegaNombre(String bodegaNombre) {
+		this.bodegaNombre = bodegaNombre;
 	}
 }

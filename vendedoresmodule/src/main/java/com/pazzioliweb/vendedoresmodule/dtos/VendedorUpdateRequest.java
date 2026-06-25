@@ -7,7 +7,9 @@ import lombok.Data;
 public class VendedorUpdateRequest {
     
     private Integer usuarioid;
-    
+
+    private Integer bodegaId;
+
     @NotBlank(message = "El nombre es obligatorio")
     private String nombre;
     

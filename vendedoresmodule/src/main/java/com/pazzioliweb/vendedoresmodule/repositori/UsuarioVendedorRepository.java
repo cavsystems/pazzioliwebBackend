@@ -4,6 +4,7 @@ import com.pazzioliweb.vendedoresmodule.entity.Usuariosvendedor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -42,4 +43,8 @@ public interface UsuarioVendedorRepository extends JpaRepository<Usuariosvendedo
      */
     @Query("SELECT uv FROM Usuariosvendedor uv WHERE uv.usuario.codigo = :usuarioCodigo AND uv.vendedor.vendedor_id = :vendedorId")
     Optional<Usuariosvendedor> findByUsuarioCodigoAndVendedorVendedorId(@Param("usuarioCodigo") Integer usuarioCodigo, @Param("vendedorId") Integer vendedorId);
+
+    @Modifying
+    @Query("DELETE FROM Usuariosvendedor uv WHERE uv.vendedor.vendedor_id = :vendedorId")
+    void deleteByVendedorId(@Param("vendedorId") Integer vendedorId);
 }

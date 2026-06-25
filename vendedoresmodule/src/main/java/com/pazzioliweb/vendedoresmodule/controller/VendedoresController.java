@@ -97,10 +97,16 @@ public class VendedoresController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
+    public ResponseEntity<?> eliminar(@PathVariable Integer id) {
         if (vendedorService.buscarPorId(id).isPresent()) {
-        	vendedorService.eliminar(id);
-            return ResponseEntity.noContent().build();
+            try {
+                vendedorService.eliminar(id);
+                return ResponseEntity.noContent().build();
+            } catch (RuntimeException e) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", e.getMessage());
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+            }
         }
         return ResponseEntity.notFound().build();
     }

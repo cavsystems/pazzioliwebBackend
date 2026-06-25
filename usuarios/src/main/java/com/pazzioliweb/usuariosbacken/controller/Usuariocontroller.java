@@ -496,7 +496,7 @@ public class Usuariocontroller {
 			response.put("mensaje", "Usuario eliminado correctamente");
 			return ResponseEntity.ok(response);
 		} catch (org.springframework.dao.DataIntegrityViolationException e) {
-			response.put("mensaje", "Este usuario no puede ser eliminado, tiene movimientos asociados");
+			response.put("mensaje", "Este vendedor tiene registros asociados y no puede ser eliminado");
 			return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
 		}
 	}

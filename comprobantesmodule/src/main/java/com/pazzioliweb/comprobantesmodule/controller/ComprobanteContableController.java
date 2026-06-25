@@ -85,6 +85,11 @@ public class ComprobanteContableController {
                     body.put("prefijo", c.getPrefijo());
                     body.put("siguienteConsecutivo", c.getSiguienteConsecutivo());
                     body.put("resolucionDian", c.getResolucionDian());
+
+                    body.put("fechaInicioResolucion", c.getFechaInicioResolucion());
+                    body.put("fechaFinResolucion", c.getFechaFinResolucion());
+                    body.put("consecutivoDesde", c.getConsecutivoDesde());
+                    body.put("consecutivoHasta", c.getConsecutivoHasta());
                     body.put("numeroPreview", c.getPrefijo() + "-" + c.getSiguienteConsecutivo());
 
                     // Validación de cajero (si el frontend mandó el id)
