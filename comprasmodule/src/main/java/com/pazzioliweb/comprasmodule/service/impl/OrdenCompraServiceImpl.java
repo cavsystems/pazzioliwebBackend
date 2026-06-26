@@ -725,9 +725,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         orden.setTotalOrdenCompra(request.getOrden_compra().getTotalOrdenCompra());
 
         // Retenciones aplicadas al proveedor (la empresa es agente retenedor).
-        orden.setRetefuente(parseMoneyOrZero(request.getOrden_compra().getRetefuente()));
-        orden.setReteiva(parseMoneyOrZero(request.getOrden_compra().getReteiva()));
-        orden.setReteica(parseMoneyOrZero(request.getOrden_compra().getReteica()));
+        orden.setRetefuente(request.getOrden_compra().getRetefuente() != null ? request.getOrden_compra().getRetefuente() : BigDecimal.ZERO);
+        orden.setReteiva(request.getOrden_compra().getReteiva() != null ? request.getOrden_compra().getReteiva() : BigDecimal.ZERO);
+        orden.setReteica(request.getOrden_compra().getReteica() != null ? request.getOrden_compra().getReteica() : BigDecimal.ZERO);
 
         // Set proveedor
         orden.setProveedor(tercerosRepository.findById(request.getProvedor().getTerceroId())
@@ -997,10 +997,11 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         orden.setIva(request.getOrden_compra().getIva());
         orden.setDescuentos(request.getOrden_compra().getDescuentos());
         orden.setTotalOrdenCompra(request.getOrden_compra().getTotalOrdenCompra());
-        orden.setRetefuente(parseMoneyOrZero(request.getOrden_compra().getRetefuente()));
-        orden.setReteiva(parseMoneyOrZero(request.getOrden_compra().getReteiva()));
-        orden.setReteica(parseMoneyOrZero(request.getOrden_compra().getReteica()));
+        orden.setRetefuente(request.getOrden_compra().getRetefuente() != null ? request.getOrden_compra().getRetefuente() : BigDecimal.ZERO);
+        orden.setReteiva(request.getOrden_compra().getReteiva() != null ? request.getOrden_compra().getReteiva() : BigDecimal.ZERO);
+        orden.setReteica(request.getOrden_compra().getReteica() != null ? request.getOrden_compra().getReteica() : BigDecimal.ZERO);
         orden.setCajeroId(request.getCajeroId());
+        orden.setPlazo(request.getPlazo());
 
         orden.setProveedor(tercerosRepository.findById(request.getProvedor().getTerceroId())
                 .orElseThrow(() -> new OrdenCompraException("Proveedor no encontrado")));
@@ -1441,9 +1442,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             if (oc.getIva() != null)               orden.setIva(oc.getIva());
             if (oc.getDescuentos() != null)        orden.setDescuentos(oc.getDescuentos());
             if (oc.getTotalOrdenCompra() != null)  orden.setTotalOrdenCompra(oc.getTotalOrdenCompra());
-            orden.setRetefuente(parseMoneyOrZero(oc.getRetefuente()));
-            orden.setReteiva(parseMoneyOrZero(oc.getReteiva()));
-            orden.setReteica(parseMoneyOrZero(oc.getReteica()));
+            orden.setRetefuente(oc.getRetefuente() != null ? oc.getRetefuente() : BigDecimal.ZERO);
+            orden.setReteiva(oc.getReteiva() != null ? oc.getReteiva() : BigDecimal.ZERO);
+            orden.setReteica(oc.getReteica() != null ? oc.getReteica() : BigDecimal.ZERO);
+        }
+
+        if (request.getPlazo() != null) {
+            orden.setPlazo(request.getPlazo());
         }
 
         // 3. Reemplazar detalles (items)
