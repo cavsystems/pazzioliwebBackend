@@ -205,7 +205,6 @@ public class VentaServiceImpl implements VentaService {
 
         Venta venta = ventaMapper.toEntity(ventaDTO);
         venta.setEstado("PENDIENTE");
-        venta.setFechaCreacion(LocalDate.now());
 
         // Resolver relaciones desde IDs
         Terceros cliente = tercerosRepository.findById(ventaDTO.getClienteId().intValue())

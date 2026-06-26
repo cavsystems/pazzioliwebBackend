@@ -7,6 +7,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.pazzioliweb.cajerosmodule.entity.Cajero;
@@ -82,8 +83,8 @@ public class Venta {
     @Column(name = "usuario_creacion", nullable = false)
     private String usuarioCreacion;
 
-    @Column(name = "fecha_creacion", nullable = false)
-    private LocalDate fechaCreacion = LocalDate.now();
+    @Column(name = "fecha_creacion", nullable = false, insertable = false)
+    private LocalDateTime fechaCreacion;
 
     /** Comprobante contable usado para generar el número de venta (FC o VC). */
     @ManyToOne(fetch = FetchType.LAZY)
