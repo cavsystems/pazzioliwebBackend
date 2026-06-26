@@ -19,6 +19,7 @@ public class CrearReciboCajaDTO {
     private BigDecimal fletes = BigDecimal.ZERO;
     private Integer cajeroId;
     private Integer usuarioId;
+    private Integer vendedorId;
     private List<DetalleCobroDTO> cuentas;
     private Boolean conceptoAbierto = false;
     private BigDecimal montoConceptoAbierto;

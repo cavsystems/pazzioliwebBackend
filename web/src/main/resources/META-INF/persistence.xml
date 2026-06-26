@@ -91,6 +91,7 @@
         <class>com.pazzioliweb.comprasmodule.entity.CuentaPorPagar</class>
         <class>com.pazzioliweb.comprasmodule.entity.Legalizacion</class>
         <class>com.pazzioliweb.comprasmodule.entity.ConfiguracionCompras</class>
+        <class>com.pazzioliweb.comprasmodule.entity.ManifestoImportacion</class>
         <!-- Ventas -->
         <class>com.pazzioliweb.ventasmodule.entity.DetalleVenta</class>
         <class>com.pazzioliweb.ventasmodule.entity.Devolucion</class>

@@ -112,16 +112,12 @@ public class ComprobanteEgresoService {
         }
 
         if (esConceptoAbierto) {
-            if (dto.getConceptoAbiertoId() == null) {
-                throw new RuntimeException("Debe seleccionar un concepto abierto registrado");
-            }
             if (dto.getMontoConceptoAbierto() == null || dto.getMontoConceptoAbierto().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new RuntimeException("El monto del concepto abierto debe ser mayor a 0");
             }
             boolean tieneTercero = dto.getTerceroId() != null;
             boolean tieneBeneficiario =
-                    dto.getBeneficiarioNombre() != null && !dto.getBeneficiarioNombre().isBlank()
-                    && dto.getBeneficiarioDocumento() != null && !dto.getBeneficiarioDocumento().isBlank();
+                    dto.getBeneficiarioNombre() != null && !dto.getBeneficiarioNombre().isBlank();
             if (!tieneTercero && !tieneBeneficiario) {
                 throw new RuntimeException("Para concepto abierto debe registrar el tercero o el nombre y documento del beneficiario");
             }
@@ -172,19 +168,24 @@ public class ComprobanteEgresoService {
             egreso.setCuentaContable(cc);
         }
 
-        if (esConceptoAbierto) {
-            ConceptoAbierto ca = conceptoAbiertoRepository.findById(dto.getConceptoAbiertoId())
-                    .orElseThrow(() -> new RuntimeException("Concepto abierto no encontrado: " + dto.getConceptoAbiertoId()));
-            String tipoCa = ca.getTipo() == null ? "" : ca.getTipo().toUpperCase();
-            if (!"EGRESO".equals(tipoCa) && !"AMBOS".equals(tipoCa)) {
-                throw new RuntimeException("El concepto seleccionado no aplica para comprobantes de egreso");
+        if (esConceptoAbierto && dto.getConceptoAbiertoId() != null) {
+            java.util.Optional<ConceptoAbierto> caOpt = conceptoAbiertoRepository.findById(dto.getConceptoAbiertoId());
+            if (caOpt.isPresent()) {
+                ConceptoAbierto ca = caOpt.get();
+                String tipoCa = ca.getTipo() == null ? "" : ca.getTipo().toUpperCase();
+                if (!"EGRESO".equals(tipoCa) && !"AMBOS".equals(tipoCa)) {
+                    throw new RuntimeException("El concepto seleccionado no aplica para comprobantes de egreso");
+                }
+                egreso.setConceptoAbiertoRef(ca);
+                if (egreso.getConcepto() == null || egreso.getConcepto().isBlank()) {
+                    egreso.setConcepto(ca.getDescripcion());
+                }
+                if (egreso.getCuentaContable() == null && ca.getCuentaContable() != null) {
+                    egreso.setCuentaContable(ca.getCuentaContable());
+                }
             }
-            egreso.setConceptoAbiertoRef(ca);
-            egreso.setConcepto(dto.getConcepto() != null && !dto.getConcepto().isBlank()
-                    ? dto.getConcepto() : ca.getDescripcion());
-            if (egreso.getCuentaContable() == null && ca.getCuentaContable() != null) {
-                egreso.setCuentaContable(ca.getCuentaContable());
-            }
+        } else if (esConceptoAbierto) {
+            // No concept category selected — just use the provided concepto text
         }
 
         // Tercero (solo si NO es concepto abierto)
@@ -545,6 +546,12 @@ public class ComprobanteEgresoService {
     @Transactional(readOnly = true)
     public List<ComprobanteEgresoResponseDTO> listarTodos() {
         return egresoRepository.findAllByOrderByFechaCreacionDesc().stream()
+                .map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ComprobanteEgresoResponseDTO> listarPorFechas(LocalDate desde, LocalDate hasta) {
+        return egresoRepository.findByFechaEgresoRango(desde, hasta).stream()
                 .map(this::toResponse).collect(Collectors.toList());
     }
 
