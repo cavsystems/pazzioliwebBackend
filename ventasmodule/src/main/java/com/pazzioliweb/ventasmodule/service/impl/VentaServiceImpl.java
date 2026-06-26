@@ -47,6 +47,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -199,6 +200,14 @@ public class VentaServiceImpl implements VentaService {
             BigDecimal cantidadVendida = BigDecimal.valueOf(detalleDTO.getCantidad());
             if (existencia.getExistencia().compareTo(cantidadVendida) < 0) {
                 throw new VentaException("Stock insuficiente para " + detalleDTO.getCodigoProducto() + ". Disponible: " + existencia.getExistencia() + ", Solicitado: " + cantidadVendida);
+            }
+
+            // Impedir venta por debajo del costo (item 9)
+            Double costo = variante.getProducto() != null ? variante.getProducto().getCosto() : null;
+            if (costo != null && costo > 0 && detalleDTO.getPrecioUnitario() != null
+                    && detalleDTO.getPrecioUnitario().doubleValue() < costo) {
+                throw new VentaException("El precio de venta (" + detalleDTO.getPrecioUnitario()
+                        + ") está por debajo del costo (" + costo + ") para el producto: " + detalleDTO.getCodigoProducto());
             }
         }
 
@@ -1055,7 +1064,10 @@ public class VentaServiceImpl implements VentaService {
     public List<VentaDTO> getVentasByFiltros(String numeroventa,Long terceroId, Integer vendedorId, Integer cajeroId,
                                              LocalDate fechaInicio, LocalDate fechaFin) {
         return ventaRepository
-                .findAll(VentaSpecification.conFiltros(numeroventa,terceroId, vendedorId, cajeroId, fechaInicio, fechaFin))
+                .findAll(
+                    VentaSpecification.conFiltros(numeroventa, terceroId, vendedorId, cajeroId, fechaInicio, fechaFin),
+                    Sort.by(Sort.Direction.DESC, "fechaEmision")
+                )
                 .stream()
                 .map(ventaMapper::toDto)
                 .collect(Collectors.toList());
