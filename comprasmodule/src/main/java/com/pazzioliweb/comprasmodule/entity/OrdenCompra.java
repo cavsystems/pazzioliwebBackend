@@ -100,5 +100,8 @@ public class OrdenCompra {
     @Column(name = "fecha_recibida")
     private LocalDateTime fechaRecibida;
 
+    @Column(name = "plazo")
+    private Integer plazo;
+
     // Getters y setters generados por Lombok
 }

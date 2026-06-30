@@ -79,6 +79,9 @@ public interface ReportesService {
     /** Cartera por antigüedad (aging buckets). */
     List<CarteraAgingDTO> getCarteraAging();
 
+    /** Cuentas por pagar por antigüedad (aging buckets). */
+    List<CarteraAgingDTO> getCuentasPorPagarAging();
+
     /** Productos activos que no han tenido ventas en el periodo. */
     List<ProductoSinMovimientoDTO> getProductosSinMovimiento(LocalDate inicio, LocalDate fin, int topN);
 
@@ -114,5 +117,8 @@ public interface ReportesService {
 
     /** Histórico mensual de ventas de un producto/sku. */
     List<HistoricoProductoDTO> getHistoricoProducto(String sku, LocalDate inicio, LocalDate fin);
+
+    /** Comparativa mensual facturación vs recaudo. */
+    List<FacturacionVsRecaudoDTO> getFacturacionVsRecaudo(LocalDate inicio, LocalDate fin);
 }
 

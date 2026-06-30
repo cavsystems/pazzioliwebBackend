@@ -36,6 +36,8 @@ public class ReciboCajaResponseDTO {
     private BigDecimal montoConceptoAbierto;
     private Long conceptoAbiertoId;
     private String conceptoAbiertoDescripcion;
+    private Integer vendedorId;
+    private String vendedorNombre;
     private Integer cuentaContableId;
     private String cuentaContableCodigo;
     private String cuentaContableNombre;

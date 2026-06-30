@@ -3,6 +3,7 @@ D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\c
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\CuentaPorPagarService.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\OrdenCompraService.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\entity\DetalleOrdenCompra.java
+D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\OrdenCompraRecienteDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\repository\LegalizacionRepository.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\service\ConfiguracionComprasService.java
 D:\Pazzioli WEB\pazzioliwebBackend\comprasmodule\src\main\java\com\pazzioliweb\comprasmodule\dtos\DetalleOrdenCompraDTO.java

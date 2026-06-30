@@ -97,6 +97,10 @@ public class ReportesServiceImpl implements ReportesService {
         dto.setTotalCompras(repo.totalComprasPeriodo(inicio, fin));
         dto.setCuentasPorPagarPendientes(repo.cuentasPorPagarTotal());
 
+        // Tesorería
+        dto.setTotalRecaudos(repo.totalRecaudosPeriodo(inicio, fin));
+        dto.setClientesNuevos(repo.contarClientesNuevos(inicio, fin));
+
         return dto;
     }
 
@@ -634,6 +638,50 @@ public class ReportesServiceImpl implements ReportesService {
                     saldo,
                     pct
             ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CUENTAS POR PAGAR AGING
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<CarteraAgingDTO> getCuentasPorPagarAging() {
+        List<Object[]> rows = repo.cuentasPorPagarAging();
+        BigDecimal granTotal = rows.stream()
+                .map(r -> toBigDecimal(r[3]))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<CarteraAgingDTO> result = new ArrayList<>();
+        for (Object[] r : rows) {
+            BigDecimal saldo = toBigDecimal(r[3]);
+            double pct = granTotal.compareTo(BigDecimal.ZERO) > 0
+                    ? saldo.multiply(BigDecimal.valueOf(100))
+                    .divide(granTotal, 2, RoundingMode.HALF_UP).doubleValue()
+                    : 0.0;
+            result.add(new CarteraAgingDTO(
+                    str(r[0]),
+                    toInt(r[1]),
+                    toLong(r[2]),
+                    saldo,
+                    pct
+            ));
+        }
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // FACTURACIÓN VS RECAUDO
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<FacturacionVsRecaudoDTO> getFacturacionVsRecaudo(LocalDate inicio, LocalDate fin) {
+        List<FacturacionVsRecaudoDTO> result = new ArrayList<>();
+        for (Object[] r : repo.facturacionVsRecaudo(inicio, fin)) {
+            BigDecimal facturado  = toBigDecimal(r[1]);
+            BigDecimal recaudado  = toBigDecimal(r[2]);
+            BigDecimal diferencia = facturado.subtract(recaudado);
+            result.add(new FacturacionVsRecaudoDTO(str(r[0]), facturado, recaudado, diferencia));
         }
         return result;
     }

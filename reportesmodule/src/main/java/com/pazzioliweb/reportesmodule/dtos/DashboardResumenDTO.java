@@ -48,5 +48,9 @@ public class DashboardResumenDTO {
     // ── Compras ──
     private BigDecimal totalCompras;
     private BigDecimal cuentasPorPagarPendientes;
+
+    // ── Tesorería ──
+    private BigDecimal totalRecaudos;
+    private Long clientesNuevos;
 }
 

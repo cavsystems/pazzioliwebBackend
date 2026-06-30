@@ -6,6 +6,7 @@ import com.pazzioliweb.tesoreriamodule.service.ReciboCajaService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -42,9 +43,14 @@ public class ReciboCajaController {
         return ResponseEntity.ok(service.listarTodos());
     }
 
-    /** Lista todos los recibos de caja (alias para el frontend) */
+    /** Lista recibos de caja, con filtro opcional de fecha (desde/hasta por fechaRecibo). */
     @GetMapping("/listar")
-    public ResponseEntity<List<ReciboCajaResponseDTO>> listarAlias() {
+    public ResponseEntity<List<ReciboCajaResponseDTO>> listarAlias(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+        if (desde != null && !desde.isBlank() && hasta != null && !hasta.isBlank()) {
+            return ResponseEntity.ok(service.listarPorFechas(LocalDate.parse(desde), LocalDate.parse(hasta)));
+        }
         return ResponseEntity.ok(service.listarTodos());
     }
 

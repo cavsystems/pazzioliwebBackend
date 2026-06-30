@@ -32,6 +32,7 @@ public class OrdenCompraDTO {
     private BigDecimal retefuente;
     private BigDecimal reteiva;
     private BigDecimal reteica;
+    private Integer plazo;
     private String usuarioCreacion;
     private LocalDate fechaCreacion;
     

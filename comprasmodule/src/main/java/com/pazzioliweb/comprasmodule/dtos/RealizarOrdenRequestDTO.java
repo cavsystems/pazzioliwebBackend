@@ -65,9 +65,9 @@ public class RealizarOrdenRequestDTO {
         @JsonProperty("total_ordencompra")
         private BigDecimal totalOrdenCompra;
         private BigDecimal descuentos;
-        private String retefuente;
-        private String reteica;
-        private String reteiva;
+        private BigDecimal retefuente;
+        private BigDecimal reteica;
+        private BigDecimal reteiva;
         private BigDecimal descuento;
     }
 

@@ -748,6 +748,92 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
     List<Object[]> carteraAging();
 
     // ══════════════════════════════════════════════════════════════
+    // FACTURACIÓN VS RECAUDO — comparativa mensual
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                DATE_FORMAT(periodo, '%Y-%m')           AS periodo,
+                COALESCE(SUM(totalFacturado), 0)         AS totalFacturado,
+                COALESCE(SUM(totalRecaudado), 0)         AS totalRecaudado
+            FROM (
+                SELECT DATE(CONCAT(DATE_FORMAT(fecha_emision, '%Y-%m'), '-01')) AS periodo,
+                       COALESCE(total_venta, 0)  AS totalFacturado,
+                       0.0                        AS totalRecaudado
+                FROM ventas
+                WHERE estado = 'COMPLETADA'
+                  AND fecha_emision BETWEEN :inicio AND :fin
+                UNION ALL
+                SELECT DATE(CONCAT(DATE_FORMAT(fecha_recibo, '%Y-%m'), '-01')) AS periodo,
+                       0.0                        AS totalFacturado,
+                       COALESCE(total, 0)         AS totalRecaudado
+                FROM recibos_caja
+                WHERE estado != 'ANULADO'
+                  AND fecha_recibo BETWEEN :inicio AND :fin
+            ) combined
+            GROUP BY periodo
+            ORDER BY periodo
+            """, nativeQuery = true)
+    List<Object[]> facturacionVsRecaudo(@Param("inicio") LocalDate inicio,
+                                         @Param("fin") LocalDate fin);
+
+    // ══════════════════════════════════════════════════════════════
+    // CUENTAS POR PAGAR — antigüedad (aging buckets)
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                CASE
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) <= 0  THEN 'Al día'
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 1 AND 30  THEN '1-30 días'
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 31 AND 60 THEN '31-60 días'
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 61 AND 90 THEN '61-90 días'
+                    ELSE '>90 días'
+                END AS rangoEdad,
+                CASE
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) <= 0  THEN 0
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 1 AND 30  THEN 1
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 31 AND 60 THEN 2
+                    WHEN DATEDIFF(CURDATE(), fecha_vencimiento) BETWEEN 61 AND 90 THEN 3
+                    ELSE 4
+                END AS ordenRango,
+                COUNT(*)                AS cantidad,
+                COALESCE(SUM(saldo), 0) AS totalSaldo
+            FROM cuentas_por_pagar
+            WHERE estado IN ('PENDIENTE','PARCIAL')
+              AND saldo > 0
+            GROUP BY rangoEdad, ordenRango
+            ORDER BY ordenRango ASC
+            """, nativeQuery = true)
+    List<Object[]> cuentasPorPagarAging();
+
+    // ══════════════════════════════════════════════════════════════
+    // TOTAL RECAUDOS (Recibos de Caja) — suma del período
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT COALESCE(SUM(total), 0)
+            FROM recibos_caja
+            WHERE estado != 'ANULADO'
+              AND fecha_recibo BETWEEN :inicio AND :fin
+            """, nativeQuery = true)
+    BigDecimal totalRecaudosPeriodo(@Param("inicio") LocalDate inicio,
+                                    @Param("fin") LocalDate fin);
+
+    // ══════════════════════════════════════════════════════════════
+    // CLIENTES NUEVOS — creados en el período
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT COUNT(*)
+            FROM terceros
+            WHERE tipo LIKE '%CLIENTE%'
+              AND DATE(fecha_creacion) BETWEEN :inicio AND :fin
+            """, nativeQuery = true)
+    Long contarClientesNuevos(@Param("inicio") LocalDate inicio,
+                               @Param("fin") LocalDate fin);
+
+    // ══════════════════════════════════════════════════════════════
     // INVENTARIO COMPLETO — todas las existencias con detalle
     // ══════════════════════════════════════════════════════════════
 

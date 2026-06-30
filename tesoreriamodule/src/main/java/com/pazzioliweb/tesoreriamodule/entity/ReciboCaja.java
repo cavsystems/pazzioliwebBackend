@@ -104,6 +104,9 @@ public class ReciboCaja {
     @Column(name = "cajero_id")
     private Integer cajeroId;
 
+    @Column(name = "vendedor_id")
+    private Integer vendedorId;
+
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion = LocalDateTime.now();
 

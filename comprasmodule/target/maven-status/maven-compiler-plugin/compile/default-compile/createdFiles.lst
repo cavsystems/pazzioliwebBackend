@@ -9,6 +9,7 @@ com\pazzioliweb\comprasmodule\dtos\ItemRecibidoDTO.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$MetodoPagoCompraDTO.class
 com\pazzioliweb\comprasmodule\service\impl\CuentaPorPagarServiceImpl.class
 com\pazzioliweb\comprasmodule\service\impl\ProductoServiceImpl.class
+com\pazzioliweb\comprasmodule\dtos\OrdenCompraDTO$MetodoPagoOrdenDTO.class
 com\pazzioliweb\comprasmodule\mapper\OrdenCompraMapperImpl.class
 com\pazzioliweb\comprasmodule\dtos\LegalizacionRequestDTO.class
 com\pazzioliweb\comprasmodule\repository\ConfiguracionComprasRepository.class

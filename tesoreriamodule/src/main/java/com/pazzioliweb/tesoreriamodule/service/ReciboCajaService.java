@@ -119,19 +119,14 @@ public class ReciboCajaService {
         boolean esConceptoAbierto = Boolean.TRUE.equals(dto.getConceptoAbierto());
 
         if (esConceptoAbierto) {
-            if (dto.getConceptoAbiertoId() == null) {
-                throw new RuntimeException("Debe seleccionar un concepto abierto registrado");
-            }
             if (dto.getMontoConceptoAbierto() == null || dto.getMontoConceptoAbierto().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new RuntimeException("El monto del concepto abierto debe ser mayor a 0");
             }
-            // Trazabilidad obligatoria: o tercero, o nombre+documento del beneficiario
+            // Trazabilidad obligatoria: o tercero, o al menos nombre del beneficiario
             boolean tieneTercero = dto.getTerceroId() != null;
-            boolean tieneBeneficiario =
-                    dto.getBeneficiarioNombre() != null && !dto.getBeneficiarioNombre().isBlank()
-                    && dto.getBeneficiarioDocumento() != null && !dto.getBeneficiarioDocumento().isBlank();
+            boolean tieneBeneficiario = dto.getBeneficiarioNombre() != null && !dto.getBeneficiarioNombre().isBlank();
             if (!tieneTercero && !tieneBeneficiario) {
-                throw new RuntimeException("Para concepto abierto debe registrar el tercero o el nombre y documento del pagador");
+                throw new RuntimeException("Para concepto abierto debe registrar el tercero o el nombre del beneficiario");
             }
         } else {
             if (dto.getTerceroId() == null) {
@@ -169,6 +164,7 @@ public class ReciboCajaService {
         recibo.setCentroCosto(dto.getCentroCosto());
         recibo.setCajeroId(dto.getCajeroId());
         recibo.setUsuarioId(dto.getUsuarioId());
+        recibo.setVendedorId(dto.getVendedorId());
         recibo.setBeneficiarioNombre(dto.getBeneficiarioNombre());
         recibo.setBeneficiarioDocumento(dto.getBeneficiarioDocumento());
 
@@ -179,21 +175,18 @@ public class ReciboCajaService {
             recibo.setCuentaContable(cc);
         }
 
-        // Concepto abierto registrado (FK)
-        if (esConceptoAbierto) {
-            ConceptoAbierto ca = conceptoAbiertoRepository.findById(dto.getConceptoAbiertoId())
-                    .orElseThrow(() -> new RuntimeException("Concepto abierto no encontrado: " + dto.getConceptoAbiertoId()));
-            String tipoCa = ca.getTipo() == null ? "" : ca.getTipo().toUpperCase();
-            if (!"RECIBO".equals(tipoCa) && !"AMBOS".equals(tipoCa)) {
-                throw new RuntimeException("El concepto seleccionado no aplica para recibos de caja");
-            }
-            recibo.setConceptoAbiertoRef(ca);
-            // Persistimos también la descripción libre por compatibilidad con la columna concepto.
-            recibo.setConcepto(dto.getConcepto() != null && !dto.getConcepto().isBlank()
-                    ? dto.getConcepto() : ca.getDescripcion());
-            // Si el concepto trae cuenta contable y no se envió una explícita, usarla por defecto.
-            if (recibo.getCuentaContable() == null && ca.getCuentaContable() != null) {
-                recibo.setCuentaContable(ca.getCuentaContable());
+        // Concepto abierto registrado (FK, opcional desde que se eliminó el combobox)
+        if (esConceptoAbierto && dto.getConceptoAbiertoId() != null) {
+            java.util.Optional<ConceptoAbierto> caOpt = conceptoAbiertoRepository.findById(dto.getConceptoAbiertoId());
+            if (caOpt.isPresent()) {
+                ConceptoAbierto ca = caOpt.get();
+                recibo.setConceptoAbiertoRef(ca);
+                if (recibo.getConcepto() == null || recibo.getConcepto().isBlank()) {
+                    recibo.setConcepto(ca.getDescripcion());
+                }
+                if (recibo.getCuentaContable() == null && ca.getCuentaContable() != null) {
+                    recibo.setCuentaContable(ca.getCuentaContable());
+                }
             }
         }
 
@@ -574,6 +567,11 @@ public class ReciboCajaService {
     }
 
     @Transactional(readOnly = true)
+    public List<ReciboCajaResponseDTO> listarPorFechas(LocalDate desde, LocalDate hasta) {
+        return reciboRepository.findByFechaRango(desde, hasta).stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public ReciboCajaResponseDTO buscarPorId(Long id) {
         ReciboCaja recibo = reciboRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Recibo de caja no encontrado: " + id));
@@ -617,6 +615,11 @@ public class ReciboCajaService {
             dto.setCuentaContableId(r.getCuentaContable().getId());
             dto.setCuentaContableCodigo(r.getCuentaContable().getCodigo());
             dto.setCuentaContableNombre(r.getCuentaContable().getNombre());
+        }
+        dto.setVendedorId(r.getVendedorId());
+        if (r.getVendedorId() != null) {
+            reciboRepository.findVendedorNombreById(r.getVendedorId())
+                    .ifPresent(dto::setVendedorNombre);
         }
         dto.setFechaCreacion(r.getFechaCreacion());
         dto.setFechaAnulacion(r.getFechaAnulacion());

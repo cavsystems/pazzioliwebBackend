@@ -6,6 +6,7 @@ import com.pazzioliweb.tesoreriamodule.service.ComprobanteEgresoService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -42,9 +43,14 @@ public class ComprobanteEgresoController {
         return ResponseEntity.ok(service.listarTodos());
     }
 
-    /** Lista todos los comprobantes de egreso (alias para el frontend) */
+    /** Lista todos los comprobantes de egreso (alias para el frontend), con filtro opcional de fecha */
     @GetMapping("/listar")
-    public ResponseEntity<List<ComprobanteEgresoResponseDTO>> listarAlias() {
+    public ResponseEntity<List<ComprobanteEgresoResponseDTO>> listarAlias(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+        if (desde != null && !desde.isBlank() && hasta != null && !hasta.isBlank()) {
+            return ResponseEntity.ok(service.listarPorFechas(LocalDate.parse(desde), LocalDate.parse(hasta)));
+        }
         return ResponseEntity.ok(service.listarTodos());
     }
 

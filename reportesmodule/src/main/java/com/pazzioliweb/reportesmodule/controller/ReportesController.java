@@ -323,6 +323,27 @@ public class ReportesController {
     }
 
     // ════════════════════════════════════════════════
+    // 23b. CUENTAS POR PAGAR — ANTIGÜEDAD (aging buckets)
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/cuentas-por-pagar-aging")
+    public ResponseEntity<List<CarteraAgingDTO>> cuentasPorPagarAging() {
+        return ResponseEntity.ok(reportesService.getCuentasPorPagarAging());
+    }
+
+    // ════════════════════════════════════════════════
+    // FACTURACIÓN VS RECAUDO — comparativa mensual
+    // ════════════════════════════════════════════════
+
+    @GetMapping("/facturacion-vs-recaudo")
+    public ResponseEntity<List<FacturacionVsRecaudoDTO>> facturacionVsRecaudo(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] r = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getFacturacionVsRecaudo(r[0], r[1]));
+    }
+
+    // ════════════════════════════════════════════════
     // 24. PRODUCTOS SIN MOVIMIENTO (inventario inmovilizado)
     // ════════════════════════════════════════════════
 
