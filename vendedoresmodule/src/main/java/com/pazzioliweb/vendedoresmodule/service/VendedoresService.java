@@ -52,6 +52,10 @@ public class VendedoresService {
     		java.sql.Date sqlDate = (java.sql.Date) row[11];
     		java.time.LocalDate localDate = sqlDate != null ? sqlDate.toLocalDate() : null;
     		
+    		// Convert BigDecimal to Double for comision and meta_ventas
+    		java.math.BigDecimal comisionBigDecimal = (java.math.BigDecimal) row[6];
+    		java.math.BigDecimal metaVentasBigDecimal = (java.math.BigDecimal) row[7];
+    		
     		return new VendedorDTO(
     			(Integer) row[0],           // vendedor_id
     			(String) row[1],            // nombre
@@ -59,8 +63,8 @@ public class VendedoresService {
     			(String) row[3],            // telefono
     			(String) row[4],            // identificacion
     			(String) row[5],            // correo
-    			(Double) row[6],            // comision
-    			(Double) row[7],            // meta_ventas
+    			comisionBigDecimal != null ? comisionBigDecimal.doubleValue() : null,  // comision
+    			metaVentasBigDecimal != null ? metaVentasBigDecimal.doubleValue() : null,  // meta_ventas
     			(String) row[8],            // tipo_vendedor
     			(String) row[9],            // estado
     			(Integer) row[10],           // codigo_usuario_creo

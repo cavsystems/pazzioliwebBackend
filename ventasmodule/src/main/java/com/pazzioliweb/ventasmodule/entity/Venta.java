@@ -83,8 +83,15 @@ public class Venta {
     @Column(name = "usuario_creacion", nullable = false)
     private String usuarioCreacion;
 
-    @Column(name = "fecha_creacion", nullable = false, insertable = false)
+    @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion;
+
+    @PrePersist
+    protected void onCreate() {
+        if (fechaCreacion == null) {
+            fechaCreacion = LocalDateTime.now();
+        }
+    }
 
     /** Comprobante contable usado para generar el número de venta (FC o VC). */
     @ManyToOne(fetch = FetchType.LAZY)
