@@ -825,10 +825,18 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
     // ══════════════════════════════════════════════════════════════
 
     @Query(value = """
-            SELECT COUNT(*)
-            FROM terceros
-            WHERE tipo LIKE '%CLIENTE%'
-              AND DATE(fecha_creacion) BETWEEN :inicio AND :fin
+            SELECT COUNT(DISTINCT v.cliente_id)
+            FROM ventas v
+            JOIN terceros t ON v.cliente_id = t.tercero_id
+            WHERE t.clasificacion_tercero_id = 1
+              AND v.estado = 'COMPLETADA'
+              AND v.fecha_emision BETWEEN :inicio AND :fin
+              AND NOT EXISTS (
+                  SELECT 1 FROM ventas v2
+                  WHERE v2.cliente_id = v.cliente_id
+                    AND v2.estado = 'COMPLETADA'
+                    AND v2.fecha_emision < :inicio
+              )
             """, nativeQuery = true)
     Long contarClientesNuevos(@Param("inicio") LocalDate inicio,
                                @Param("fin") LocalDate fin);
