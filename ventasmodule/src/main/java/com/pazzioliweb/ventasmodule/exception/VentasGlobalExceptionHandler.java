@@ -48,5 +48,19 @@ public class VentasGlobalExceptionHandler {
         errorResponse.put("message", ex.getMessage());
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(FacturaPendienteException.class)
+    public ResponseEntity<Map<String, String>> handleFacturaPendienteException(FacturaPendienteException ex) {
+        Map<String, String> errorResponse = new HashMap<>();
+        errorResponse.put("message", ex.getMessage());
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(FacturaDevueltaException.class)
+    public ResponseEntity<Map<String, String>> handleFacturaDevueltaException(FacturaDevueltaException ex) {
+        Map<String, String> errorResponse = new HashMap<>();
+        errorResponse.put("message", ex.getMessage());
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
 }
 

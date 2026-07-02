@@ -34,6 +34,8 @@ import com.pazzioliweb.ventasmodule.dtos.VentaMetodoPagoDTO;
 import com.pazzioliweb.ventasmodule.entity.DetalleVenta;
 import com.pazzioliweb.ventasmodule.entity.Venta;
 import com.pazzioliweb.ventasmodule.entity.VentaMetodoPago;
+import com.pazzioliweb.ventasmodule.exception.FacturaDevueltaException;
+import com.pazzioliweb.ventasmodule.exception.FacturaPendienteException;
 import com.pazzioliweb.ventasmodule.exception.VentaException;
 import com.pazzioliweb.ventasmodule.mapper.VentaMapper;
 import com.pazzioliweb.ventasmodule.repository.VentaRepository;
@@ -1054,6 +1056,41 @@ public class VentaServiceImpl implements VentaService {
     @Override
     public List<VentaDTO> getVentasByFiltros(String numeroventa,Long terceroId, Integer vendedorId, Integer cajeroId,
                                              LocalDate fechaInicio, LocalDate fechaFin) {
+        // Si se busca por numeroVenta, aplicar lógica de fallback por estado
+        if (numeroventa != null) {
+            // 1. Buscar por estado COMPLETADA
+            List<Venta> ventasCompletadas = ventaRepository.findByNumeroVentaAndEstado(numeroventa, "COMPLETADA");
+            if (!ventasCompletadas.isEmpty()) {
+                return ventasCompletadas.stream()
+                        .map(ventaMapper::toDto)
+                        .collect(Collectors.toList());
+            }
+
+            // 2. Buscar por estado DEVUELTA_PARCIAL
+            List<Venta> ventasDevolucionParcial = ventaRepository.findByNumeroVentaAndEstado(numeroventa, "DEVOLUCION_PARCIAL");
+            if (!ventasDevolucionParcial.isEmpty()) {
+                return ventasDevolucionParcial.stream()
+                        .map(ventaMapper::toDto)
+                        .collect(Collectors.toList());
+            }
+
+            // 3. Buscar por estado PENDIENTE
+            List<Venta> ventasPendientes = ventaRepository.findByNumeroVentaAndEstado(numeroventa, "PENDIENTE");
+            if (!ventasPendientes.isEmpty()) {
+                throw new FacturaPendienteException("Factura de venta en estado pendiente");
+            }
+
+            // 4. Buscar por estado DEVUELTA
+            List<Venta> ventasDevueltas = ventaRepository.findByNumeroVentaAndEstado(numeroventa, "DEVUELTA");
+            if (!ventasDevueltas.isEmpty()) {
+                throw new FacturaDevueltaException("Factura ya devuelta");
+            }
+
+            // Si no se encontró en ningún estado, retornar lista vacía
+            return List.of();
+        }
+
+        // Si no se busca por numeroVenta, usar la lógica normal de filtros
         return ventaRepository
                 .findAll(VentaSpecification.conFiltros(numeroventa,terceroId, vendedorId, cajeroId, fechaInicio, fechaFin), Sort.by(Sort.Direction.DESC, "fechaCreacion"))
                 .stream()

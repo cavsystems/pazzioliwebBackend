@@ -34,6 +34,8 @@ public interface VentaRepository extends JpaRepository<Venta, Long>, JpaSpecific
 
     @Query("SELECT MAX(v.id) FROM Venta v")
     Long getUltimaVentaId();
+
+    List<Venta> findByNumeroVentaAndEstado(String numeroVenta, String estado);
 }
 
 

@@ -26,7 +26,7 @@ public interface DevolucionRepository extends JpaRepository<Devolucion, Long> {
            SELECT d FROM Devolucion d
            WHERE d.cajero.cajeroId = :cajeroId
              AND d.fechaCreacion BETWEEN :fechaInicio AND :fechaFin
-           ORDER BY d.fechaCreacion DESC, d.id DESC
+           ORDER BY d.fechaCreacion ASC, d.id ASC
            """)
     List<Devolucion> findByCajeroAndFechas(
             @Param("cajeroId")     Integer   cajeroId,
@@ -37,7 +37,7 @@ public interface DevolucionRepository extends JpaRepository<Devolucion, Long> {
     @Query("""
            SELECT d FROM Devolucion d
            WHERE d.fechaCreacion BETWEEN :fechaInicio AND :fechaFin
-           ORDER BY d.fechaCreacion DESC, d.id DESC
+           ORDER BY d.fechaCreacion ASC, d.id ASC
            """)
     List<Devolucion> findByFechas(
             @Param("fechaInicio") LocalDate fechaInicio,
