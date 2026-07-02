@@ -200,7 +200,7 @@ public class TercerosController {
             @PathVariable Integer id,
             @RequestBody com.pazzioliweb.tercerosmodule.dtos.MontoUpdateRequest request) {
         try {
-            Double nuevoSaldo = terceroService.aumentarSaldofavorCliente(id, request.getMonto());
+            Double nuevoSaldo = terceroService.aumentarSaldofavorCliente(id, request.getMonto(), request.getSaldoAFavorUsado());
             return ResponseEntity.ok(nuevoSaldo);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().build();

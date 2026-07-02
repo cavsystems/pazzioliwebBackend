@@ -53,6 +53,8 @@ public class TercerosService {
     @Autowired
  private ContactoTerceroRepository contactoTerceroRepository;
     @Autowired
+ private SaldoWebSocketBroadcastService saldoWebSocketBroadcastService;
+    @Autowired
     public TercerosService(TercerosRepository terceroRepository, EntityManager entityManager) {
         this.terceroRepository = terceroRepository;
         this.entityManager = entityManager;
@@ -579,12 +581,32 @@ public class TercerosService {
     }
 
     @Transactional
-    public Double aumentarSaldofavorCliente(Integer id, Double monto) {
+    public Double aumentarSaldofavorCliente(Integer id, Double monto, Double saldoAFavorUsado) {
+        System.out.println("[DEBUG] aumentarSaldofavorCliente - id: " + id + ", monto: " + monto + ", saldoAFavorUsado: " + saldoAFavorUsado);
+        
         Terceros tercero = terceroRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tercero no encontrado con ID: " + id));
         Double saldoActual = tercero.getSaldofavorCliente() != null ? tercero.getSaldofavorCliente() : 0.0;
-        tercero.setSaldofavorCliente(saldoActual + monto);
+        
+        System.out.println("[DEBUG] Saldo actual antes: " + saldoActual);
+        
+        if (monto != null) {
+            saldoActual = saldoActual + monto;
+            System.out.println("[DEBUG] Después de sumar monto: " + saldoActual);
+        }
+        
+        if (saldoAFavorUsado != null) {
+            saldoActual = saldoActual - saldoAFavorUsado;
+            System.out.println("[DEBUG] Después de restar saldoAFavorUsado: " + saldoActual);
+        }
+        
+        tercero.setSaldofavorCliente(saldoActual);
         terceroRepository.save(tercero);
+        
+        System.out.println("[DEBUG] Saldo guardado: " + tercero.getSaldofavorCliente());
+        
+        saldoWebSocketBroadcastService.notificarSaldoActualizado(id, tercero.getSaldofavorCliente());
+        
         return tercero.getSaldofavorCliente();
     }
 

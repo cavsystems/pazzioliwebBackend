@@ -5,4 +5,5 @@ import lombok.Data;
 @Data
 public class MontoUpdateRequest {
     private Double monto;
+    private Double saldoAFavorUsado;
 }
