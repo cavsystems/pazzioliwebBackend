@@ -578,6 +578,23 @@ public class TercerosService {
         terceroRepository.save(tercero);
     }
 
+    @Transactional
+    public Double aumentarSaldofavorCliente(Integer id, Double monto) {
+        Terceros tercero = terceroRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tercero no encontrado con ID: " + id));
+        Double saldoActual = tercero.getSaldofavorCliente() != null ? tercero.getSaldofavorCliente() : 0.0;
+        tercero.setSaldofavorCliente(saldoActual + monto);
+        terceroRepository.save(tercero);
+        return tercero.getSaldofavorCliente();
+    }
+
+    @Transactional(readOnly = true)
+    public Double obtenerSaldofavorCliente(Integer id) {
+        Terceros tercero = terceroRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tercero no encontrado con ID: " + id));
+        return tercero.getSaldofavorCliente() != null ? tercero.getSaldofavorCliente() : 0.0;
+    }
+
     private TerceroDTOImpl convertirADTO(Terceros t) {
         TerceroDTOImpl dto = TerceroDTOImpl.fromEntity(t);
 

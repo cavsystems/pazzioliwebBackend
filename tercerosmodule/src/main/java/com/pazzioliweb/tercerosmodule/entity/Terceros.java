@@ -278,6 +278,12 @@ public class Terceros {
 	@Column(name = "ultimo_movimiento")
 	private LocalDateTime ultimoMovimiento;
 
+	@Column(name = "saldofavor_cliente")
+	private Double saldofavorCliente = 0.0;
+
+	@Column(name = "saldofavor_empresa")
+	private Double saldofavorEmpresa = 0.0;
+
 	public LocalDate getFechaNacimiento() {
 		return fechaNacimiento;
 	}
@@ -308,6 +314,22 @@ public class Terceros {
 
 	public void setUltimoMovimiento(LocalDateTime ultimoMovimiento) {
 		this.ultimoMovimiento = ultimoMovimiento;
+	}
+
+	public Double getSaldofavorCliente() {
+		return saldofavorCliente;
+	}
+
+	public void setSaldofavorCliente(Double saldofavorCliente) {
+		this.saldofavorCliente = saldofavorCliente;
+	}
+
+	public Double getSaldofavorEmpresa() {
+		return saldofavorEmpresa;
+	}
+
+	public void setSaldofavorEmpresa(Double saldofavorEmpresa) {
+		this.saldofavorEmpresa = saldofavorEmpresa;
 	}
 
 	@ManyToOne
