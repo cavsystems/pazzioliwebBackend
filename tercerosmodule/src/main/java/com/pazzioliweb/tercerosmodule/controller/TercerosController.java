@@ -217,6 +217,28 @@ public class TercerosController {
         }
     }
 
+    @PostMapping("/{id}/aumentar-saldofavor-empresa")
+    public ResponseEntity<Double> aumentarSaldofavorEmpresa(
+            @PathVariable Integer id,
+            @RequestBody com.pazzioliweb.tercerosmodule.dtos.MontoUpdateRequest request) {
+        try {
+            Double nuevoSaldo = terceroService.aumentarSaldofavorEmpresa(id, request.getMonto(), request.getSaldoAFavorUsado());
+            return ResponseEntity.ok(nuevoSaldo);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/{id}/saldofavor-empresa")
+    public ResponseEntity<Double> obtenerSaldofavorEmpresa(@PathVariable Integer id) {
+        try {
+            Double saldo = terceroService.obtenerSaldofavorEmpresa(id);
+            return ResponseEntity.ok(saldo);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
     @PostMapping("/extraer-rut")
     public ResponseEntity<?> extraerRut(@RequestParam("archivo") MultipartFile archivo) {
         String nombre = archivo.getOriginalFilename() != null

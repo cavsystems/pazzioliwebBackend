@@ -617,6 +617,43 @@ public class TercerosService {
         return tercero.getSaldofavorCliente() != null ? tercero.getSaldofavorCliente() : 0.0;
     }
 
+    @Transactional
+    public Double aumentarSaldofavorEmpresa(Integer id, Double monto, Double saldoAFavorUsado) {
+        System.out.println("[DEBUG] aumentarSaldofavorEmpresa - id: " + id + ", monto: " + monto + ", saldoAFavorUsado: " + saldoAFavorUsado);
+        
+        Terceros tercero = terceroRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tercero no encontrado con ID: " + id));
+        Double saldoActual = tercero.getSaldofavorEmpresa() != null ? tercero.getSaldofavorEmpresa() : 0.0;
+        
+        System.out.println("[DEBUG] Saldo actual antes: " + saldoActual);
+        
+        if (monto != null) {
+            saldoActual = saldoActual + monto;
+            System.out.println("[DEBUG] Después de sumar monto: " + saldoActual);
+        }
+        
+        if (saldoAFavorUsado != null) {
+            saldoActual = saldoActual - saldoAFavorUsado;
+            System.out.println("[DEBUG] Después de restar saldoAFavorUsado: " + saldoActual);
+        }
+        
+        tercero.setSaldofavorEmpresa(saldoActual);
+        terceroRepository.save(tercero);
+        
+        System.out.println("[DEBUG] Saldo guardado: " + tercero.getSaldofavorEmpresa());
+        
+        saldoWebSocketBroadcastService.notificarSaldoActualizado(id, tercero.getSaldofavorEmpresa());
+        
+        return tercero.getSaldofavorEmpresa();
+    }
+
+    @Transactional(readOnly = true)
+    public Double obtenerSaldofavorEmpresa(Integer id) {
+        Terceros tercero = terceroRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tercero no encontrado con ID: " + id));
+        return tercero.getSaldofavorEmpresa() != null ? tercero.getSaldofavorEmpresa() : 0.0;
+    }
+
     private TerceroDTOImpl convertirADTO(Terceros t) {
         TerceroDTOImpl dto = TerceroDTOImpl.fromEntity(t);
 
