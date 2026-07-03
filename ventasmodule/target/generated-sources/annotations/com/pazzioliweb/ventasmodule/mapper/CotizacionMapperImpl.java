@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-06-17T14:54:14-0500",
-    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.2 (Oracle Corporation)"
+    date = "2026-07-02T16:41:54-0500",
+    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.18 (Microsoft)"
 )
 @Component
 public class CotizacionMapperImpl implements CotizacionMapper {

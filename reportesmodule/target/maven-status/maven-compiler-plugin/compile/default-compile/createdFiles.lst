@@ -36,6 +36,7 @@ com\pazzioliweb\reportesmodule\controller\MisReportesController.class
 com\pazzioliweb\reportesmodule\repository\MisReportesRepository.class
 com\pazzioliweb\reportesmodule\service\impl\MisReportesServiceImpl.class
 com\pazzioliweb\reportesmodule\controller\ReportesController.class
+com\pazzioliweb\reportesmodule\dtos\FacturacionVsRecaudoDTO.class
 com\pazzioliweb\reportesmodule\dtos\MiReciboDTO.class
 com\pazzioliweb\reportesmodule\dtos\CuentaPorPagarDetalleDTO.class
 com\pazzioliweb\reportesmodule\dtos\DashboardResumenDTO.class

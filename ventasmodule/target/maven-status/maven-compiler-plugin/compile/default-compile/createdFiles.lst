@@ -8,6 +8,7 @@ com\pazzioliweb\ventasmodule\entity\Venta.class
 com\pazzioliweb\ventasmodule\service\EmailVentaService.class
 com\pazzioliweb\ventasmodule\dtos\DevolucionRequestDTO.class
 com\pazzioliweb\ventasmodule\dtos\VentaMetodoPagoDTO.class
+com\pazzioliweb\ventasmodule\exception\FacturaPendienteException.class
 com\pazzioliweb\ventasmodule\repository\CotizacionSpecification.class
 com\pazzioliweb\ventasmodule\dtos\DetalleVentaDTO.class
 com\pazzioliweb\ventasmodule\dtos\CotizacionDTO.class
@@ -33,6 +34,7 @@ com\pazzioliweb\ventasmodule\repository\CotizacionRepository.class
 com\pazzioliweb\ventasmodule\service\DevolucionService.class
 com\pazzioliweb\ventasmodule\exception\DevolucionException.class
 com\pazzioliweb\ventasmodule\service\impl\CuentaPorCobrarServiceImpl.class
+com\pazzioliweb\ventasmodule\exception\FacturaDevueltaException.class
 com\pazzioliweb\ventasmodule\dtos\DetalleDevolucionDTO.class
 com\pazzioliweb\ventasmodule\mapper\CotizacionMapper.class
 com\pazzioliweb\ventasmodule\service\impl\VentaServiceImpl.class

@@ -17,6 +17,7 @@ public class CrearReciboCajaDTO {
     private BigDecimal descuento = BigDecimal.ZERO;
     private BigDecimal averias = BigDecimal.ZERO;
     private BigDecimal fletes = BigDecimal.ZERO;
+    private BigDecimal saldoFavorUsado = BigDecimal.ZERO;
     private Integer cajeroId;
     private Integer usuarioId;
     private Integer vendedorId;
