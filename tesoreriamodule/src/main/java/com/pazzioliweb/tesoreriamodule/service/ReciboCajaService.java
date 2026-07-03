@@ -16,6 +16,7 @@ import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
+import com.pazzioliweb.tercerosmodule.service.TercerosService;
 import com.pazzioliweb.tesoreriamodule.dtos.CrearReciboCajaDTO;
 import com.pazzioliweb.tesoreriamodule.dtos.ReciboCajaResponseDTO;
 import com.pazzioliweb.tesoreriamodule.entity.DetalleReciboCaja;
@@ -50,6 +51,7 @@ public class ReciboCajaService {
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
     private final PeriodoContableService periodoContableService;
+    private final TercerosService tercerosService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
 
@@ -64,7 +66,8 @@ public class ReciboCajaService {
                               AsignacionComprobanteService asignacionComprobante,
                               AsientoContableService asientoService,
                               ConfiguracionContableService configContable,
-                              PeriodoContableService periodoContableService) {
+                              PeriodoContableService periodoContableService,
+                              TercerosService tercerosService) {
         this.reciboRepository = reciboRepository;
         this.cxcRepository = cxcRepository;
         this.tercerosRepository = tercerosRepository;
@@ -77,6 +80,7 @@ public class ReciboCajaService {
         this.asientoService = asientoService;
         this.configContable = configContable;
         this.periodoContableService = periodoContableService;
+        this.tercerosService = tercerosService;
     }
 
     /** Construye el nombre completo de un tercero (nombres + apellidos) o razón social. */
@@ -282,6 +286,17 @@ public class ReciboCajaService {
 
         // Generar asiento contable (partida doble)
         generarAsientoContable(recibo);
+
+        // Restar saldo a favor del cliente si se usó
+        if (dto.getSaldoFavorUsado() != null && dto.getSaldoFavorUsado().compareTo(BigDecimal.ZERO) > 0) {
+            if (recibo.getTercero() != null) {
+                tercerosService.aumentarSaldofavorCliente(
+                    recibo.getTercero().getTerceroId(),
+                    null,
+                    dto.getSaldoFavorUsado().doubleValue()
+                );
+            }
+        }
 
         return toResponse(recibo);
     }
