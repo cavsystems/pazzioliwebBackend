@@ -52,6 +52,8 @@ public class ComprobanteEgresoService {
     private final PeriodoContableService periodoContableService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.tercerosmodule.service.SaldoWebSocketBroadcastService saldoWebSocketBroadcastService;
 
     public ComprobanteEgresoService(ComprobanteEgresoRepository egresoRepository,
                                      CuentaPorPagarRepository cxpRepository,
@@ -257,6 +259,20 @@ public class ComprobanteEgresoService {
         egreso.setTotal(subtotal.subtract(totalRetenciones));
 
         egreso = egresoRepository.save(egreso);
+
+        // Procesar saldo a favor de la empresa usado
+        if (dto.getSaldoFavorUsado() != null && dto.getSaldoFavorUsado().compareTo(BigDecimal.ZERO) > 0) {
+            if (egreso.getTercero() != null) {
+                Terceros tercero = egreso.getTercero();
+                Double saldoActual = tercero.getSaldofavorEmpresa() != null ? tercero.getSaldofavorEmpresa() : 0.0;
+                Double nuevoSaldo = saldoActual - dto.getSaldoFavorUsado().doubleValue();
+                tercero.setSaldofavorEmpresa(nuevoSaldo);
+                tercerosRepository.save(tercero);
+                
+                // Enviar notificación WebSocket
+                saldoWebSocketBroadcastService.notificarSaldoActualizado(tercero.getTerceroId(), nuevoSaldo);
+            }
+        }
 
         // Actualizar último movimiento del tercero
         try {

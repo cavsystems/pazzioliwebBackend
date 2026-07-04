@@ -24,6 +24,7 @@ public class CrearComprobanteEgresoDTO {
     private Integer cuentaContableId;
     private String beneficiarioNombre;
     private String beneficiarioDocumento;
+    private BigDecimal saldoFavorUsado = BigDecimal.ZERO;
 
     @Data
     public static class MedioPagoDTO {
