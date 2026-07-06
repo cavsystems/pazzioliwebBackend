@@ -287,8 +287,8 @@ public class InformeDiarioService {
         dto.setTransaccionInicial(transInicial);
         dto.setTransaccionFinal(transFinal);
         dto.setNumeroTransacciones((int) numVentas);
-        // Zeta = número de cierres acumulados del cajero (consecutivo de la sesión)
-        dto.setZeta(sesion.getConsecutivo());
+        // Zeta = número Z asignado a la sesión
+        dto.setZeta(sesion.getNumeroz());
 
         // Resumen de movimientos agrupados por tipo
         List<InformeDiarioVentasDTO.MovimientoTipo> resumen = movimientos.stream()
