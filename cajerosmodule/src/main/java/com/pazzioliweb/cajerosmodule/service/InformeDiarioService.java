@@ -7,9 +7,26 @@ import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
 import com.pazzioliweb.cajerosmodule.repositori.DetalleCajeroRepository;
 import com.pazzioliweb.cajerosmodule.repositori.InformeDiarioRepository;
 import com.pazzioliweb.cajerosmodule.repositori.MovimientoCajeroRepository;
+
+import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
+import com.pazzioliweb.commonbacken.entity.Tipoidentificacion;
+import com.pazzioliweb.commonbacken.repositorio.TipoidentificacionRepository;
+import com.pazzioliweb.commonbacken.util.Jwcommon;
+import com.pazzioliweb.empresasback.entity.Empresa;
+import com.pazzioliweb.empresasback.entity.Regimen;
+import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
+import com.pazzioliweb.empresasback.repositori.RegimenRepositori;
+import com.pazzioliweb.productosmodule.entity.Bodegas;
+import com.pazzioliweb.productosmodule.entity.Usuariobodega;
+import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
+import com.pazzioliweb.productosmodule.repositori.UsuariobodegaRepository;
+import com.pazzioliweb.usuariosbacken.entity.Usuario;
+import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -49,14 +66,51 @@ public class InformeDiarioService {
     private final DetalleCajeroRepository    detalleCajeroRepo;
     private final MovimientoCajeroRepository movimientoRepo;
     private final InformeDiarioRepository    informeDiarioRepo;
+    private final EmpresaRepositori           empresaRepo;
+    private final RegimenRepositori           regimenRepo;
+    private final TipoidentificacionRepository tipoIdentificacionRepo;
+    private final UsuariobodegaRepository      usuariobodegaRepo;
+    private final BodegasRepository           bodegasRepo;
+    private final UsuarioRepository           usuarioRepo;
+    private final RedisTemplate<String, DatosSesiones> redisTemplate;
+    private final Jwcommon                     jwcommon;
+
+    // Map para iniciales de tipo de identificación
+    private static final java.util.Map<Integer, String> TIPO_IDENTIFICACION_INICIALES = java.util.Map.of(
+        1, "CC",
+        2, "NIT",
+        3, "CE",
+        4, "TI",
+        5, "PP",
+        6, "IDC",
+        7, "CD",
+        8, "RC",
+        9, "DE"
+    );
 
     @Autowired
     public InformeDiarioService(DetalleCajeroRepository detalleCajeroRepo,
                                 MovimientoCajeroRepository movimientoRepo,
-                                InformeDiarioRepository informeDiarioRepo) {
-        this.detalleCajeroRepo  = detalleCajeroRepo;
-        this.movimientoRepo     = movimientoRepo;
-        this.informeDiarioRepo  = informeDiarioRepo;
+                                InformeDiarioRepository informeDiarioRepo,
+                                EmpresaRepositori empresaRepo,
+                                RegimenRepositori regimenRepo,
+                                TipoidentificacionRepository tipoIdentificacionRepo,
+                                UsuariobodegaRepository usuariobodegaRepo,
+                                BodegasRepository bodegasRepo,
+                                UsuarioRepository usuarioRepo,
+                                RedisTemplate<String, DatosSesiones> redisTemplate,
+                                Jwcommon jwcommon) {
+        this.detalleCajeroRepo      = detalleCajeroRepo;
+        this.movimientoRepo         = movimientoRepo;
+        this.informeDiarioRepo     = informeDiarioRepo;
+        this.empresaRepo           = empresaRepo;
+        this.regimenRepo           = regimenRepo;
+        this.tipoIdentificacionRepo = tipoIdentificacionRepo;
+        this.usuariobodegaRepo      = usuariobodegaRepo;
+        this.bodegasRepo           = bodegasRepo;
+        this.usuarioRepo           = usuarioRepo;
+        this.redisTemplate         = redisTemplate;
+        this.jwcommon              = jwcommon;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -70,7 +124,7 @@ public class InformeDiarioService {
      * @param fecha           Día del informe (si es null → hoy)
      */
     @Transactional(readOnly = true)
-    public InformeDiarioVentasDTO generarInforme(Long detalleCajeroId, LocalDate fecha) {
+    public InformeDiarioVentasDTO generarInforme(Long detalleCajeroId, LocalDate fecha, String token) {
 
         DetalleCajero sesion = detalleCajeroRepo.findById(detalleCajeroId)
                 .orElseThrow(() -> new RuntimeException("Sesión no encontrada: " + detalleCajeroId));
@@ -78,7 +132,7 @@ public class InformeDiarioService {
         // Fecha del informe: parámetro recibido, o la fecha de hoy
         LocalDate fechaInforme = (fecha != null) ? fecha : LocalDate.now(ZONA_BOGOTA);
 
-        return construirInforme(sesion, fechaInforme);
+        return construirInforme(sesion, fechaInforme, token);
     }
 
     /**
@@ -92,7 +146,8 @@ public class InformeDiarioService {
      * @param fecha    Día del informe
      */
     @Transactional(readOnly = true)
-    public InformeDiarioVentasDTO generarInformePorCajero(Integer cajeroId, LocalDate fecha) {
+    public InformeDiarioVentasDTO generarInformePorCajero(Integer cajeroId, LocalDate fecha, String token) {
+        System.out.println("=== generarInformePorCajero INICIADO: cajeroId=" + cajeroId + ", fecha=" + fecha);
 
         List<DetalleCajero> sesiones = detalleCajeroRepo.findByCajeroIdAndFechaMovimiento(cajeroId, fecha);
 
@@ -102,20 +157,24 @@ public class InformeDiarioService {
                   + " con movimientos en la fecha " + fecha);
         }
 
+        System.out.println("Sesiones encontradas: " + sesiones.size());
+
         // Si solo hay una sesión, generar informe normal
         if (sesiones.size() == 1) {
-            return construirInforme(sesiones.get(0), fecha);
+            System.out.println("Llamando a construirInforme con sesión única");
+            return construirInforme(sesiones.get(0), fecha, token);
         }
 
         // Si hay múltiples sesiones, consolidar datos de todas
-        return construirInformeConsolidado(sesiones, fecha);
+        System.out.println("Llamando a construirInformeConsolidado con múltiples sesiones");
+        return construirInformeConsolidado(sesiones, fecha, token);
     }
 
     /**
      * Construye un informe consolidado combinando datos de múltiples sesiones
      * de un mismo cajero en la misma fecha.
      */
-    private InformeDiarioVentasDTO construirInformeConsolidado(List<DetalleCajero> sesiones, LocalDate fechaInforme) {
+    private InformeDiarioVentasDTO construirInformeConsolidado(List<DetalleCajero> sesiones, LocalDate fechaInforme, String token) {
         // Usamos la sesión más reciente (primera en la lista, ya ordenada DESC) para datos de encabezado
         DetalleCajero sesionPrincipal = sesiones.get(0);
 
@@ -135,6 +194,9 @@ public class InformeDiarioService {
 
         // Encabezado con datos de la sesión principal
         buildEncabezado(dto, sesionPrincipal, todosMovimientosDia, fechaInforme);
+
+        // Información de la empresa (tercero)
+        buildInformacionEmpresa(dto, token);
 
         // Para las queries nativas, consolidamos datos de todas las sesiones
         List<Long> sesionIds = sesiones.stream()
@@ -157,7 +219,8 @@ public class InformeDiarioService {
     /**
      * Lógica común para construir el informe a partir de una sesión y una fecha.
      */
-    private InformeDiarioVentasDTO construirInforme(DetalleCajero sesion, LocalDate fechaInforme) {
+    private InformeDiarioVentasDTO construirInforme(DetalleCajero sesion, LocalDate fechaInforme, String token) {
+        System.out.println("=== construirInforme INICIADO ===");
 
         Long detalleCajeroId = sesion.getDetalleCajeroId();
 
@@ -171,8 +234,15 @@ public class InformeDiarioService {
                 .collect(Collectors.toList());
 
         InformeDiarioVentasDTO dto = new InformeDiarioVentasDTO();
+        System.out.println("DTO creado: " + dto);
 
         buildEncabezado(dto, sesion, movimientosDia, fechaInforme);
+        System.out.println("buildEncabezado completado");
+
+        System.out.println("ANTES de buildInformacionEmpresa");
+        buildInformacionEmpresa(dto, token);
+        System.out.println("DESPUES de buildInformacionEmpresa");
+
         buildMovimientoCuentas(dto, detalleCajeroId, fechaInforme);
         buildVentasPorLinea(dto, detalleCajeroId, fechaInforme);
         buildFormasDePago(dto, detalleCajeroId, fechaInforme);
@@ -239,6 +309,130 @@ public class InformeDiarioService {
             dto.setDiferenciaEfectivo(sesion.getDiferenciaEfectivo());
             dto.setMediosElectronicosDeclarado(sesion.getMediosElectronicosDeclarado());
             dto.setDiferenciaMediosElectronicos(sesion.getDiferenciaMediosElectronicos());
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  INFORMACIÓN DE LA EMPRESA (TERCERO)
+    // ════════════════════════════════════════════════════════════════════════
+    private void buildInformacionEmpresa(InformeDiarioVentasDTO dto, String token) {
+        try {
+            System.out.println("=== INICIANDO buildInformacionEmpresa ===");
+
+            if (token == null || token.isEmpty()) {
+                System.err.println("Token vacío, no se puede obtener información de empresa");
+                return;
+            }
+
+            // Extraer idsecion del claim JWT
+            io.jsonwebtoken.Claims claims = jwcommon.extraerClaims(token);
+            String idSesion = claims.get("idsecion", String.class);
+            System.out.println("idsecion desde token: " + idSesion);
+
+            if (idSesion == null || idSesion.isEmpty()) {
+                System.err.println("No se encontró claim 'idsecion' en el token");
+                return;
+            }
+
+            // Obtener datos de sesión desde Redis
+            DatosSesiones datosSesion = redisTemplate.opsForValue().get(idSesion);
+            System.out.println("DatosSesiones desde Redis: " + datosSesion);
+
+            if (datosSesion == null) {
+                System.err.println("No se encontraron datos de sesión en Redis para idsecion: " + idSesion);
+                return;
+            }
+
+            // Obtener usuario usando el ID de la sesión
+            Integer usuarioId = datosSesion.getIdusuario();
+            System.out.println("Usuario ID desde sesión: " + usuarioId);
+
+            Usuario usuario = usuarioRepo.findById(usuarioId).orElse(null);
+            System.out.println("Usuario: " + usuario + ", ID: " + (usuario != null ? usuario.getCodigo() : "null"));
+
+            if (usuario == null) {
+                System.err.println("No se encontró usuario con ID: " + usuarioId);
+                return;
+            }
+
+            // Obtener empresa (asumiendo que hay solo una empresa por tenant)
+            Empresa empresa = empresaRepo.findAll().stream().findFirst().orElse(null);
+            System.out.println("Empresa encontrada: " + empresa);
+
+            if (empresa == null) {
+                System.err.println("No se encontró empresa en el tenant");
+                return;
+            }
+
+            // Obtener bodega del usuario
+            String direccionFinal = null;
+            String celularFinal = null;
+
+            java.util.List<Usuariobodega> usuarioBodegas = usuariobodegaRepo.findByUsuarioid(usuario);
+            System.out.println("Bodegas del usuario: " + (usuarioBodegas != null ? usuarioBodegas.size() : "null"));
+
+            if (usuarioBodegas != null && !usuarioBodegas.isEmpty()) {
+                Bodegas bodega = usuarioBodegas.get(0).getBodegaid();
+                System.out.println("Bodega: " + bodega);
+                if (bodega != null) {
+                    // Usar dirección de la bodega si existe y no está vacía
+                    if (bodega.getDireccion() != null && !bodega.getDireccion().trim().isEmpty()) {
+                        direccionFinal = bodega.getDireccion();
+                        System.out.println("Usando dirección de bodega: " + direccionFinal);
+                    }
+                    // Usar celular de la bodega si existe y no está vacío
+                    if (bodega.getCelular() != null && !bodega.getCelular().trim().isEmpty()) {
+                        celularFinal = bodega.getCelular();
+                        System.out.println("Usando celular de bodega: " + celularFinal);
+                    }
+                }
+            }
+
+            // Fallback: usar dirección de la empresa si la bodega no tiene dirección
+            if (direccionFinal == null || direccionFinal.trim().isEmpty()) {
+                direccionFinal = empresa.getDireccion();
+                System.out.println("Usando dirección de empresa (fallback): " + direccionFinal);
+            }
+            // Fallback: usar celular de la empresa si la bodega no tiene celular
+            if (celularFinal == null || celularFinal.trim().isEmpty()) {
+                celularFinal = empresa.getCelularempresa();
+                System.out.println("Usando celular de empresa (fallback): " + celularFinal);
+            }
+
+            // Setear información de la empresa en el DTO
+            dto.setRazonSocialEmpresa(empresa.getRazonsocial());
+            dto.setDireccionEmpresa(direccionFinal);
+            dto.setDigitoVerificacionEmpresa(empresa.getDigitoverificacion());
+            dto.setNumeroIdentificacionEmpresa(empresa.getNumeroidentificacion());
+
+            System.out.println("Razón social: " + empresa.getRazonsocial());
+            System.out.println("Dirección final: " + direccionFinal);
+            System.out.println("Dígito verificación:" + empresa.getDigitoverificacion());
+            System.out.println("Número identificación:" + empresa.getNumeroidentificacion());
+
+            // Mapear regimen: cargar explícitamente del repositorio
+            java.util.List<Regimen> regimenes = regimenRepo.findAll();
+            if (!regimenes.isEmpty()) {
+                Regimen regimen = regimenes.get(0);
+                dto.setRegimenEmpresa(regimen.getDescripcion());
+                System.out.println("Descripción regimen: " + regimen.getDescripcion());
+            } else {
+                System.out.println("No se encontraron regimenes en la base de datos");
+            }
+
+            // Mapear tipo de identificación a iniciales
+            if (empresa.getCodigotipoidentificacion() != null) {
+                Integer tipoIdCodigo = empresa.getCodigotipoidentificacion().getCodigo();
+                String iniciales = TIPO_IDENTIFICACION_INICIALES.getOrDefault(tipoIdCodigo, "");
+                dto.setTipoIdentificacionEmpresa(iniciales);
+                System.out.println("Tipo identificación código: " + tipoIdCodigo + ", iniciales: " + iniciales);
+            }
+
+            System.out.println("=== buildInformacionEmpresa COMPLETADO ===");
+
+        } catch (Exception e) {
+            System.err.println("Error al construir información de empresa: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

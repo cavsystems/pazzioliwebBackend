@@ -39,6 +39,16 @@ public class InformeDiarioVentasDTO {
     private String   estadoSesion;       // ABIERTA / CERRADA
 
     // ══════════════════════════════════════════════════════
+    //  INFORMACIÓN DE LA EMPRESA (TERCERO)
+    // ══════════════════════════════════════════════════════
+    private String razonSocialEmpresa;
+    private String direccionEmpresa;
+    private String regimenEmpresa;
+    private String digitoVerificacionEmpresa;
+    private String numeroIdentificacionEmpresa;
+    private String tipoIdentificacionEmpresa;
+
+    // ══════════════════════════════════════════════════════
     //  CUADRE DE CAJA (solo cuando la sesión está CERRADA)
     // ══════════════════════════════════════════════════════
     private BigDecimal efectivoEsperado;
@@ -347,6 +357,18 @@ public class InformeDiarioVentasDTO {
     public void setFechaCierre(LocalDateTime v)         { this.fechaCierre = v; }
     public String getEstadoSesion()                     { return estadoSesion; }
     public void setEstadoSesion(String v)               { this.estadoSesion = v; }
+    public String getRazonSocialEmpresa()               { return razonSocialEmpresa; }
+    public void setRazonSocialEmpresa(String v)         { this.razonSocialEmpresa = v; }
+    public String getDireccionEmpresa()                 { return direccionEmpresa; }
+    public void setDireccionEmpresa(String v)           { this.direccionEmpresa = v; }
+    public String getRegimenEmpresa()                   { return regimenEmpresa; }
+    public void setRegimenEmpresa(String v)             { this.regimenEmpresa = v; }
+    public String getDigitoVerificacionEmpresa()        { return digitoVerificacionEmpresa; }
+    public void setDigitoVerificacionEmpresa(String v)  { this.digitoVerificacionEmpresa = v; }
+    public String getNumeroIdentificacionEmpresa()      { return numeroIdentificacionEmpresa; }
+    public void setNumeroIdentificacionEmpresa(String v){ this.numeroIdentificacionEmpresa = v; }
+    public String getTipoIdentificacionEmpresa()        { return tipoIdentificacionEmpresa; }
+    public void setTipoIdentificacionEmpresa(String v)  { this.tipoIdentificacionEmpresa = v; }
     public BigDecimal getEfectivoEsperado()             { return efectivoEsperado; }
     public void setEfectivoEsperado(BigDecimal v)       { this.efectivoEsperado = v; }
     public BigDecimal getEfectivoDeclarado()            { return efectivoDeclarado; }

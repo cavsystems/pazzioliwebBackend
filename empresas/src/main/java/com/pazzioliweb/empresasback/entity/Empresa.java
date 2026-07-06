@@ -97,6 +97,9 @@ public class Empresa {
  private String razonsocial;
  private String codigopostal;
 
+ @Column(name = "direccion", length = 200)
+ private String direccion;
+
  // ──────────────────────────────────────────────────────────────
  // Datos fiscales DIAN (exigidos en cbc:TaxLevelCode del XML UBL)
  // ──────────────────────────────────────────────────────────────
@@ -167,7 +170,7 @@ public String getCodigopostal() {
  }
 private String nombrecomercial;
 
- @ManyToOne
+ @ManyToOne(fetch = FetchType.EAGER)
  @JoinColumn(name = "codigoregimen")
  private Regimen codigoregimen;
   
@@ -267,6 +270,12 @@ public String getRazonsocial() {
 }
 public void setRazonsocial(String razonsocial) {
 	this.razonsocial = razonsocial;
+}
+public String getDireccion() {
+	return direccion;
+}
+public void setDireccion(String direccion) {
+	this.direccion = direccion;
 }
 public String getNombrecomercial() {
 	return nombrecomercial;

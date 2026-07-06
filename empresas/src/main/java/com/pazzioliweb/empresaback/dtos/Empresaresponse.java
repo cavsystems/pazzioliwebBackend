@@ -17,6 +17,7 @@ public class Empresaresponse {
 	 private String Actividadeconomica;
 	 private String celularempresa;
 	 private String codigopostal;
+	 private String direccion;
 	 private String digitodeverificacion;
 	 private String nombrecomercial;
 	 private  String primerapellido;
@@ -166,6 +167,14 @@ public class Empresaresponse {
 
 	public void setCodigopostal(String codigopostal) {
 		this.codigopostal = codigopostal;
+	}
+
+	public String getDireccion() {
+		return direccion;
+	}
+
+	public void setDireccion(String direccion) {
+		this.direccion = direccion;
 	}
 
 	public String getDigitodeverificacion() {

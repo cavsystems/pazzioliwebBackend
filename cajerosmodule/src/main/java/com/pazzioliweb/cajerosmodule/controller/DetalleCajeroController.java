@@ -8,15 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.pazzioliweb.cajerosmodule.dtos.CuadreCajaDTO;
 import com.pazzioliweb.cajerosmodule.dtos.DetalleCajeroDTO;
@@ -329,9 +321,12 @@ public class DetalleCajeroController {
     @GetMapping("/{detalleCajeroId}/informe-diario")
     public ResponseEntity<?> generarInformeDiario(
             @PathVariable Long detalleCajeroId,
-            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha) {
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha,
+            @CookieValue(name = "token", required = false, defaultValue = "") String token
+    ) {
         try {
-            InformeDiarioVentasDTO informe = informeDiarioService.generarInforme(detalleCajeroId, fecha);
+            String token2 = token!=null && token!="" ?  token : "";
+            InformeDiarioVentasDTO informe = informeDiarioService.generarInforme(detalleCajeroId, fecha,token2);
             return ResponseEntity.ok(informe);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -350,10 +345,11 @@ public class DetalleCajeroController {
     @GetMapping("/cajero/{cajeroId}/informe-diario")
     public ResponseEntity<?> generarInformeDiarioPorCajero(
             @PathVariable Integer cajeroId,
-            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha) {
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha,
+            @CookieValue(name = "token", required = false, defaultValue = "") String token) {
         try {
             java.time.LocalDate fechaInforme = (fecha != null) ? fecha : java.time.LocalDate.now(java.time.ZoneId.of("America/Bogota"));
-            InformeDiarioVentasDTO informe = informeDiarioService.generarInformePorCajero(cajeroId, fechaInforme);
+            InformeDiarioVentasDTO informe = informeDiarioService.generarInformePorCajero(cajeroId, fechaInforme, token != null ? token : "");
             return ResponseEntity.ok(informe);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

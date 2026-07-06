@@ -23,6 +23,7 @@ public class EmpresaTenantProjection {
 
     private String razonsocial;
     private String codigopostal;
+    private String direccion;
     private String nombrecomercial;
 
     private String codigoactividadeconomica;
@@ -67,6 +68,7 @@ private   Integer plazo;
             String segundoapellido,
             String razonsocial,
             String codigopostal,
+            String direccion,
             String nombrecomercial,
             String codigoactividadeconomica,
             Integer codigoregimen,
@@ -106,6 +108,7 @@ private   Integer plazo;
         this.segundoapellido = segundoapellido;
         this.razonsocial = razonsocial;
         this.codigopostal = codigopostal;
+        this.direccion = direccion;
         this.nombrecomercial = nombrecomercial;
         this.codigoactividadeconomica = codigoactividadeconomica;
         this.codigoregimen = codigoregimen;
