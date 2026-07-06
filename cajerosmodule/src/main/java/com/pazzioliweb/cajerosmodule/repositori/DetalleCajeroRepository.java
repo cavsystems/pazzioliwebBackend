@@ -16,7 +16,7 @@ import com.pazzioliweb.cajerosmodule.entity.DetalleCajero;
 public interface DetalleCajeroRepository extends JpaRepository<DetalleCajero, Long> {
 
     @Query("""
-           SELECT 
+           SELECT
                d.detalleCajeroId              AS detalleCajeroId,
                d.cajero.cajeroId              AS cajeroId,
                d.cajero.nombre                AS cajeroNombre,
@@ -35,14 +35,15 @@ public interface DetalleCajeroRepository extends JpaRepository<DetalleCajero, Lo
                d.efectivoDeclarado            AS efectivoDeclarado,
                d.mediosElectronicosDeclarado  AS mediosElectronicosDeclarado,
                d.diferenciaEfectivo           AS diferenciaEfectivo,
-               d.diferenciaMediosElectronicos AS diferenciaMediosElectronicos
+               d.diferenciaMediosElectronicos AS diferenciaMediosElectronicos,
+               d.numeroz                      AS numeroz
            FROM DetalleCajero d
            LEFT JOIN d.comprobante comp
            """)
     Page<DetalleCajeroDTO> listarDetalleCajerosDTO(Pageable pageable);
 
     @Query("""
-           SELECT 
+           SELECT
                d.detalleCajeroId              AS detalleCajeroId,
                d.cajero.cajeroId              AS cajeroId,
                d.cajero.nombre                AS cajeroNombre,
@@ -61,7 +62,8 @@ public interface DetalleCajeroRepository extends JpaRepository<DetalleCajero, Lo
                d.efectivoDeclarado            AS efectivoDeclarado,
                d.mediosElectronicosDeclarado  AS mediosElectronicosDeclarado,
                d.diferenciaEfectivo           AS diferenciaEfectivo,
-               d.diferenciaMediosElectronicos AS diferenciaMediosElectronicos
+               d.diferenciaMediosElectronicos AS diferenciaMediosElectronicos,
+               d.numeroz                      AS numeroz
            FROM DetalleCajero d
            LEFT JOIN d.comprobante comp
            WHERE d.cajero.cajeroId = :cajeroId
@@ -87,5 +89,11 @@ public interface DetalleCajeroRepository extends JpaRepository<DetalleCajero, Lo
     List<DetalleCajero> findByCajeroIdAndFechaMovimiento(
             @Param("cajeroId") Integer cajeroId,
             @Param("fecha") LocalDate fecha);
+
+    @Query(value = "SELECT fn_cajero_tiene_z_pendiente(:cajeroId)", nativeQuery = true)
+    Boolean cajeroTieneZPendiente(@Param("cajeroId") Integer cajeroId);
+
+    @Query(value = "SELECT MAX(numeroz) FROM detalle_cajero WHERE cajero_id = :cajeroId", nativeQuery = true)
+    Integer obtenerMaxNumeroZ(@Param("cajeroId") Integer cajeroId);
 }
 

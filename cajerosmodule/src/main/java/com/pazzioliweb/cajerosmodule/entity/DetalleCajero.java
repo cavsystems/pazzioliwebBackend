@@ -91,6 +91,9 @@ public class DetalleCajero {
     @Column(name = "diferencia_medios_electronicos")
     private BigDecimal diferenciaMediosElectronicos;
 
+    @Column(name = "numeroz", nullable = false)
+    private Integer numeroz = 1;
+
     public enum EstadoDetalleCajero {
         ABIERTA, CERRADA
     }

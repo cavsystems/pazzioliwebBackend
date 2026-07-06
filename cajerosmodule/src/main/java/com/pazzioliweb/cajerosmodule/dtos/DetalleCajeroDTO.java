@@ -26,4 +26,5 @@ public interface DetalleCajeroDTO {
     BigDecimal getMediosElectronicosDeclarado();
     BigDecimal getDiferenciaEfectivo();
     BigDecimal getDiferenciaMediosElectronicos();
+    Integer getNumeroz();
 }

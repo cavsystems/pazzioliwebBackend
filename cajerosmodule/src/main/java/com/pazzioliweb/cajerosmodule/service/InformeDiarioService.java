@@ -402,6 +402,7 @@ public class InformeDiarioService {
             // Setear información de la empresa en el DTO
             dto.setRazonSocialEmpresa(empresa.getRazonsocial());
             dto.setDireccionEmpresa(direccionFinal);
+            dto.setCelularEmpresa(celularFinal);
             dto.setDigitoVerificacionEmpresa(empresa.getDigitoverificacion());
             dto.setNumeroIdentificacionEmpresa(empresa.getNumeroidentificacion());
 

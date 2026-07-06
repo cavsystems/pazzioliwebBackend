@@ -166,6 +166,18 @@ public class DetalleCajeroService {
         detalle.setTotalEfectivo(BigDecimal.ZERO);
         detalle.setTotalMediosElectronicos(BigDecimal.ZERO);
 
+        // Asignar número Z
+        Boolean tieneZPendiente = detalleCajeroRepository.cajeroTieneZPendiente(cajero.getCajeroId());
+        if (tieneZPendiente != null && tieneZPendiente) {
+            // Si tiene Z pendiente, mantener el mismo número Z
+            Integer maxNumeroZ = detalleCajeroRepository.obtenerMaxNumeroZ(cajero.getCajeroId());
+            detalle.setNumeroz(maxNumeroZ != null ? maxNumeroZ : 1);
+        } else {
+            // Si no tiene Z pendiente, incrementar el número Z
+            Integer maxNumeroZ = detalleCajeroRepository.obtenerMaxNumeroZ(cajero.getCajeroId());
+            detalle.setNumeroz(maxNumeroZ != null ? maxNumeroZ + 1 : 1);
+        }
+
         // Asignar comprobante si se proporcionó
         if (comprobanteId != null) {
             comprobantesRepository.findById(comprobanteId).ifPresent(detalle::setComprobante);
@@ -295,6 +307,11 @@ public class DetalleCajeroService {
             nueva.setTotalEfectivo(BigDecimal.ZERO);
             nueva.setTotalMediosElectronicos(BigDecimal.ZERO);
             nueva.setComprobante(detalle.getComprobante());
+
+            // Asignar número Z (incrementar para el nuevo día)
+            Integer maxNumeroZ = detalleCajeroRepository.obtenerMaxNumeroZ(detalle.getCajero().getCajeroId());
+            nueva.setNumeroz(maxNumeroZ != null ? maxNumeroZ + 1 : 1);
+
             detalleCajeroRepository.save(nueva);
 
             System.out.println("🔄 Sesión reabierta a medianoche — cajeroId: "

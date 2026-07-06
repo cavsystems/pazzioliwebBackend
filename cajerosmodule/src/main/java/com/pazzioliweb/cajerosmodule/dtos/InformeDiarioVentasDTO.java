@@ -43,6 +43,7 @@ public class InformeDiarioVentasDTO {
     // ══════════════════════════════════════════════════════
     private String razonSocialEmpresa;
     private String direccionEmpresa;
+    private String celularEmpresa;
     private String regimenEmpresa;
     private String digitoVerificacionEmpresa;
     private String numeroIdentificacionEmpresa;
@@ -361,6 +362,8 @@ public class InformeDiarioVentasDTO {
     public void setRazonSocialEmpresa(String v)         { this.razonSocialEmpresa = v; }
     public String getDireccionEmpresa()                 { return direccionEmpresa; }
     public void setDireccionEmpresa(String v)           { this.direccionEmpresa = v; }
+    public String getCelularEmpresa()                   { return celularEmpresa; }
+    public void setCelularEmpresa(String v)             { this.celularEmpresa = v; }
     public String getRegimenEmpresa()                   { return regimenEmpresa; }
     public void setRegimenEmpresa(String v)             { this.regimenEmpresa = v; }
     public String getDigitoVerificacionEmpresa()        { return digitoVerificacionEmpresa; }
