@@ -1,5 +1,7 @@
 package com.pazzioliweb.movimientosinventariomodule.service;
 
+import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
+import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import com.pazzioliweb.movimientosinventariomodule.entity.Kardex;
 import com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventario;
 import com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventarioDetalle;
@@ -49,17 +51,20 @@ public class MovimientoInventarioAutoService {
     private final KardexRepository kardexRepo;
     private final ProductoVarianteRepository varianteRepo;
     private final BodegasRepository bodegaRepo;
+    private final ComprobanteContableRepository comprobanteRepo;
 
     public MovimientoInventarioAutoService(MovimientoInventarioRepository movimientoRepo,
                                             MovimientoInventarioDetalleRepository detalleRepo,
                                             KardexRepository kardexRepo,
                                             ProductoVarianteRepository varianteRepo,
-                                            BodegasRepository bodegaRepo) {
+                                            BodegasRepository bodegaRepo,
+                                            ComprobanteContableRepository comprobanteRepo) {
         this.movimientoRepo = movimientoRepo;
         this.detalleRepo = detalleRepo;
         this.kardexRepo = kardexRepo;
         this.varianteRepo = varianteRepo;
         this.bodegaRepo = bodegaRepo;
+        this.comprobanteRepo = comprobanteRepo;
     }
 
     /** Item simple usado por los callers para describir una línea del movimiento. */
@@ -93,17 +98,17 @@ public class MovimientoInventarioAutoService {
     @Transactional
     public void registrarSalidaPorVenta(String numeroVenta, Long ventaId, Integer bodegaCodigo,
                                          LocalDate fecha, List<ItemMovimiento> items,
-                                         String tipoComprobante) {
+                                         String tipoComprobante, Integer comprobanteId, Integer consecutivo) {
         String t = (tipoComprobante == null || tipoComprobante.isBlank()) ? "FC" : tipoComprobante.toUpperCase();
         crearMovimientoAuto(t, "Venta " + numeroVenta, ventaId, t,
-                TipoMovimiento.SALIDA, bodegaCodigo, fecha, items, false);
+                TipoMovimiento.SALIDA, bodegaCodigo, fecha, items, false, comprobanteId, consecutivo);
     }
 
     /** Compat: sobrecarga que asume FC (venta contado) si el caller no especifica. */
     @Transactional
     public void registrarSalidaPorVenta(String numeroVenta, Long ventaId, Integer bodegaCodigo,
                                          LocalDate fecha, List<ItemMovimiento> items) {
-        registrarSalidaPorVenta(numeroVenta, ventaId, bodegaCodigo, fecha, items, "FC");
+        registrarSalidaPorVenta(numeroVenta, ventaId, bodegaCodigo, fecha, items, "FC", null, null);
     }
 
     /**
@@ -114,17 +119,17 @@ public class MovimientoInventarioAutoService {
     @Transactional
     public void registrarEntradaPorCompra(String numeroOrden, Long ordenId, Integer bodegaCodigo,
                                            LocalDate fecha, List<ItemMovimiento> items,
-                                           String tipoComprobante) {
+                                           String tipoComprobante, Integer comprobanteId, Integer consecutivo) {
         String t = (tipoComprobante == null || tipoComprobante.isBlank()) ? "CC" : tipoComprobante.toUpperCase();
         crearMovimientoAuto(t, "Compra " + numeroOrden, ordenId, t,
-                TipoMovimiento.ENTRADA, bodegaCodigo, fecha, items, true);
+                TipoMovimiento.ENTRADA, bodegaCodigo, fecha, items, true, comprobanteId, consecutivo);
     }
 
     /** Compat: sobrecarga que asume CC (compra contado) si el caller no especifica. */
     @Transactional
     public void registrarEntradaPorCompra(String numeroOrden, Long ordenId, Integer bodegaCodigo,
                                            LocalDate fecha, List<ItemMovimiento> items) {
-        registrarEntradaPorCompra(numeroOrden, ordenId, bodegaCodigo, fecha, items, "CC");
+        registrarEntradaPorCompra(numeroOrden, ordenId, bodegaCodigo, fecha, items, "CC", null, null);
     }
 
     /**
@@ -134,9 +139,17 @@ public class MovimientoInventarioAutoService {
     @Transactional
     public void registrarEntradaPorDevolucion(String numeroDevolucion, Long devolucionId,
                                                Integer bodegaCodigo, LocalDate fecha,
-                                               List<ItemMovimiento> items) {
+                                               List<ItemMovimiento> items, Integer comprobanteId, Integer consecutivo) {
         crearMovimientoAuto("DV", "Devolución " + numeroDevolucion, devolucionId, "DV",
-                TipoMovimiento.ENTRADA, bodegaCodigo, fecha, items, false);
+                TipoMovimiento.ENTRADA, bodegaCodigo, fecha, items, false, comprobanteId, consecutivo);
+    }
+
+    /** Compat: sobrecarga sin comprobanteId y consecutivo. */
+    @Transactional
+    public void registrarEntradaPorDevolucion(String numeroDevolucion, Long devolucionId,
+                                               Integer bodegaCodigo, LocalDate fecha,
+                                               List<ItemMovimiento> items) {
+        registrarEntradaPorDevolucion(numeroDevolucion, devolucionId, bodegaCodigo, fecha, items, null, null);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -147,7 +160,7 @@ public class MovimientoInventarioAutoService {
                                       Long documentoOrigenId, String documentoTipo,
                                       TipoMovimiento tipo, Integer bodegaCodigo,
                                       LocalDate fecha, List<ItemMovimiento> items,
-                                      boolean costoUnitarioComoPromedio) {
+                                      boolean costoUnitarioComoPromedio, Integer comprobanteId, Integer consecutivo) {
 
         if (items == null || items.isEmpty()) {
             log.warn("[MovInv-Auto] {} sin items, omitido.", descripcion);
@@ -174,7 +187,12 @@ public class MovimientoInventarioAutoService {
         movimiento.setObservaciones(descripcion + " (auto)");
         movimiento.setDocumentoOrigenTipo(documentoTipo);
         movimiento.setDocumentoOrigenId(documentoOrigenId);
-        movimiento.setConsecutivo(0); // no usamos consecutivo aquí — el del documento es la trazabilidad
+        movimiento.setConsecutivo(consecutivo != null ? consecutivo : 0);
+
+        // Asignar comprobante si se proporcionó
+        if (comprobanteId != null) {
+            comprobanteRepo.findById(comprobanteId.longValue()).ifPresent(movimiento::setComprobante);
+        }
 
         // Persistir cabecera para tener ID
         MovimientoInventario movGuardado = movimientoRepo.save(movimiento);

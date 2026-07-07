@@ -585,8 +585,14 @@ public class VentaServiceImpl implements VentaService {
             if (items.isEmpty()) return;
             // Tipo real del comprobante (FC contado / VC crédito) — si no hay comprobante, default FC.
             String tipoComprobante = "FC";
-            if (venta.getComprobante() != null && venta.getComprobante().getTipoMovimiento() != null) {
-                tipoComprobante = venta.getComprobante().getTipoMovimiento().name();
+            Integer comprobanteId = null;
+            Integer consecutivo = null;
+            if (venta.getComprobante() != null) {
+                if (venta.getComprobante().getTipoMovimiento() != null) {
+                    tipoComprobante = venta.getComprobante().getTipoMovimiento().name();
+                }
+                comprobanteId = venta.getComprobante().getId() != null ? venta.getComprobante().getId().intValue() : null;
+                consecutivo = venta.getConsecutivoComprobante();
             }
             movimientoInventarioAutoService.registrarSalidaPorVenta(
                     venta.getNumeroVenta(),
@@ -594,7 +600,9 @@ public class VentaServiceImpl implements VentaService {
                     venta.getBodega() != null ? venta.getBodega().getCodigo() : null,
                     venta.getFechaEmision() != null ? venta.getFechaEmision() : LocalDate.now(),
                     items,
-                    tipoComprobante
+                    tipoComprobante,
+                    comprobanteId,
+                    consecutivo
             );
         } catch (Exception ex) {
             System.out.println("[MovInv-Venta] Error generando movimiento (no crítico): " + ex.getMessage());

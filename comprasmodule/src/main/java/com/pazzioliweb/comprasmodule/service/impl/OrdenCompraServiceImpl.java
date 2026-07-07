@@ -1242,11 +1242,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 String tipoComp = orden.getComprobante() != null
                         && orden.getComprobante().getTipoMovimiento() != null
                         ? orden.getComprobante().getTipoMovimiento().name() : "CC";
+                Integer comprobanteId = orden.getComprobante() != null ? orden.getComprobante().getId().intValue() : null;
+                Integer consecutivo = orden.getConsecutivoComprobante();
                 movimientoInventarioAutoService.registrarEntradaPorCompra(
                         orden.getNumeroOrden(), orden.getId(),
                         orden.getBodega().getCodigo(),
                         orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
-                        kardexItems, tipoComp);
+                        kardexItems, tipoComp, comprobanteId, consecutivo);
             }
         } catch (Exception ex) {
             System.out.println("[FinalizarIngreso] Movimiento inventario (no crítico): " + ex.getMessage());

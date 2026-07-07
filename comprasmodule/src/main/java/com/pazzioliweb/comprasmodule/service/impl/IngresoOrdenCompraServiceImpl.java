@@ -11,7 +11,11 @@ import com.pazzioliweb.comprasmodule.mapper.OrdenCompraMapper;
 import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.IngresoOrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
+import com.pazzioliweb.comprasmodule.service.ConfiguracionComprasService;
 import com.pazzioliweb.comprasmodule.service.ProductoService;
+import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
+import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
 import com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +41,9 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
     private final OrdenCompraMapper ordenCompraMapper;
     private final CuentaPorPagarService cuentaPorPagarService;
     private final MovimientoInventarioAutoService movimientoInventarioAutoService;
+    private final AsignacionComprobanteService asignacionComprobante;
+    private final ComprobanteContableRepository comprobanteRepository;
+    private final ConfiguracionComprasService configCompras;
 
     @Autowired
     public IngresoOrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
@@ -44,13 +51,19 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
                                           ProductoClient productoClient,
                                           OrdenCompraMapper ordenCompraMapper,
                                           CuentaPorPagarService cuentaPorPagarService,
-                                          MovimientoInventarioAutoService movimientoInventarioAutoService) {
+                                          MovimientoInventarioAutoService movimientoInventarioAutoService,
+                                          AsignacionComprobanteService asignacionComprobante,
+                                          ComprobanteContableRepository comprobanteRepository,
+                                          ConfiguracionComprasService configCompras) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.productoService = productoService;
         this.productoClient = productoClient;
         this.ordenCompraMapper = ordenCompraMapper;
         this.cuentaPorPagarService = cuentaPorPagarService;
         this.movimientoInventarioAutoService = movimientoInventarioAutoService;
+        this.asignacionComprobante = asignacionComprobante;
+        this.comprobanteRepository = comprobanteRepository;
+        this.configCompras = configCompras;
     }
 
     @Override
@@ -148,7 +161,7 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
         boolean allReceived = orden.getItems().stream()
                 .allMatch(d -> d.getCantidadRecibida() != null && d.getCantidadRecibida().equals(d.getCantidad()));
         orden.setEstado(allReceived ? "RECIBIDA" : "RECIBIDA_PARCIAL");
-        
+
         // Actualizar fecha_recibida cuando la orden pasa a RECIBIDA o RECIBIDA_PARCIAL
         if ("RECIBIDA".equals(orden.getEstado()) || "RECIBIDA_PARCIAL".equals(orden.getEstado())) {
             orden.setFechaRecibida(LocalDateTime.now());
@@ -156,7 +169,33 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
         
         log.info("Estado final: {}", orden.getEstado());
 
-        // Paso 4: actualizar el numero_factura_proveedor en CuentaPorPagar
+        // Paso 4: asignar comprobante contable si la orden no tiene uno
+        if (orden.getComprobante() == null) {
+            // Determinar tipo de comprobante basado en métodos de pago de la orden
+            boolean esCredito = tieneMetodoPagoCreditoEnOrden(orden.getMetodosPago());
+            TipoMovimientoComprobante tipo = esCredito ? TipoMovimientoComprobante.CR : TipoMovimientoComprobante.CC;
+            Integer cajeroId = orden.getCajeroId();
+            try {
+                Integer cajeroEfectivo = resolverCajeroParaComprobante(cajeroId, tipo);
+                AsignacionComprobanteService.Resultado r = asignacionComprobante.asignar(cajeroEfectivo, tipo);
+                orden.setComprobante(r.getComprobante());
+                orden.setConsecutivoComprobante(r.getConsecutivo());
+                // Preservar el número OC original si aún no se había guardado
+                if (orden.getNumeroOc() == null && orden.getNumeroOrden() != null
+                        && orden.getNumeroOrden().startsWith("OC-")) {
+                    orden.setNumeroOc(orden.getNumeroOrden());
+                }
+                // numero_orden pasa a ser el número del comprobante contable (CC-X / CR-X)
+                orden.setNumeroOrden(r.getNumeroDocumento());
+                log.info("Comprobante asignado: {} - {}", r.getNumeroDocumento(), tipo);
+            } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+                log.warn("No se pudo asignar comprobante: {}", ex.getMessage());
+            } catch (OrdenCompraException ex) {
+                log.warn("No se pudo resolver cajero para comprobante: {}", ex.getMessage());
+            }
+        }
+
+        // Paso 5: actualizar el numero_factura_proveedor en CuentaPorPagar
         cuentaPorPagarService.actualizarNumeroFacturaProveedor(orden.getNumeroOrden(), numeroFacturaProveedor);
 
         ordenCompraRepository.save(orden);
@@ -204,16 +243,47 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
             if (orden.getComprobante() != null && orden.getComprobante().getTipoMovimiento() != null) {
                 tipoComprobante = orden.getComprobante().getTipoMovimiento().name();
             }
+            Integer comprobanteId = orden.getComprobante() != null ? orden.getComprobante().getId().intValue() : null;
+            Integer consecutivo = orden.getConsecutivoComprobante();
             movimientoInventarioAutoService.registrarEntradaPorCompra(
                     orden.getNumeroOrden(),
                     orden.getId(),
                     orden.getBodega().getCodigo(),
                     orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
                     items,
-                    tipoComprobante
+                    tipoComprobante,
+                    comprobanteId,
+                    consecutivo
             );
         } catch (Exception ex) {
             log.error("[MovInv-Compra] Error generando movimiento (no crítico): {}", ex.getMessage());
         }
+    }
+
+    private Integer resolverCajeroParaComprobante(Integer cajeroUsuario, TipoMovimientoComprobante tipo) {
+        if (cajeroUsuario != null
+                && comprobanteRepository.findActivoByCajeroAndTipo(cajeroUsuario, tipo).isPresent()) {
+            return cajeroUsuario;
+        }
+        Integer cajeroDefault = configCompras.obtenerCajeroDefaultId();
+        if (cajeroDefault != null
+                && comprobanteRepository.findActivoByCajeroAndTipo(cajeroDefault, tipo).isPresent()) {
+            return cajeroDefault;
+        }
+        throw new OrdenCompraException(
+            "No hay cajero válido para asignar el comprobante de " + tipo.name() +
+            ". El usuario actual " + (cajeroUsuario == null ? "no es cajero" : "no tiene comprobante " + tipo.name()) +
+            " y no se ha configurado un cajero por defecto para compras. " +
+            "Configúrelo en Admin → Configuración de compras."
+        );
+    }
+
+    private boolean tieneMetodoPagoCreditoEnOrden(List<com.pazzioliweb.comprasmodule.entity.OrdenCompraMetodoPago> metodosPago) {
+        if (metodosPago == null || metodosPago.isEmpty()) return false;
+        return metodosPago.stream().anyMatch(mp -> {
+            com.pazzioliweb.metodospagomodule.entity.MetodosPago m = mp.getMetodoPago();
+            return m != null && m.getTipoNegociacion() != null
+                    && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
+        });
     }
 }

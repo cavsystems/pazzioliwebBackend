@@ -269,12 +269,20 @@ public class DevolucionServiceImpl implements DevolucionService {
                         + devolucion.getNumeroDevolucion());
                 return;
             }
+            Integer comprobanteId = null;
+            Integer consecutivo = null;
+            if (devolucion.getComprobante() != null) {
+                comprobanteId = devolucion.getComprobante().getId().intValue();
+                consecutivo = devolucion.getConsecutivoComprobante();
+            }
             movimientoInventarioAutoService.registrarEntradaPorDevolucion(
                     devolucion.getNumeroDevolucion(),
                     devolucion.getId(),
                     venta.getBodega().getCodigo(),
                     devolucion.getFechaCreacion() != null ? devolucion.getFechaCreacion() : LocalDate.now(),
-                    items
+                    items,
+                    comprobanteId,
+                    consecutivo
             );
         } catch (Exception ex) {
             System.out.println("[MovInv-Devolucion] Error generando movimiento (no crítico): " + ex.getMessage());
