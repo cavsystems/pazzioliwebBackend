@@ -29,6 +29,7 @@ import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableReposito
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import org.springframework.context.ApplicationEventPublisher;
+import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
@@ -549,5 +550,44 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             // del registro histórico (auditoría debe ver que estuvo ACTIVO antes).
             // La reversa queda con estado ANULADO + observación que la liga al original.
         }
+    }
+
+    @Override
+    public List<KardexReportDto> getKardexReport(String desde, String hasta) {
+        List<Object[]> results = kardexRepository.getKardexReportRaw(desde, hasta);
+        List<KardexReportDto> dtos = new java.util.ArrayList<>();
+        
+        for (Object[] row : results) {
+            KardexReportDto dto = new KardexReportDto();
+            if (row[0] instanceof java.sql.Timestamp) {
+                dto.setFechaCreacion(((java.sql.Timestamp) row[0]).toLocalDateTime());
+            } else if (row[0] instanceof java.time.LocalDateTime) {
+                dto.setFechaCreacion((java.time.LocalDateTime) row[0]);
+            }
+            dto.setNumeroFactura((String) row[1]);
+            dto.setMovimiento((String) row[2]);
+            dto.setTipoMovimiento((String) row[3]);
+            dto.setTipo((String) row[4]);
+            dto.setProducto((String) row[5]);
+            dto.setEntrada(row[6] != null ? getDoubleValue(row[6]) : null);
+            dto.setSalida(row[7] != null ? getDoubleValue(row[7]) : null);
+            dto.setCostoPromedio(row[8] != null ? getDoubleValue(row[8]) : null);
+            dto.setTotalCosto(row[9] != null ? getDoubleValue(row[9]) : null);
+            dto.setSaldo(row[10] != null ? getDoubleValue(row[10]) : null);
+            dtos.add(dto);
+        }
+        
+        return dtos;
+    }
+
+    private Double getDoubleValue(Object value) {
+        if (value instanceof java.math.BigDecimal) {
+            return ((java.math.BigDecimal) value).doubleValue();
+        } else if (value instanceof Double) {
+            return (Double) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        return null;
     }
 }

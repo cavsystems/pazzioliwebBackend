@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioUpdateDto;
@@ -117,6 +118,23 @@ public class MovimientoInventarioController {
             return ResponseEntity.ok(Map.of("mensaje", "Movimiento anulado correctamente"));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Obtener reporte de kardex con información detallada de movimientos.
+     * Filtros opcionales por rango de fechas (desde, hasta).
+     */
+    @GetMapping("/kardex-reporte")
+    public ResponseEntity<?> getKardexReport(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+        try {
+            java.util.List<KardexReportDto> report = movimientoService.getKardexReport(desde, hasta);
+            return ResponseEntity.ok(report);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
     }
