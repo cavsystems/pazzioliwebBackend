@@ -229,13 +229,14 @@ public class Empresacontroller {
 			  return ResponseEntity.ok(serv.renovarLicencia(id));
 	 }
 
+	 @Transactional
 	 @RequestMapping("/traerinformacionem")
 	 	 public ResponseEntity<Map<String, Object>> traerempresainfo() {
-	 		 List<Empresa>  empresas=repoempresa.findAll();
 	 		 response.clear();
+	 		 List<Empresa>  empresas=repoempresa.findAll();
 	 		 response.put("empresa",empresas );
 	 		 return ResponseEntity.ok().body(response);
-	 		 
+
 	 	 }
 
 
@@ -290,10 +291,11 @@ public class Empresacontroller {
 			  return ResponseEntity.ok().build();
 		  }
 
+	 @Transactional
 	 @RequestMapping("/traerempresa")
 	 public ResponseEntity<Map<String, Object>> traerempresa() {
-		 
-		
+		 response.clear();
+
 		 List<Tipopersona>  tipersona=tipopersonarepositori.findAll();
 		 List<Tipoidentificacion> tipoidentificacion=tipoidentificacionrepositori.findAll();
 		 List<Regimen> regimen=regimenrepositori.findAll();
@@ -307,14 +309,14 @@ public class Empresacontroller {
 		 datosempresa.setDepartamento(departamento);
 		 datosempresa.setPais(pais);
 		 datosempresa.setMunicipio(municipio);
-		 
+
             response.put("datos",  datosempresa );
             return ResponseEntity
                     .ok()
                     .body(response);
-		 
-		 
-		 
+
+
+
 	 }
 	    
 	 @RequestMapping("/traeractividadeseconomicas")
@@ -339,8 +341,10 @@ public class Empresacontroller {
                  .ok()
                  .body(response);
 	 }
+	 @Transactional
 	 @RequestMapping("/traerimpuestos")
 	 public ResponseEntity<Map<String, Object>> traerimpuestos() {
+		 response.clear();
 		 List<Impuestos> impuestos=impuestorepositorio.findAll();
 		   response.put("datosimpuestos",  impuestos );
 		   return ResponseEntity
