@@ -282,14 +282,20 @@ public class MovimientoInventarioAutoService {
                     double valorIngreso  = entrada * item.costoUnitario;
                     promedioNuevo = (valorAnterior + valorIngreso) / (saldoAnterior + entrada);
                 }
+                // Redondear a 2 decimales para evitar errores de punto flotante
+                promedioNuevo = Math.round(promedioNuevo * 100.0) / 100.0;
             }
             // Para devoluciones (entrada) mantenemos promedio anterior si era >0
             if (entrada > 0 && "DV".equals(documentoTipo) && promedioAnterior > 0) {
                 promedioNuevo = promedioAnterior;
+                // Redondear a 2 decimales para evitar errores de punto flotante
+                promedioNuevo = Math.round(promedioNuevo * 100.0) / 100.0;
             }
 
             // Si la variante todavía no tenía promedio (compra inicial), guardamos costoUnitario
             if (promedioNuevo <= 0) promedioNuevo = item.costoUnitario;
+            // Redondear a 2 decimales para evitar errores de punto flotante
+            promedioNuevo = Math.round(promedioNuevo * 100.0) / 100.0;
 
             Kardex kardex = new Kardex();
             kardex.setMovimiento(movGuardado);

@@ -392,8 +392,12 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             nuevoCostoPromedio = nuevoSaldo > 0
                     ? (valorSaldoPrevio + valorEntrada) / nuevoSaldo
                     : costoUnitario;
+            // Redondear a 2 decimales para evitar errores de punto flotante
+            nuevoCostoPromedio = Math.round(nuevoCostoPromedio * 100.0) / 100.0;
         } else {
             nuevoCostoPromedio = costoPromedioAnterior;
+            // Redondear a 2 decimales para evitar errores de punto flotante
+            nuevoCostoPromedio = Math.round(nuevoCostoPromedio * 100.0) / 100.0;
         }
 
         Kardex kardex = new Kardex();
@@ -417,6 +421,23 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         kardex.setEstado(movimiento.getEstado());
         kardex.setObservaciones(movimiento.getObservaciones());
         kardexRepository.save(kardex);
+
+        // Actualizar tabla existencias para mantener sincronización con Kardex
+        java.util.Optional<Existencias> existenciasOpt = existenciasRepository
+                .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
+                        variante.getProductoVarianteId(), bodega.getCodigo());
+        if (existenciasOpt.isPresent()) {
+            Existencias existencias = existenciasOpt.get();
+            existencias.setExistencia(java.math.BigDecimal.valueOf(nuevoSaldo));
+            existenciasRepository.save(existencias);
+        } else {
+            // Si no existe registro de existencias, crearlo
+            Existencias nuevasExistencias = new Existencias();
+            nuevasExistencias.setProductoVariante(variante);
+            nuevasExistencias.setBodega(bodega);
+            nuevasExistencias.setExistencia(java.math.BigDecimal.valueOf(nuevoSaldo));
+            existenciasRepository.save(nuevasExistencias);
+        }
     }
 
     @Override
@@ -562,6 +583,23 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             reversa.setEstado(EstadoMovimiento.ANULADO);
             reversa.setObservaciones("Reversa por anulación de movimiento #" + movimientoId);
             kardexRepository.save(reversa);
+
+            // Actualizar tabla existencias para mantener sincronización con Kardex
+            java.util.Optional<Existencias> existenciasOpt = existenciasRepository
+                    .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
+                            original.getProductoVariante().getProductoVarianteId(), original.getBodega().getCodigo());
+            if (existenciasOpt.isPresent()) {
+                Existencias existencias = existenciasOpt.get();
+                existencias.setExistencia(java.math.BigDecimal.valueOf(nuevoSaldo));
+                existenciasRepository.save(existencias);
+            } else {
+                // Si no existe registro de existencias, crearlo
+                Existencias nuevasExistencias = new Existencias();
+                nuevasExistencias.setProductoVariante(original.getProductoVariante());
+                nuevasExistencias.setBodega(original.getBodega());
+                nuevasExistencias.setExistencia(java.math.BigDecimal.valueOf(nuevoSaldo));
+                existenciasRepository.save(nuevasExistencias);
+            }
 
             // NO se sobrescribe el estado del original — eso destruye trazabilidad
             // del registro histórico (auditoría debe ver que estuvo ACTIVO antes).
