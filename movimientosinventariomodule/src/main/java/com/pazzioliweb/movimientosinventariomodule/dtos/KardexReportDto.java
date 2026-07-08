@@ -14,6 +14,7 @@ public class KardexReportDto {
     private Double costoPromedio;
     private Double totalCosto;
     private Double saldo;
+    private String nombrebodega;
 
     public LocalDateTime getFechaCreacion() {
         return fechaCreacion;
@@ -101,5 +102,13 @@ public class KardexReportDto {
 
     public void setSaldo(Double saldo) {
         this.saldo = saldo;
+    }
+
+    public String getNombrebodega() {
+        return nombrebodega;
+    }
+
+    public void setNombrebodega(String nombrebodega) {
+        this.nombrebodega = nombrebodega;
     }
 }

@@ -629,6 +629,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             dto.setCostoPromedio(row[8] != null ? getDoubleValue(row[8]) : null);
             dto.setTotalCosto(row[9] != null ? getDoubleValue(row[9]) : null);
             dto.setSaldo(row[10] != null ? getDoubleValue(row[10]) : null);
+            dto.setNombrebodega(row[11] != null ? (String) row[11] : null);
             dtos.add(dto);
         }
         

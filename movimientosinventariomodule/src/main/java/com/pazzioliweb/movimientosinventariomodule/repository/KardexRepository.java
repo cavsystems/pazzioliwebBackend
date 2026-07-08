@@ -19,7 +19,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
         Optional<Kardex> findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(ProductoVariante variante, Bodegas bodega);
 
         @Query(value = "SELECT fecha_creacion, numerofactura, tipo_movimiento AS movimiento, tipoentrada AS tipo_movimiento, tipo, " +
-                       "descripcion AS Producto, entrada, salida, costo_promedio, total_costo, saldo " +
+                       "descripcion AS Producto, entrada, salida, costo_promedio, total_costo, saldo, nombrebodega " +
                        "FROM (" +
                        "SELECT " +
                        "  m.tipo_movimiento AS tipoentrada, " +
@@ -35,6 +35,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "  CONCAT(co.prefijo, '-', m.consecutivo) AS numerofactura, " +
                        "  mov.movimiento_cajero_id, " +
                        "  mov.detalle_cajero_id, " +
+                       "  b.nombre AS nombrebodega, " +
                        "  mov.cajero_id, " +
                        "  CASE " +
                        "    WHEN co.prefijo = 'VC' THEN 'CUENTA_POR_COBRAR' " +
@@ -74,6 +75,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "LEFT JOIN detalles_orden_compra detorden ON detorden.orden_compra_id = orden.id " +
                        "LEFT JOIN devoluciones_venta devv ON devv.comprobante_id = m.comprobante_id AND devv.consecutivo_comprobante = m.consecutivo " +
                        "LEFT JOIN detalles_devolucion_venta devvt ON devvt.devolucion_id = devv.id " +
+                       "JOIN bodegas b ON b.codigo = k.bodega_id " +
                        ") t " +
                        "WHERE rn = 1 " +
                        "AND (:desde IS NULL OR DATE(t.fecha_creacion) >= :desde) " +
