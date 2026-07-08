@@ -23,7 +23,8 @@ public class CuentaContable {
     @Column(nullable = false, length = 100)
     private String nombre;
 
-    /** ACTIVO / PASIVO / PATRIMONIO / INGRESO / GASTO */
+    /** Clase PUC: ACTIVO / PASIVO / PATRIMONIO / INGRESO / GASTO /
+     *  COSTO / COSTO_PRODUCCION / ORDEN_DEUDORAS / ORDEN_ACREEDORAS */
     @Column(nullable = false, length = 20)
     private String tipo;
 
@@ -42,19 +43,26 @@ public class CuentaContable {
     @Column(name = "requiere_tercero", nullable = false)
     private Boolean requiereTercero = false;
 
+    /** "Documento de cruce": si es true, al digitar esta cuenta en un asiento
+     *  manual se exige tercero + documento de cruce (factura/CxC/CxP). Se usa
+     *  para cuentas de cartera (Ej. 130505 clientes, 220505 proveedores) para
+     *  contabilizar el saldo discriminado por documento y no un total global. */
+    @Column(name = "requiere_documento_cruce", nullable = false)
+    private Boolean requiereDocumentoCruce = false;
+
     @Column(nullable = false, length = 15)
     private String estado = "ACTIVO";
 
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion = LocalDateTime.now();
 
-    /** Naturaleza derivada del tipo: ACTIVO/GASTO=DEBITO, resto=CREDITO. */
+    /** Naturaleza derivada del tipo (débito o crédito según la clase PUC). */
     @Transient
     public String getNaturaleza() {
         if (tipo == null) return null;
         return switch (tipo.toUpperCase()) {
-            case "ACTIVO", "GASTO" -> "DEBITO";
-            case "PASIVO", "PATRIMONIO", "INGRESO" -> "CREDITO";
+            case "ACTIVO", "GASTO", "COSTO", "COSTO_PRODUCCION", "ORDEN_DEUDORAS" -> "DEBITO";
+            case "PASIVO", "PATRIMONIO", "INGRESO", "ORDEN_ACREEDORAS" -> "CREDITO";
             default -> null;
         };
     }

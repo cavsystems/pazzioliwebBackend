@@ -11,11 +11,21 @@ import java.util.Optional;
 
 public interface AsientoContableRepository extends JpaRepository<AsientoContable, Long> {
 
+    // Puede haber varias filas para el mismo documento origen cuando un asiento se
+    // anula y se regenera (queda el ANULADO + el CONFIRMADO nuevo). Traemos todas
+    // ordenadas por id desc y el método público devuelve la más reciente, evitando
+    // NonUniqueResultException.
     @Query("SELECT a FROM AsientoContable a LEFT JOIN FETCH a.comprobante " +
-           " WHERE a.documentoOrigenTipo = :tipo AND a.documentoOrigenId = :id")
-    Optional<AsientoContable> findByDocumentoOrigenTipoAndDocumentoOrigenId(
+           " WHERE a.documentoOrigenTipo = :tipo AND a.documentoOrigenId = :id ORDER BY a.id DESC")
+    List<AsientoContable> findAllByDocumentoOrigen(
             @Param("tipo") String documentoOrigenTipo,
             @Param("id") Long documentoOrigenId);
+
+    /** Compatibilidad: devuelve el asiento MÁS RECIENTE del documento origen. */
+    default Optional<AsientoContable> findByDocumentoOrigenTipoAndDocumentoOrigenId(
+            String documentoOrigenTipo, Long documentoOrigenId) {
+        return findAllByDocumentoOrigen(documentoOrigenTipo, documentoOrigenId).stream().findFirst();
+    }
 
     List<AsientoContable> findByFechaBetweenOrderByFechaAscIdAsc(LocalDate desde, LocalDate hasta);
 

@@ -2,6 +2,9 @@ package com.pazzioliweb.comprobantesmodule.service;
 
 import com.pazzioliweb.comprobantesmodule.entity.PeriodoContable;
 import com.pazzioliweb.comprobantesmodule.repositori.PeriodoContableRepository;
+import com.pazzioliweb.commonbacken.util.PasswordUtils;
+import com.pazzioliweb.usuariosbacken.entity.Usuario;
+import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,9 +23,11 @@ import java.util.Optional;
 public class PeriodoContableService {
 
     private final PeriodoContableRepository repo;
+    private final UsuarioRepository usuarioRepository;
 
-    public PeriodoContableService(PeriodoContableRepository repo) {
+    public PeriodoContableService(PeriodoContableRepository repo, UsuarioRepository usuarioRepository) {
         this.repo = repo;
+        this.usuarioRepository = usuarioRepository;
     }
 
     /**
@@ -115,5 +120,46 @@ public class PeriodoContableService {
         p.setObservaciones(prev + "Reapertura " + LocalDateTime.now() + " por " + usuario + ": " + motivo);
         // Mantenemos fechaCierre y usuarioCierre como historial de quién lo cerró antes
         return repo.save(p);
+    }
+
+    /**
+     * Reapertura con clave especial: valida la contraseña del usuario que
+     * autoriza (misma doble lógica del login: hash BCrypt o texto plano legado)
+     * antes de reabrir. El cierre nunca es definitivo; se puede levantar con clave.
+     */
+    @Transactional
+    public PeriodoContable reabrirValidado(int anio, int mes, String usuario, String motivo, String password) {
+        if (usuario == null || usuario.isBlank() || password == null || password.isBlank())
+            throw new IllegalStateException("Debe indicar usuario y contraseña para reabrir el periodo.");
+        Usuario u = usuarioRepository.findByUsuario(usuario)
+                .orElseThrow(() -> new IllegalStateException("Usuario no encontrado: " + usuario));
+        String guardada = u.getContrasena();
+        boolean ok = guardada != null && (PasswordUtils.matches(password, guardada) || password.equals(guardada));
+        if (!ok) throw new IllegalStateException("Contraseña incorrecta. No autorizado para reabrir el periodo.");
+        return reabrir(anio, mes, usuario, motivo);
+    }
+
+    /**
+     * Cierra un grupo consecutivo de meses (bimestre=2, trimestre=3,
+     * cuatrimestre=4) empezando en mesInicio. Valida que los meses anteriores
+     * del año estén cerrados, y cierra todo el grupo de forma atómica.
+     */
+    @Transactional
+    public List<PeriodoContable> cerrarGrupo(int anio, int mesInicio, int tamano, String usuario, String observaciones) {
+        if (tamano < 1) tamano = 1;
+        int mesFin = mesInicio + tamano - 1;
+        if (mesInicio < 1 || mesFin > 12)
+            throw new IllegalStateException("El grupo de meses (" + mesInicio + "-" + mesFin + ") está fuera del año.");
+        // Validar secuencia: todos los meses anteriores al grupo deben estar cerrados.
+        for (int m = 1; m < mesInicio; m++) {
+            if (!estaCerrado(LocalDate.of(anio, m, 1)))
+                throw new IllegalStateException("No se puede cerrar desde el mes " + mesInicio +
+                        ": el mes " + m + " aún está abierto. Cierre los periodos en orden.");
+        }
+        List<PeriodoContable> cerrados = new java.util.ArrayList<>();
+        for (int m = mesInicio; m <= mesFin; m++) {
+            cerrados.add(cerrar(anio, m, usuario, observaciones));
+        }
+        return cerrados;
     }
 }

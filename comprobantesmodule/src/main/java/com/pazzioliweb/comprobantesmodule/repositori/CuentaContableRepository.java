@@ -9,4 +9,8 @@ import java.util.Optional;
 public interface CuentaContableRepository extends JpaRepository<CuentaContable, Integer> {
     List<CuentaContable> findByEstadoOrderByCodigoAsc(String estado);
     Optional<CuentaContable> findByCodigo(String codigo);
+
+    /** true si existe alguna subcuenta cuyo código empieza por el prefijo dado
+     *  (excluyendo la cuenta misma). Se usa para detectar "cuentas mayores". */
+    boolean existsByCodigoStartingWithAndCodigoNot(String prefijo, String codigo);
 }

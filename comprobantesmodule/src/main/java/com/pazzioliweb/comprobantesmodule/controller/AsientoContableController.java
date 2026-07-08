@@ -22,16 +22,19 @@ public class AsientoContableController {
     private final AsientoContableRepository repo;
     private final TercerosRepository tercerosRepo;
     private final com.pazzioliweb.comprobantesmodule.service.AsientoContableService asientoService;
+    private final com.pazzioliweb.comprobantesmodule.service.TipoComprobanteManualService tipoComprobanteManualService;
 
     @PersistenceContext
     private EntityManager em;
 
     public AsientoContableController(AsientoContableRepository repo,
                                       TercerosRepository tercerosRepo,
-                                      com.pazzioliweb.comprobantesmodule.service.AsientoContableService asientoService) {
+                                      com.pazzioliweb.comprobantesmodule.service.AsientoContableService asientoService,
+                                      com.pazzioliweb.comprobantesmodule.service.TipoComprobanteManualService tipoComprobanteManualService) {
         this.repo = repo;
         this.tercerosRepo = tercerosRepo;
         this.asientoService = asientoService;
+        this.tipoComprobanteManualService = tipoComprobanteManualService;
     }
 
     /**
@@ -137,23 +140,119 @@ public class AsientoContableController {
                     String tnombre = li.get("terceroNombre") != null ? li.get("terceroNombre").toString() : "";
                     l.conTercero(tid, tnombre);
                 }
+                if (li.get("documentoCruce") != null) {
+                    l.documentoCruce = li.get("documentoCruce").toString();
+                }
+                if (li.get("centroCostoId") != null && !li.get("centroCostoId").toString().isBlank()) {
+                    l.centroCostoId = Integer.parseInt(li.get("centroCostoId").toString());
+                }
                 lineas.add(l);
             }
             if (lineas.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Ninguna línea tiene débito o crédito > 0"));
             }
 
-            // Número del asiento: MAN-{timestamp}
-            String numero = "MAN-" + System.currentTimeMillis() / 1000;
+            // Número del asiento: si se eligió un tipo de comprobante manual
+            // (Nota de contabilidad, Depreciación...), se numera con su prefijo
+            // y consecutivo (NC-1, DEP-1...). Si no, cae al genérico MAN-{timestamp}.
+            Integer tipoId = null;
+            String numero;
+            if (body.get("tipoComprobanteManualId") != null
+                    && !body.get("tipoComprobanteManualId").toString().isBlank()) {
+                tipoId = Integer.parseInt(body.get("tipoComprobanteManualId").toString());
+                // Peek: numera sin consumir el contador (se confirma tras el éxito).
+                numero = tipoComprobanteManualService.peekSiguienteNumero(tipoId);
+            } else {
+                numero = "MAN-" + System.currentTimeMillis() / 1000;
+            }
 
             AsientoContable asiento = asientoService.generarAsiento(
                     numero, fecha, descripcion, "MANUAL", null, null, lineas);
+
+            // El asiento se creó bien: ahora sí consumimos el consecutivo del tipo
+            // (evita huecos si generarAsiento hubiera fallado antes).
+            if (tipoId != null) {
+                tipoComprobanteManualService.siguienteNumero(tipoId);
+            }
             return ResponseEntity.ok(Map.of(
                     "id", asiento.getId(),
                     "numeroAsiento", asiento.getNumeroAsiento(),
                     "totalDebito", asiento.getTotalDebito(),
                     "totalCredito", asiento.getTotalCredito(),
                     "mensaje", "Asiento manual creado correctamente"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Saldos iniciales → asiento de apertura. Recibe una fecha y las líneas
+     * (cuenta + débito/crédito ya ubicados en su naturaleza por el front).
+     * Origen "APERTURA" con documentoOrigenId = año → idempotente: una sola
+     * apertura por año (si ya existe una CONFIRMADA, la retorna sin duplicar).
+     */
+    @PostMapping("/apertura")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> crearApertura(@RequestBody Map<String, Object> body) {
+        try {
+            LocalDate fecha = body.get("fecha") != null
+                    ? LocalDate.parse(body.get("fecha").toString())
+                    : LocalDate.now();
+            long anio = fecha.getYear();
+            String descripcion = body.get("descripcion") != null
+                    ? body.get("descripcion").toString()
+                    : "Saldos iniciales " + anio;
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> lineasIn = (List<Map<String, Object>>) body.get("lineas");
+            if (lineasIn == null || lineasIn.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Debe registrar al menos una línea de saldo inicial"));
+            }
+
+            List<com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO> lineas = new ArrayList<>();
+            for (Map<String, Object> li : lineasIn) {
+                Integer cuentaId = li.get("cuentaContableId") != null
+                        ? Integer.parseInt(li.get("cuentaContableId").toString()) : null;
+                if (cuentaId == null) continue;
+                java.math.BigDecimal debito = new java.math.BigDecimal(li.getOrDefault("debito", "0").toString());
+                java.math.BigDecimal credito = new java.math.BigDecimal(li.getOrDefault("credito", "0").toString());
+                String desc = li.get("descripcion") != null ? li.get("descripcion").toString() : descripcion;
+
+                com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO l;
+                if (debito.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    l = com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.debito(cuentaId, debito, desc);
+                } else if (credito.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    l = com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(cuentaId, credito, desc);
+                } else {
+                    continue;
+                }
+                if (li.get("terceroId") != null && !li.get("terceroId").toString().isBlank()) {
+                    Integer tid = Integer.parseInt(li.get("terceroId").toString());
+                    String tnombre = li.get("terceroNombre") != null ? li.get("terceroNombre").toString() : "";
+                    l.conTercero(tid, tnombre);
+                }
+                if (li.get("documentoCruce") != null) {
+                    l.documentoCruce = li.get("documentoCruce").toString();
+                }
+                if (li.get("centroCostoId") != null && !li.get("centroCostoId").toString().isBlank()) {
+                    l.centroCostoId = Integer.parseInt(li.get("centroCostoId").toString());
+                }
+                lineas.add(l);
+            }
+            if (lineas.size() < 2) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El asiento de apertura debe tener al menos 2 líneas con valor"));
+            }
+
+            String numero = "APERTURA-" + anio;
+            AsientoContable asiento = asientoService.generarAsiento(
+                    numero, fecha, descripcion, "APERTURA", anio, null, lineas);
+            return ResponseEntity.ok(Map.of(
+                    "id", asiento.getId(),
+                    "numeroAsiento", asiento.getNumeroAsiento(),
+                    "totalDebito", asiento.getTotalDebito(),
+                    "totalCredito", asiento.getTotalCredito(),
+                    "mensaje", "Asiento de apertura registrado correctamente"
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -280,6 +379,8 @@ public class AsientoContableController {
             }
             lm.put("terceroNit", terceroNit);
             lm.put("descripcion", l.getDescripcion());
+            lm.put("documentoCruce", l.getDocumentoCruce());
+            lm.put("centroCostoId", l.getCentroCostoId());
             lineas.add(lm);
         }
         m.put("lineas", lineas);

@@ -46,9 +46,22 @@ public class CuentaContableController {
         catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
     }
 
+    /** Compatibilidad: DELETE ahora inactiva (soft), no borra físicamente. */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> eliminar(@PathVariable Integer id) {
         try { service.eliminar(id); return ResponseEntity.noContent().build(); }
+        catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
+    @PutMapping("/{id}/inactivar")
+    public ResponseEntity<?> inactivar(@PathVariable Integer id) {
+        try { return ResponseEntity.ok(service.inactivar(id)); }
+        catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
+    @PutMapping("/{id}/activar")
+    public ResponseEntity<?> activar(@PathVariable Integer id) {
+        try { return ResponseEntity.ok(service.activar(id)); }
         catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
     }
 }

@@ -60,6 +60,8 @@ public class AsientoContableService {
         public Integer terceroId;
         public String terceroNombre;
         public String descripcion;
+        public String documentoCruce;
+        public Integer centroCostoId;
 
         public static LineaDTO debito(Integer cuentaId, BigDecimal monto, String desc) {
             LineaDTO l = new LineaDTO();
@@ -142,7 +144,11 @@ public class AsientoContableService {
         // Validar periodo contable. Si el mes/año del asiento está CERRADO,
         // bloquear. Esto NO afecta nada existente: por defecto todos los periodos
         // están abiertos hasta que el admin los cierre manualmente.
-        if (periodoService.estaCerrado(fechaAsiento)) {
+        // EXCEPCIÓN: los asientos de CIERRE/APERTURA son el mecanismo mismo del
+        // cierre anual y deben poder emitirse sobre un periodo cerrado (si no, el
+        // cierre anual —que exige los 12 meses cerrados— nunca podría generarlos).
+        boolean esCierreOApertura = "CIERRE".equals(documentoOrigenTipo) || "APERTURA".equals(documentoOrigenTipo);
+        if (!esCierreOApertura && periodoService.estaCerrado(fechaAsiento)) {
             throw new PeriodoCerradoException(
                 "Periodo contable " + fechaAsiento.getMonthValue() + "/" + fechaAsiento.getYear() +
                 " está CERRADO. No se pueden registrar nuevos movimientos en él. " +
@@ -188,6 +194,27 @@ public class AsientoContableService {
                 );
             }
 
+            // Validación 3: "documento de cruce". Solo aplica a asientos MANUALES
+            // (los automáticos ya tienen su documento origen como cruce y se
+            // autocompleta abajo, para no romper la contabilización automática).
+            boolean esManual = documentoOrigenTipo == null || "MANUAL".equalsIgnoreCase(documentoOrigenTipo);
+            String documentoCruce = ldto.documentoCruce;
+            if (Boolean.TRUE.equals(cc.getRequiereDocumentoCruce())) {
+                if (ldto.terceroId == null || ldto.terceroId == 0) {
+                    throw new IllegalStateException(
+                        "La cuenta '" + cc.getCodigo() + " - " + cc.getNombre() + "' exige tercero " +
+                        "(documento de cruce).");
+                }
+                if (esManual && (documentoCruce == null || documentoCruce.isBlank())) {
+                    throw new IllegalStateException(
+                        "La cuenta '" + cc.getCodigo() + " - " + cc.getNombre() + "' exige un documento " +
+                        "de cruce (Ej. número de factura o CxC/CxP).");
+                }
+                if (!esManual && (documentoCruce == null || documentoCruce.isBlank())) {
+                    documentoCruce = documentoOrigenTipo + " #" + documentoOrigenId;
+                }
+            }
+
             AsientoContableLinea linea = new AsientoContableLinea();
             linea.setAsiento(asiento);
             linea.setCuentaContable(cc);
@@ -196,6 +223,8 @@ public class AsientoContableService {
             linea.setTerceroId(ldto.terceroId);
             linea.setTerceroNombre(ldto.terceroNombre);
             linea.setDescripcion(ldto.descripcion);
+            linea.setDocumentoCruce(documentoCruce);
+            linea.setCentroCostoId(ldto.centroCostoId);
             linea.setOrden(orden++);
             asiento.getLineas().add(linea);
         }

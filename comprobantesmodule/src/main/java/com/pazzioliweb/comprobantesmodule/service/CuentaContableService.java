@@ -14,7 +14,8 @@ import java.util.stream.Collectors;
 public class CuentaContableService {
 
     private static final Set<String> TIPOS_VALIDOS =
-            Set.of("ACTIVO", "PASIVO", "PATRIMONIO", "INGRESO", "GASTO");
+            Set.of("ACTIVO", "PASIVO", "PATRIMONIO", "INGRESO", "GASTO",
+                   "COSTO", "COSTO_PRODUCCION", "ORDEN_DEUDORAS", "ORDEN_ACREEDORAS");
 
     private final CuentaContableRepository repo;
 
@@ -56,12 +57,37 @@ public class CuentaContableService {
         return toDto(repo.save(cc));
     }
 
+    /**
+     * "Eliminar" ahora es inactivación suave: nunca borra la fila (para no
+     * perder historial ni romper referencias de asientos). Solo cambia estado.
+     */
     @Transactional
     public void eliminar(Integer id) {
-        if (!repo.existsById(id)) {
-            throw new RuntimeException("Cuenta contable no encontrada: " + id);
+        inactivar(id);
+    }
+
+    /** Marca la cuenta como INACTIVA. No se permite inactivar cuentas mayores
+     *  (las que tienen subcuentas), porque dejaría colgadas las subcuentas. */
+    @Transactional
+    public CuentaContableDTO inactivar(Integer id) {
+        CuentaContable cc = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada: " + id));
+        if (repo.existsByCodigoStartingWithAndCodigoNot(cc.getCodigo(), cc.getCodigo())) {
+            throw new RuntimeException(
+                "No se puede inactivar la cuenta " + cc.getCodigo() + " porque es una cuenta mayor " +
+                "con subcuentas. Inactive primero las subcuentas.");
         }
-        repo.deleteById(id);
+        cc.setEstado("INACTIVO");
+        return toDto(repo.save(cc));
+    }
+
+    /** Reactiva una cuenta previamente inactivada. */
+    @Transactional
+    public CuentaContableDTO activar(Integer id) {
+        CuentaContable cc = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada: " + id));
+        cc.setEstado("ACTIVO");
+        return toDto(repo.save(cc));
     }
 
     private void validar(CuentaContableDTO dto, Integer idActual) {
@@ -70,12 +96,42 @@ public class CuentaContableService {
         if (dto.getNombre() == null || dto.getNombre().isBlank())
             throw new RuntimeException("El nombre es obligatorio");
         if (dto.getTipo() == null || !TIPOS_VALIDOS.contains(dto.getTipo().toUpperCase()))
-            throw new RuntimeException("Tipo inválido. Use ACTIVO/PASIVO/PATRIMONIO/INGRESO/GASTO");
+            throw new RuntimeException("Tipo inválido. Clases PUC válidas: ACTIVO, PASIVO, PATRIMONIO, "
+                    + "INGRESO, GASTO, COSTO, COSTO_PRODUCCION, ORDEN_DEUDORAS, ORDEN_ACREEDORAS");
         repo.findByCodigo(dto.getCodigo()).ifPresent(existente -> {
             if (idActual == null || !existente.getId().equals(idActual)) {
                 throw new RuntimeException("Ya existe una cuenta contable con código " + dto.getCodigo());
             }
         });
+        // Regla PUC: solo las auxiliares (más de 6 dígitos) pueden ser de movimiento.
+        // Las cuentas de 6 dígitos o menos son cuentas mayores/subcuentas de agrupación.
+        // Se valida solo al CREAR para no alterar cuentas existentes ya en uso.
+        if (idActual == null
+                && Boolean.TRUE.equals(dto.getEsMovimiento())
+                && dto.getCodigo().trim().length() <= 6) {
+            throw new RuntimeException("Las cuentas de 6 dígitos o menos no pueden ser de movimiento. "
+                    + "Cree una cuenta auxiliar de más de 6 dígitos para registrar movimientos.");
+        }
+        // Al CREAR, verificar que existan todas las cuentas PADRE del PUC en los
+        // niveles estándar (1, 2, 4, 6, 8…) previos al código que se crea.
+        // Ej: para 613595 deben existir 6, 61 y 6135 antes.
+        if (idActual == null) {
+            validarCuentasPadre(dto.getCodigo().trim());
+        }
+    }
+
+    private static final int[] NIVELES_PUC = {1, 2, 4, 6, 8, 10, 12};
+
+    /** Verifica que existan las cuentas padre (prefijos en niveles PUC) del código dado. */
+    private void validarCuentasPadre(String codigo) {
+        for (int nivel : NIVELES_PUC) {
+            if (nivel >= codigo.length()) break;
+            String padre = codigo.substring(0, nivel);
+            if (repo.findByCodigo(padre).isEmpty()) {
+                throw new RuntimeException("Debe crear primero la cuenta padre " + padre +
+                        " antes de crear la cuenta " + codigo + ".");
+            }
+        }
     }
 
     private void aplicar(CuentaContable cc, CuentaContableDTO dto) {
@@ -86,6 +142,7 @@ public class CuentaContableService {
         cc.setPadreId(dto.getPadreId());
         if (dto.getEsMovimiento() != null) cc.setEsMovimiento(dto.getEsMovimiento());
         if (dto.getRequiereTercero() != null) cc.setRequiereTercero(dto.getRequiereTercero());
+        if (dto.getRequiereDocumentoCruce() != null) cc.setRequiereDocumentoCruce(dto.getRequiereDocumentoCruce());
         if (dto.getEstado() != null) cc.setEstado(dto.getEstado());
     }
 
@@ -100,6 +157,7 @@ public class CuentaContableService {
         dto.setPadreId(cc.getPadreId());
         dto.setEsMovimiento(cc.getEsMovimiento());
         dto.setRequiereTercero(cc.getRequiereTercero());
+        dto.setRequiereDocumentoCruce(cc.getRequiereDocumentoCruce());
         dto.setEstado(cc.getEstado());
         return dto;
     }

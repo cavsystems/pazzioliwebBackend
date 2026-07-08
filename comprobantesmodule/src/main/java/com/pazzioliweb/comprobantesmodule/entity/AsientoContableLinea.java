@@ -50,6 +50,16 @@ public class AsientoContableLinea {
     @Column(name = "descripcion", length = 500)
     private String descripcion;
 
+    /** Documento de cruce (factura/CxC/CxP) cuando la cuenta lo exige. Para
+     *  asientos automáticos se autocompleta con el documento origen. */
+    @Column(name = "documento_cruce", length = 100)
+    private String documentoCruce;
+
+    /** Centro de costo (opcional) asociado a la línea. Referencia al id de
+     *  la tabla centrocosto; sin FK dura, igual que terceroId. */
+    @Column(name = "centro_costo_id")
+    private Integer centroCostoId;
+
     /** Orden visual de la línea dentro del asiento. */
     @Column(name = "orden", nullable = false)
     private Integer orden = 0;
