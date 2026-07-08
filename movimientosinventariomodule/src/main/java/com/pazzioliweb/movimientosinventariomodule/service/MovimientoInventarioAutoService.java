@@ -11,8 +11,10 @@ import com.pazzioliweb.movimientosinventariomodule.repository.KardexRepository;
 import com.pazzioliweb.movimientosinventariomodule.repository.MovimientoInventarioDetalleRepository;
 import com.pazzioliweb.movimientosinventariomodule.repository.MovimientoInventarioRepository;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
+import com.pazzioliweb.productosmodule.entity.Existencias;
 import com.pazzioliweb.productosmodule.entity.ProductoVariante;
 import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
+import com.pazzioliweb.productosmodule.repositori.ExistenciasRepository;
 import com.pazzioliweb.productosmodule.repositori.ProductoVarianteRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,19 +54,22 @@ public class MovimientoInventarioAutoService {
     private final ProductoVarianteRepository varianteRepo;
     private final BodegasRepository bodegaRepo;
     private final ComprobanteContableRepository comprobanteRepo;
+    private final ExistenciasRepository existenciasRepo;
 
     public MovimientoInventarioAutoService(MovimientoInventarioRepository movimientoRepo,
                                             MovimientoInventarioDetalleRepository detalleRepo,
                                             KardexRepository kardexRepo,
                                             ProductoVarianteRepository varianteRepo,
                                             BodegasRepository bodegaRepo,
-                                            ComprobanteContableRepository comprobanteRepo) {
+                                            ComprobanteContableRepository comprobanteRepo,
+                                            ExistenciasRepository existenciasRepo) {
         this.movimientoRepo = movimientoRepo;
         this.detalleRepo = detalleRepo;
         this.kardexRepo = kardexRepo;
         this.varianteRepo = varianteRepo;
         this.bodegaRepo = bodegaRepo;
         this.comprobanteRepo = comprobanteRepo;
+        this.existenciasRepo = existenciasRepo;
     }
 
     /** Item simple usado por los callers para describir una línea del movimiento. */
@@ -100,7 +105,8 @@ public class MovimientoInventarioAutoService {
                                          LocalDate fecha, List<ItemMovimiento> items,
                                          String tipoComprobante, Integer comprobanteId, Integer consecutivo) {
         String t = (tipoComprobante == null || tipoComprobante.isBlank()) ? "FC" : tipoComprobante.toUpperCase();
-        crearMovimientoAuto(t, "Venta " + numeroVenta, ventaId, t,
+        // Usar "VENTA" como documentoTipo fijo para idempotencia, independientemente de FC/VC
+        crearMovimientoAuto(t, "Venta " + numeroVenta, ventaId, "VENTA",
                 TipoMovimiento.SALIDA, bodegaCodigo, fecha, items, false, comprobanteId, consecutivo);
     }
 
@@ -246,8 +252,21 @@ public class MovimientoInventarioAutoService {
             // Kardex: leer saldo y costo promedio anterior
             Optional<Kardex> ultimoOpt = kardexRepo
                     .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodega);
-            double saldoAnterior = ultimoOpt.map(Kardex::getSaldo).orElse(0.0);
-            double promedioAnterior = ultimoOpt.map(Kardex::getCostoPromedio).orElse(0.0);
+            double saldoAnterior;
+            double promedioAnterior;
+
+            if (ultimoOpt.isPresent()) {
+                saldoAnterior = ultimoOpt.get().getSaldo();
+                promedioAnterior = ultimoOpt.get().getCostoPromedio() != null ? ultimoOpt.get().getCostoPromedio() : 0.0;
+            } else {
+                // Si no hay kardex previo, usar el stock actual de la tabla existencias
+                Long varianteId = variante.getProductoVarianteId();
+                Optional<Existencias> existenciasOpt = existenciasRepo
+                        .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
+                                varianteId, bodega.getCodigo());
+                saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
+                promedioAnterior = 0.0;
+            }
 
             double entrada = tipo == TipoMovimiento.ENTRADA ? item.cantidad : 0.0;
             double salida  = tipo == TipoMovimiento.SALIDA  ? item.cantidad : 0.0;
@@ -293,6 +312,23 @@ public class MovimientoInventarioAutoService {
             kardex.setEstado(EstadoMovimiento.ACTIVO);
             kardex.setObservaciones(descripcion);
             kardexRepo.save(kardex);
+
+            // Actualizar tabla existencias para mantener sincronización con Kardex
+            Optional<Existencias> existenciasOpt = existenciasRepo
+                    .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
+                            variante.getProductoVarianteId(), bodega.getCodigo());
+            if (existenciasOpt.isPresent()) {
+                Existencias existencias = existenciasOpt.get();
+                existencias.setExistencia(java.math.BigDecimal.valueOf(saldoNuevo));
+                existenciasRepo.save(existencias);
+            } else {
+                // Si no existe registro de existencias, crearlo
+                Existencias nuevasExistencias = new Existencias();
+                nuevasExistencias.setProductoVariante(variante);
+                nuevasExistencias.setBodega(bodega);
+                nuevasExistencias.setExistencia(java.math.BigDecimal.valueOf(saldoNuevo));
+                existenciasRepo.save(nuevasExistencias);
+            }
 
             // Refresh el costo promedio del detalle
             detGuardado.setCostoPromedio(promedioNuevo);

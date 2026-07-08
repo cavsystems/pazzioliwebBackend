@@ -300,16 +300,9 @@ public class VentaServiceImpl implements VentaService {
             completarVenta(ven.getId(), ventaDTO.getMetodosPago());
         }
 
-        // Reducir stock después de guardar la venta
+        // Actualizar ultimaFechaVenta del producto variante
         for (DetalleVentaDTO detalleDTO : ventaDTO.getItems()) {
             ProductoVariante variante = productoVarianteRepository.findBySku(detalleDTO.getCodigoProducto()).get();
-            Existencias existencia = existenciasRepository
-                    .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(variante.getProductoVarianteId(), ventaDTO.getBodegaId()).get();
-            BigDecimal cantidadVendida = BigDecimal.valueOf(detalleDTO.getCantidad());
-            existencia.setExistencia(existencia.getExistencia().subtract(cantidadVendida));
-            existenciasRepository.save(existencia);
-
-            // Actualizar ultimaFechaVenta del producto variante
             variante.setUltimaFechaVenta(LocalDateTime.now());
             productoVarianteRepository.save(variante);
         }

@@ -44,8 +44,10 @@ import com.pazzioliweb.movimientosinventariomodule.repository.KardexRepository;
 import com.pazzioliweb.movimientosinventariomodule.repository.MovimientoInventarioDetalleRepository;
 import com.pazzioliweb.movimientosinventariomodule.repository.MovimientoInventarioRepository;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
+import com.pazzioliweb.productosmodule.entity.Existencias;
 import com.pazzioliweb.productosmodule.entity.ProductoVariante;
 import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
+import com.pazzioliweb.productosmodule.repositori.ExistenciasRepository;
 import com.pazzioliweb.productosmodule.repositori.ProductoVarianteRepository;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
@@ -75,6 +77,9 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
 
     @Autowired
     private BodegasRepository bodegasRepository;
+
+    @Autowired
+    private ExistenciasRepository existenciasRepository;
 
     @Autowired
     private UsuarioRepository usuarioRepository;
@@ -346,9 +351,21 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         Kardex ultimo = kardexRepository
                 .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodega)
                 .orElse(null);
-        double saldoAnterior = ultimo != null ? ultimo.getSaldo() : 0.0;
-        double costoPromedioAnterior = ultimo != null && ultimo.getCostoPromedio() != null
-                ? ultimo.getCostoPromedio() : 0.0;
+        double saldoAnterior;
+        double costoPromedioAnterior;
+
+        if (ultimo != null) {
+            saldoAnterior = ultimo.getSaldo();
+            costoPromedioAnterior = ultimo.getCostoPromedio() != null ? ultimo.getCostoPromedio() : 0.0;
+        } else {
+            // Si no hay kardex previo, usar el stock actual de la tabla existencias
+            Long varianteId = variante.getProductoVarianteId();
+            java.util.Optional<Existencias> existenciasOpt = existenciasRepository
+                    .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
+                            varianteId, bodega.getCodigo());
+            saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
+            costoPromedioAnterior = 0.0;
+        }
 
         double nuevoSaldo = saldoAnterior + entrada - salida;
 

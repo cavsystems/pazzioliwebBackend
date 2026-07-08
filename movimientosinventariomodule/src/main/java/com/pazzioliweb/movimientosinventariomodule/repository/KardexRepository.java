@@ -18,15 +18,15 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
 
         Optional<Kardex> findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(ProductoVariante variante, Bodegas bodega);
 
-        @Query(value = "SELECT t.fecha_creacion, t.numerofactura, t.movimiento, t.tipo_movimiento, t.tipo, t.producto, " +
-                       "t.entrada, t.salida, t.costo_promedio, t.total_costo, t.saldo " +
+        @Query(value = "SELECT fecha_creacion, numerofactura , tipo_movimiento as movimiento,tipoentrada as tipo_movimiento , tipo, descripcion AS Producto, " +
+                       "entrada, salida, costo_promedio, total_costo, saldo " +
                        "FROM (" +
                        "SELECT " +
                        "  m.tipo_movimiento as tipoentrada, " +
                        "  co.prefijo, " +
                        "  m.consecutivo, " +
                        "  co.tipo_movimiento AS tipo, " +
-                       "  CONCAT(TRIM(pod.descripcion), '  ', IFNULL(TRIM(po.referencia_variantes), '')) AS producto, " +
+                       "  CONCAT(TRIM(pod.descripcion), '  ', IFNULL(TRIM(po.referencia_variantes), '')) AS descripcion, " +
                        "  k.entrada, " +
                        "  k.salida, " +
                        "  k.saldo, " +
@@ -45,7 +45,6 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "    WHEN co.tipo_movimiento = 'EI' AND mov.tipo_movimiento IS NULL THEN 'ENTRADA' " +
                        "    ELSE mov.tipo_movimiento " +
                        "  END AS tipo_movimiento, " +
-                       "  m.tipo_movimiento as movimiento, " +
                        "  mov.numero_comprobante, " +
                        "  ROW_NUMBER() OVER ( " +
                        "      PARTITION BY k.kardex_id " +
@@ -61,7 +60,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "WHERE rn = 1 " +
                        "AND (:desde IS NULL OR DATE(t.fecha_creacion) >= :desde) " +
                        "AND (:hasta IS NULL OR DATE(t.fecha_creacion) <= :hasta) " +
-                       "ORDER BY t.fecha_creacion", nativeQuery = true)
+                       "ORDER BY fecha_creacion", nativeQuery = true)
         List<Object[]> getKardexReportRaw(@Param("desde") String desde, @Param("hasta") String hasta);
 
 }
