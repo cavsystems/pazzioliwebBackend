@@ -557,8 +557,7 @@ public class VentaServiceImpl implements VentaService {
                     MovimientoInventarioAutoService.nuevaLista();
             for (DetalleVenta d : venta.getItems()) {
                 if (d.getCantidad() == null || d.getCantidad() <= 0) continue;
-                // Costo unitario para Kardex: usamos costo unitario del producto si está,
-                // si no, dejamos en 0 (el Kardex calculará promedio en base al saldo previo).
+                // Costo unitario para Kardex: obtener costo del producto si no hay costo promedio anterior
                 double cant = d.getCantidad().doubleValue();
                 double precio = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
                 double ivaPct = d.getIva() != null ? d.getIva().doubleValue() : 0.0;
@@ -567,11 +566,40 @@ public class VentaServiceImpl implements VentaService {
                 double totalLineaConIva = d.getTotal() != null
                         ? d.getTotal().doubleValue()
                         : (precio * cant * (1.0 + ivaPct / 100.0));
+                
+                // Obtener costo del producto desde ProductoVariante -> Producto
+                // Usar codigo_producto (SKU) en lugar de referencia_variantes
+                double costoUnitario = 0.0;
+                try {
+                    System.out.println("[CostoProducto] Buscando variante con SKU: " + d.getCodigoProducto());
+                    java.util.Optional<com.pazzioliweb.productosmodule.entity.ProductoVariante> varianteOpt =
+                            productoVarianteRepository.findBySku(d.getCodigoProducto());
+                    if (varianteOpt.isPresent()) {
+                        System.out.println("[CostoProducto] Variante encontrada: " + varianteOpt.get().getProductoVarianteId());
+                        if (varianteOpt.get().getProducto() != null) {
+                            Double costoProducto = varianteOpt.get().getProducto().getCosto();
+                            System.out.println("[CostoProducto] Costo del producto: " + costoProducto);
+                            if (costoProducto != null && costoProducto > 0) {
+                                costoUnitario = costoProducto;
+                            } else {
+                                System.out.println("[CostoProducto] Costo del producto es null o 0");
+                            }
+                        } else {
+                            System.out.println("[CostoProducto] Producto es null");
+                        }
+                    } else {
+                        System.out.println("[CostoProducto] Variante no encontrada con SKU: " + d.getCodigoProducto());
+                    }
+                } catch (Exception ex) {
+                    System.out.println("[CostoProducto] Error obteniendo costo del producto: " + ex.getMessage());
+                    ex.printStackTrace();
+                }
+                
                 items.add(new MovimientoInventarioAutoService.ItemMovimiento(
                         d.getCodigoProducto(),
                         d.getReferenciaVariantes(),
                         cant,
-                        0.0,                  // costo unitario sin IVA — kardex usa promedio existente
+                        costoUnitario,        // costo unitario del producto — kardex usa promedio existente si está disponible
                         totalLineaConIva       // total mostrado en historial
                 ));
             }

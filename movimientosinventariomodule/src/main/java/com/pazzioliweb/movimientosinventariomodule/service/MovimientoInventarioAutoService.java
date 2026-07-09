@@ -230,6 +230,8 @@ public class MovimientoInventarioAutoService {
             ProductoVariante variante = opt.get();
 
             // Detalle
+            double entrada = tipo == TipoMovimiento.ENTRADA ? item.cantidad : 0.0;
+            double salida  = tipo == TipoMovimiento.SALIDA  ? item.cantidad : 0.0;
             MovimientoInventarioDetalle det = new MovimientoInventarioDetalle();
             det.setMovimiento(movGuardado);
             det.setProductoVariante(variante);
@@ -254,42 +256,52 @@ public class MovimientoInventarioAutoService {
                     .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodega);
             double saldoAnterior;
             double promedioAnterior;
+            Double saldototal;
 
             if (ultimoOpt.isPresent()) {
                 saldoAnterior = ultimoOpt.get().getSaldo();
-                promedioAnterior = ultimoOpt.get().getCostoPromedio() != null ? ultimoOpt.get().getCostoPromedio() : 0.0;
+                promedioAnterior = ultimoOpt.get().getCostoUnitario() != null ? ultimoOpt.get().getCostoUnitario(): 0.0;
+
             } else {
                 // Si no hay kardex previo, usar el stock actual de la tabla existencias
                 Long varianteId = variante.getProductoVarianteId();
                 Optional<Existencias> existenciasOpt = existenciasRepo
                         .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
                                 varianteId, bodega.getCodigo());
-                saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
+                //saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
+                saldoAnterior=0.0;
                 promedioAnterior = 0.0;
+                saldototal= entrada * opt.get().getProducto().getCosto();
+
+
+
+
             }
 
-            double entrada = tipo == TipoMovimiento.ENTRADA ? item.cantidad : 0.0;
-            double salida  = tipo == TipoMovimiento.SALIDA  ? item.cantidad : 0.0;
+
             double saldoNuevo = saldoAnterior + entrada - salida;
 
-            // Recalcular costo promedio (solo en entradas)
             double promedioNuevo = promedioAnterior;
+
+            // Para SALIDAS, valorar al costo promedio vigente
+            double costoUnitarioFinal = item.costoUnitario;
+            if (salida > 0 && promedioAnterior > 0) {
+                costoUnitarioFinal = promedioAnterior;
+            }
+
             if (entrada > 0) {
-                if (saldoAnterior <= 0 || promedioAnterior <= 0) {
-                    promedioNuevo = item.costoUnitario;
-                } else {
-                    double valorAnterior = saldoAnterior * promedioAnterior;
-                    double valorIngreso  = entrada * item.costoUnitario;
-                    promedioNuevo = (valorAnterior + valorIngreso) / (saldoAnterior + entrada);
-                }
-                // Redondear a 2 decimales para evitar errores de punto flotante
+                // Costo promedio ponderado en toda entrada (NIIF Sec.13 / NIC 2)
+                double costoTotalAnterior = saldoAnterior * promedioAnterior;
+                double costoTotalActual = entrada * item.costoUnitario;
+                double totalUnidades = saldoAnterior + entrada;
+                promedioNuevo = totalUnidades > 0
+                        ? (costoTotalAnterior + costoTotalActual) / totalUnidades
+                        : item.costoUnitario;
                 promedioNuevo = Math.round(promedioNuevo * 100.0) / 100.0;
             }
-            // Para devoluciones (entrada) mantenemos promedio anterior si era >0
+            // Para devoluciones: mantener promedio anterior (la mercancía vuelve al mismo costo)
             if (entrada > 0 && "DV".equals(documentoTipo) && promedioAnterior > 0) {
                 promedioNuevo = promedioAnterior;
-                // Redondear a 2 decimales para evitar errores de punto flotante
-                promedioNuevo = Math.round(promedioNuevo * 100.0) / 100.0;
             }
 
             // Si la variante todavía no tenía promedio (compra inicial), guardamos costoUnitario
@@ -307,11 +319,11 @@ public class MovimientoInventarioAutoService {
             kardex.setEntrada(entrada);
             kardex.setSalida(salida);
             kardex.setSaldo(saldoNuevo);
-            kardex.setCostoUnitario(item.costoUnitario);
+            kardex.setCostoUnitario(costoUnitarioFinal);
             kardex.setCostoPromedio(promedioNuevo);
-            // Total costo: para entradas usar el costo del ingreso, para salidas usar el promedio
+            // Total costo: para salidas usar el promedio, para entradas usar el nuevo saldo * nuevo promedio
             double totalCostoLinea = (entrada > 0)
-                    ? entrada * item.costoUnitario
+                    ? saldoNuevo * costoUnitarioFinal
                     : salida * promedioNuevo;
             kardex.setTotalCosto(totalCostoLinea);
             kardex.setTipo(tipo);

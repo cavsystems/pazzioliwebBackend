@@ -124,14 +124,17 @@ public class MovimientoInventarioController {
 
     /**
      * Obtener reporte de kardex con información detallada de movimientos.
-     * Filtros opcionales por rango de fechas (desde, hasta).
+     * Filtros opcionales por rango de fechas (desde, hasta), variante de producto, bodega y tipo de movimiento.
      */
     @GetMapping("/kardex-reporte")
     public ResponseEntity<?> getKardexReport(
             @RequestParam(required = false) String desde,
-            @RequestParam(required = false) String hasta) {
+            @RequestParam(required = false) String hasta,
+            @RequestParam(required = false) Integer varianteproductoid,
+            @RequestParam(required = false) String bodega,
+            @RequestParam(required = false) String movimiento) {
         try {
-            java.util.List<KardexReportDto> report = movimientoService.getKardexReport(desde, hasta);
+            java.util.List<KardexReportDto> report = movimientoService.getKardexReport(desde, hasta, varianteproductoid, bodega, movimiento);
             return ResponseEntity.ok(report);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

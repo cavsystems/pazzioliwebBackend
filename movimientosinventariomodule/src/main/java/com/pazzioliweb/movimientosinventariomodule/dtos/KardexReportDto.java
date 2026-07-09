@@ -11,10 +11,11 @@ public class KardexReportDto {
     private String producto;
     private Double entrada;
     private Double salida;
-    private Double costoPromedio;
+    private Double costo;
     private Double totalCosto;
     private Double saldo;
     private String nombrebodega;
+    private String cliente;
 
     public LocalDateTime getFechaCreacion() {
         return fechaCreacion;
@@ -80,12 +81,12 @@ public class KardexReportDto {
         this.salida = salida;
     }
 
-    public Double getCostoPromedio() {
-        return costoPromedio;
+    public Double getCosto() {
+        return costo;
     }
 
-    public void setCostoPromedio(Double costoPromedio) {
-        this.costoPromedio = costoPromedio;
+    public void setCosto(Double costo) {
+        this.costo = costo;
     }
 
     public Double getTotalCosto() {
@@ -110,5 +111,13 @@ public class KardexReportDto {
 
     public void setNombrebodega(String nombrebodega) {
         this.nombrebodega = nombrebodega;
+    }
+
+    public String getCliente() {
+        return cliente;
+    }
+
+    public void setCliente(String cliente) {
+        this.cliente = cliente;
     }
 }

@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
 import com.pazzioliweb.commonbacken.util.Jwcommon;
+import com.pazzioliweb.productosmodule.entity.Productos;
 import io.jsonwebtoken.Claims;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -347,24 +348,27 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                                    double costoUnitario,
                                    TipoMovimiento tipo) {
 
+        Productos product=variante.getProducto();
         // ── Saldo y costo promedio previos ──
+        System.out.println(" ── Saldo y costo promedio previos ──"+bodega.getNombre()+variante.getCodigoBarras());
         Kardex ultimo = kardexRepository
                 .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodega)
                 .orElse(null);
         double saldoAnterior;
-        double costoPromedioAnterior;
+        double costounitarioanterior;
 
         if (ultimo != null) {
             saldoAnterior = ultimo.getSaldo();
-            costoPromedioAnterior = ultimo.getCostoPromedio() != null ? ultimo.getCostoPromedio() : 0.0;
+            costounitarioanterior = ultimo.getCostoUnitario() != null ? ultimo.getCostoUnitario() : 0.0;
         } else {
             // Si no hay kardex previo, usar el stock actual de la tabla existencias
             Long varianteId = variante.getProductoVarianteId();
             java.util.Optional<Existencias> existenciasOpt = existenciasRepository
                     .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
                             varianteId, bodega.getCodigo());
-            saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
-            costoPromedioAnterior = 0.0;
+          //  saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
+            saldoAnterior=0.0;
+            costounitarioanterior = 0.0;
         }
 
         double nuevoSaldo = saldoAnterior + entrada - salida;
@@ -381,23 +385,27 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             );
         }
 
-        // ── Costo promedio ponderado real (NIIF Sec.13 / NIC 2) ──
-        //   nuevoCostoProm = (saldoAnterior × costoPromAnt + entrada × costoNuevo) / nuevoSaldo
-        // Solo aplica recálculo en ENTRADAS. En SALIDAS, el costo promedio
-        // permanece igual al anterior (se usa para valorar la salida).
+        // Costo promedio ponderado (NIIF Sec.13 / NIC 2):
+        //   nuevoCosto = (saldoAnterior * promedioAnterior + entrada * costoUnitario) / (saldoAnterior + entrada)
+        // En SALIDAS, el promedio se mantiene igual al anterior.
         double nuevoCostoPromedio;
+
+        // Para SALIDAS, valorar al costo promedio vigente, no al precio de entrada
+        double costoUnitarioFinal = costoUnitario;
+        if (salida > 0 && costounitarioanterior > 0) {
+            costoUnitarioFinal = costounitarioanterior;
+        }
+
         if (entrada > 0) {
-            double valorSaldoPrevio = saldoAnterior * costoPromedioAnterior;
-            double valorEntrada = entrada * costoUnitario;
-            nuevoCostoPromedio = nuevoSaldo > 0
-                    ? (valorSaldoPrevio + valorEntrada) / nuevoSaldo
+            double costoTotalAnterior = saldoAnterior * costounitarioanterior;
+            double costoTotalActual = entrada * costoUnitario;
+            double totalUnidades = saldoAnterior + entrada;
+            nuevoCostoPromedio = totalUnidades > 0
+                    ? (costoTotalAnterior + costoTotalActual) / totalUnidades
                     : costoUnitario;
-            // Redondear a 2 decimales para evitar errores de punto flotante
             nuevoCostoPromedio = Math.round(nuevoCostoPromedio * 100.0) / 100.0;
         } else {
-            nuevoCostoPromedio = costoPromedioAnterior;
-            // Redondear a 2 decimales para evitar errores de punto flotante
-            nuevoCostoPromedio = Math.round(nuevoCostoPromedio * 100.0) / 100.0;
+            nuevoCostoPromedio = Math.round(costounitarioanterior * 100.0) / 100.0;
         }
 
         Kardex kardex = new Kardex();
@@ -410,13 +418,13 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         kardex.setEntrada(entrada);
         kardex.setSalida(salida);
         kardex.setSaldo(nuevoSaldo);
-        kardex.setCostoUnitario(costoUnitario);
+        kardex.setCostoUnitario(costoUnitarioFinal);
         kardex.setCostoPromedio(nuevoCostoPromedio);
         // Total del movimiento valorado al costo promedio cuando es SALIDA,
-        // al costo unitario cuando es ENTRADA.
+        // al nuevo costo promedio cuando es ENTRADA (valor total del inventario).
         kardex.setTotalCosto(salida > 0
                 ? salida * nuevoCostoPromedio
-                : entrada * costoUnitario);
+                : nuevoSaldo * costoUnitarioFinal);
         kardex.setTipo(tipo);
         kardex.setEstado(movimiento.getEstado());
         kardex.setObservaciones(movimiento.getObservaciones());
@@ -608,8 +616,8 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     }
 
     @Override
-    public List<KardexReportDto> getKardexReport(String desde, String hasta) {
-        List<Object[]> results = kardexRepository.getKardexReportRaw(desde, hasta);
+    public List<KardexReportDto> getKardexReport(String desde, String hasta, Integer varianteproductoid, String bodega, String movimiento) {
+        List<Object[]> results = kardexRepository.getKardexReportRaw(desde, hasta, varianteproductoid, bodega, movimiento);
         List<KardexReportDto> dtos = new java.util.ArrayList<>();
         
         for (Object[] row : results) {
@@ -626,10 +634,11 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             dto.setProducto((String) row[5]);
             dto.setEntrada(row[6] != null ? getDoubleValue(row[6]) : null);
             dto.setSalida(row[7] != null ? getDoubleValue(row[7]) : null);
-            dto.setCostoPromedio(row[8] != null ? getDoubleValue(row[8]) : null);
+            dto.setCosto(row[8] != null ? getDoubleValue(row[8]) : null);
             dto.setTotalCosto(row[9] != null ? getDoubleValue(row[9]) : null);
             dto.setSaldo(row[10] != null ? getDoubleValue(row[10]) : null);
             dto.setNombrebodega(row[11] != null ? (String) row[11] : null);
+            dto.setCliente(row[12] != null ? (String) row[12] : null);
             dtos.add(dto);
         }
         

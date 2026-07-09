@@ -37,6 +37,6 @@ public interface MovimientoInventarioService {
 
     void reversarKardex(Long movimientoId);
 
-    List<KardexReportDto> getKardexReport(String desde, String hasta);
+    List<KardexReportDto> getKardexReport(String desde, String hasta, Integer varianteproductoid, String bodega, String movimiento);
 	
 }

@@ -24,6 +24,7 @@ public interface ProductoVarianteRepository extends JpaRepository<ProductoVarian
 	boolean existsBySku(String sku);
 	boolean existsByCodigoBarras(String codigoBarras);
 
+	@EntityGraph(attributePaths = {"producto"})
 	Optional<ProductoVariante> findBySku(String sku);
 
 	Optional<ProductoVariante> findByProductoAndPredeterminada(Productos producto, Boolean predeterminada);
@@ -415,6 +416,9 @@ AND t.activo = :activo
 
 	Optional<ProductoVariante> findByProductoVarianteId(Long id);
 	Optional<ProductoVariante> findByCodigoBarras(String codigobarras);
+	
+	@EntityGraph(attributePaths = {"producto"})
+	Optional<ProductoVariante> findByReferenciaVariantes(String referenciaVariantes);
 	
 	void deleteByProductoVarianteId(Long id);
 	
