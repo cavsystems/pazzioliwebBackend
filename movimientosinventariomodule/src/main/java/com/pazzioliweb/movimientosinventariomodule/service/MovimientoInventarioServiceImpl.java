@@ -226,8 +226,20 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             }
             // Kardex: TRASLADO → registrar entrada en bodega destino
             else if (tipo == TipoMovimiento.TRASLADO && bodegaDestino != null) {
+                // El costo de entrada en destino debe ser el costo promedio ponderado
+                // con que salió de bodega origen, no el costo unitario de la última compra.
+                double costoTraslado = costoUnitario;
+                if (bodegaOrigen != null) {
+                    Kardex ultimoKardexOrigen = kardexRepository
+                            .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodegaOrigen)
+                            .orElse(null);
+                    if (ultimoKardexOrigen != null && ultimoKardexOrigen.getCostoPromedio() != null
+                            && ultimoKardexOrigen.getCostoPromedio() > 0) {
+                        costoTraslado = ultimoKardexOrigen.getCostoPromedio();
+                    }
+                }
                 crearKardexEntry(movimiento, detalle, variante, bodegaDestino,
-                        cantidad, 0.0, costoUnitario, tipo);
+                        cantidad, 0.0, costoTraslado, tipo);
             }
 
             detalles.add(detalle);
