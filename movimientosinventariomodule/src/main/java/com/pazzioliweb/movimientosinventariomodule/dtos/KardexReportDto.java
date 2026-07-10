@@ -11,7 +11,8 @@ public class KardexReportDto {
     private String producto;
     private Double entrada;
     private Double salida;
-    private Double costo;
+    private Double costoUnitario;
+    private Double costoPromedio;
     private Double totalCosto;
     private Double saldo;
     private String nombrebodega;
@@ -81,12 +82,20 @@ public class KardexReportDto {
         this.salida = salida;
     }
 
-    public Double getCosto() {
-        return costo;
+    public Double getCostoUnitario() {
+        return costoUnitario;
     }
 
-    public void setCosto(Double costo) {
-        this.costo = costo;
+    public void setCostoUnitario(Double costoUnitario) {
+        this.costoUnitario = costoUnitario;
+    }
+
+    public Double getCostoPromedio() {
+        return costoPromedio;
+    }
+
+    public void setCostoPromedio(Double costoPromedio) {
+        this.costoPromedio = costoPromedio;
     }
 
     public Double getTotalCosto() {

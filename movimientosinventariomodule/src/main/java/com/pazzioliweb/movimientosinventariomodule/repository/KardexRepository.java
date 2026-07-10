@@ -19,7 +19,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
         Optional<Kardex> findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(ProductoVariante variante, Bodegas bodega);
 
         @Query(value = "SELECT fecha_creacion, numerofactura, tipo_movimiento AS movimiento, tipoentrada AS tipo_movimiento, tipo, " +
-                       "descripcion AS Producto, entrada, salida, costo, total_costo, saldo, nombrebodega, cliente " +
+                       "descripcion AS Producto, entrada, salida, costo_unitario, costo_promedio, total_costo, saldo, nombrebodega, cliente " +
                        "FROM (" +
                        "SELECT " +
                        "  m.tipo_movimiento AS tipoentrada, " +
@@ -49,18 +49,8 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "    ELSE mov.tipo_movimiento " +
                        "  END AS tipo_movimiento, " +
                        "  mov.numero_comprobante, " +
-                       "  CASE " +
-                       "    WHEN ve.id IS NOT NULL THEN pod.costo " +
-                       "    WHEN orden.id IS NOT NULL THEN pod.costo" +
-                       "    WHEN devv.id IS NOT NULL THEN pod.costo " +
-                       "    ELSE k.costo_promedio " +
-                       "  END AS costo, " +
-                       "  CASE " +
-                       "    WHEN ve.id IS NOT NULL THEN pod.costo * dev.cantidad " +
-                       "    WHEN orden.id IS NOT NULL THEN pod.costo * detorden.recibido " +
-                       "    WHEN devv.id IS NOT NULL THEN pod.costo * devvt.cantidad_devuelta " +
-                       "    ELSE k.total_costo " +
-                       "  END AS total_costo, " +
+                       "  k.total_costo, " +
+                       "  k.costo_promedio, " +
                        "  CASE " +
                        "    WHEN ve.id IS NOT NULL THEN COALESCE(NULLIF(TRIM(tve.razon_social), ''), CONCAT_WS(' ', NULLIF(TRIM(tve.nombre_1),''), NULLIF(TRIM(tve.nombre_2),''), NULLIF(TRIM(tve.apellido_1),''), NULLIF(TRIM(tve.apellido_2),''))) " +
                        "    WHEN orden.id IS NOT NULL THEN COALESCE(NULLIF(TRIM(torden.razon_social), ''), CONCAT_WS(' ', NULLIF(TRIM(torden.nombre_1),''), NULLIF(TRIM(torden.nombre_2),''), NULLIF(TRIM(torden.apellido_1),''), NULLIF(TRIM(torden.apellido_2),''))) " +

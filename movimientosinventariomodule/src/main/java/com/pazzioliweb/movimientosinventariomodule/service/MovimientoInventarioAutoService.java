@@ -260,7 +260,8 @@ public class MovimientoInventarioAutoService {
 
             if (ultimoOpt.isPresent()) {
                 saldoAnterior = ultimoOpt.get().getSaldo();
-                promedioAnterior = ultimoOpt.get().getCostoUnitario() != null ? ultimoOpt.get().getCostoUnitario(): 0.0;
+                promedioAnterior = ultimoOpt.get().getCostoPromedio() != null ? ultimoOpt.get().getCostoPromedio(): 0.0;
+            saldototal=ultimoOpt.get().getTotalCosto();
 
             } else {
                 // Si no hay kardex previo, usar el stock actual de la tabla existencias
@@ -271,7 +272,7 @@ public class MovimientoInventarioAutoService {
                 //saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
                 saldoAnterior=0.0;
                 promedioAnterior = 0.0;
-                saldototal= entrada * opt.get().getProducto().getCosto();
+                saldototal= 0.0;
 
 
 
@@ -323,8 +324,8 @@ public class MovimientoInventarioAutoService {
             kardex.setCostoPromedio(promedioNuevo);
             // Total costo: para salidas usar el promedio, para entradas usar el nuevo saldo * nuevo promedio
             double totalCostoLinea = (entrada > 0)
-                    ? saldoNuevo * costoUnitarioFinal
-                    : salida * promedioNuevo;
+                    ?   (entrada * costoUnitarioFinal) + saldototal
+                    :  saldototal - (salida * costoUnitarioFinal) ;
             kardex.setTotalCosto(totalCostoLinea);
             kardex.setTipo(tipo);
             kardex.setEstado(EstadoMovimiento.ACTIVO);

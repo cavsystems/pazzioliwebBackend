@@ -356,10 +356,11 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                 .orElse(null);
         double saldoAnterior;
         double costounitarioanterior;
-
+      double saldototal;
         if (ultimo != null) {
             saldoAnterior = ultimo.getSaldo();
-            costounitarioanterior = ultimo.getCostoUnitario() != null ? ultimo.getCostoUnitario() : 0.0;
+            costounitarioanterior = ultimo.getCostoPromedio() != null ? ultimo.getCostoPromedio() : 0.0;
+            saldototal = ultimo.getTotalCosto();
         } else {
             // Si no hay kardex previo, usar el stock actual de la tabla existencias
             Long varianteId = variante.getProductoVarianteId();
@@ -367,6 +368,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                     .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
                             varianteId, bodega.getCodigo());
           //  saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
+            saldototal=0.0;
             saldoAnterior=0.0;
             costounitarioanterior = 0.0;
         }
@@ -422,9 +424,10 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         kardex.setCostoPromedio(nuevoCostoPromedio);
         // Total del movimiento valorado al costo promedio cuando es SALIDA,
         // al nuevo costo promedio cuando es ENTRADA (valor total del inventario).
+
         kardex.setTotalCosto(salida > 0
-                ? salida * nuevoCostoPromedio
-                : nuevoSaldo * costoUnitarioFinal);
+                ?  saldototal - (salida * costoUnitarioFinal)
+                :  saldototal + (entrada * costoUnitarioFinal)  );
         kardex.setTipo(tipo);
         kardex.setEstado(movimiento.getEstado());
         kardex.setObservaciones(movimiento.getObservaciones());
@@ -634,11 +637,12 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             dto.setProducto((String) row[5]);
             dto.setEntrada(row[6] != null ? getDoubleValue(row[6]) : null);
             dto.setSalida(row[7] != null ? getDoubleValue(row[7]) : null);
-            dto.setCosto(row[8] != null ? getDoubleValue(row[8]) : null);
-            dto.setTotalCosto(row[9] != null ? getDoubleValue(row[9]) : null);
-            dto.setSaldo(row[10] != null ? getDoubleValue(row[10]) : null);
-            dto.setNombrebodega(row[11] != null ? (String) row[11] : null);
-            dto.setCliente(row[12] != null ? (String) row[12] : null);
+            dto.setCostoUnitario(row[8] != null ? getDoubleValue(row[8]) : null);
+            dto.setCostoPromedio(row[9] != null ? getDoubleValue(row[9]) : null);
+            dto.setTotalCosto(row[10] != null ? getDoubleValue(row[10]) : null);
+            dto.setSaldo(row[11] != null ? getDoubleValue(row[11]) : null);
+            dto.setNombrebodega(row[12] != null ? (String) row[12] : null);
+            dto.setCliente(row[13] != null ? (String) row[13] : null);
             dtos.add(dto);
         }
         
