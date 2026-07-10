@@ -62,14 +62,37 @@ public class PeriodoContableController {
         return ResponseEntity.ok(service.cerrar(anio, mes, usuario, obs));
     }
 
-    /** Reabre un periodo cerrado (requiere motivo). */
+    /**
+     * Cierra un grupo de meses: bimestre (2), trimestre (3) o cuatrimestre (4)
+     * a partir de mesInicio. Body: {anio, mesInicio, tamano, usuario, observaciones?}.
+     */
+    @PostMapping("/cerrar-grupo")
+    public ResponseEntity<?> cerrarGrupo(@RequestBody Map<String, Object> body) {
+        try {
+            int anio = ((Number) body.get("anio")).intValue();
+            int mesInicio = ((Number) body.get("mesInicio")).intValue();
+            int tamano = ((Number) body.get("tamano")).intValue();
+            String usuario = (String) body.getOrDefault("usuario", "sistema");
+            String obs = (String) body.getOrDefault("observaciones", null);
+            return ResponseEntity.ok(service.cerrarGrupo(anio, mesInicio, tamano, usuario, obs));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Reabre un periodo cerrado. Requiere motivo + contraseña del usuario admin (clave especial). */
     @PostMapping("/reabrir")
-    public ResponseEntity<PeriodoContable> reabrir(@RequestBody Map<String, Object> body) {
-        int anio = ((Number) body.get("anio")).intValue();
-        int mes  = ((Number) body.get("mes")).intValue();
-        String usuario = (String) body.getOrDefault("usuario", "sistema");
-        String motivo = (String) body.getOrDefault("motivo", "Sin motivo");
-        return ResponseEntity.ok(service.reabrir(anio, mes, usuario, motivo));
+    public ResponseEntity<?> reabrir(@RequestBody Map<String, Object> body) {
+        try {
+            int anio = ((Number) body.get("anio")).intValue();
+            int mes  = ((Number) body.get("mes")).intValue();
+            String usuario = (String) body.getOrDefault("usuario", "sistema");
+            String motivo = (String) body.getOrDefault("motivo", "Sin motivo");
+            String password = (String) body.getOrDefault("password", null);
+            return ResponseEntity.ok(service.reabrirValidado(anio, mes, usuario, motivo, password));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** Consulta puntual: ¿está cerrado un periodo X? */

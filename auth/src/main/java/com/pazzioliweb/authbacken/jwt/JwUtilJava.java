@@ -52,6 +52,7 @@ public class JwUtilJava {
 		System.out.println("codigo rol"+usuario.getCodigorol().getCodigo());
 		Optional<Usuario> optional = usuarioRepository.findByNombreRol(usuario.getCodigo());
 		Optional<BodegaDTO> bodegaid = usuarioRepository.findBybo(usuario.getCodigo());
+
 		if (bodegaid.isPresent()) {
 			boid = bodegaid.get().bodegaid();
 		}

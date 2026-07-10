@@ -54,24 +54,33 @@ public class ReportesContablesController {
     @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> libroDiario(
             @RequestParam(required = false) String desde,
-            @RequestParam(required = false) String hasta) {
+            @RequestParam(required = false) String hasta,
+            @RequestParam(required = false, defaultValue = "false") boolean incluirAnulados,
+            @RequestParam(required = false) String tipo) {
 
         LocalDate d = desde != null ? LocalDate.parse(desde) : LocalDate.now().withDayOfMonth(1);
         LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
+        String tipoFiltro = (tipo != null) ? tipo.trim() : "";
 
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery(
                 "SELECT a.id, a.numero_asiento, a.fecha, a.descripcion, " +
                 "       a.documento_origen_tipo, a.documento_origen_id, a.estado, " +
                 "       l.orden, cc.codigo, cc.nombre, l.tercero_id, l.tercero_nombre, " +
-                "       l.debito, l.credito, l.descripcion AS desc_linea " +
+                "       l.debito, l.credito, l.descripcion AS desc_linea, l.documento_cruce AS doc_cruce, " +
+                "       t.identificacion AS tercero_nit " +
                 "FROM asientos_contables a " +
                 "JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
                 "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
-                "WHERE a.fecha BETWEEN :d AND :h AND a.estado <> 'ANULADO' " +
+                "LEFT JOIN terceros t ON t.tercero_id = l.tercero_id " +
+                "WHERE a.fecha BETWEEN :d AND :h " +
+                "  AND (:incluirAnulados = true OR a.estado <> 'ANULADO') " +
+                "  AND (:tipo = '' OR a.documento_origen_tipo = :tipo) " +
                 "ORDER BY a.fecha, a.id, l.orden")
                 .setParameter("d", d)
                 .setParameter("h", h)
+                .setParameter("incluirAnulados", incluirAnulados)
+                .setParameter("tipo", tipoFiltro)
                 .getResultList();
 
         // Agrupamos por asiento para no repetir cabecera por cada línea.
@@ -106,6 +115,8 @@ public class ReportesContablesController {
             linea.put("debito", db);
             linea.put("credito", cr);
             linea.put("descripcion", r[14]);
+            linea.put("documentoCruce", r[15]);
+            linea.put("terceroNit", r[16]);
             lineas.add(linea);
             totalDebitoGen = totalDebitoGen.add(db);
             totalCreditoGen = totalCreditoGen.add(cr);
@@ -214,10 +225,16 @@ public class ReportesContablesController {
     @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> balanceComprobacion(
             @RequestParam(required = false) String desde,
-            @RequestParam(required = false) String hasta) {
+            @RequestParam(required = false) String hasta,
+            @RequestParam(required = false, defaultValue = "false") boolean porTercero) {
 
         LocalDate d = desde != null ? LocalDate.parse(desde) : LocalDate.now().withDayOfMonth(1);
         LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
+
+        // ── Variante discriminada por tercero (opcional) ──
+        if (porTercero) {
+            return ResponseEntity.ok(balanceComprobacionPorTercero(d, h));
+        }
 
         List<Object[]> rows = lineaRepo.balanceComprobacion(d, h);
         List<Map<String, Object>> cuentas = new ArrayList<>();
@@ -278,6 +295,313 @@ public class ReportesContablesController {
     }
 
     /**
+     * Balance de comprobación discriminado por tercero: una fila por cada
+     * combinación (cuenta, tercero) con movimiento en el período, con su saldo
+     * inicial (arrastrado por cuenta+tercero), débitos, créditos y saldo final.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> balanceComprobacionPorTercero(LocalDate d, LocalDate h) {
+        // Saldo inicial por (cuenta, tercero) — movimientos antes de :d
+        List<Object[]> saldos = em.createNativeQuery(
+                "SELECT l.cuenta_contable_id, COALESCE(l.tercero_id,0), COALESCE(SUM(l.debito - l.credito),0) " +
+                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "WHERE a.fecha < :d AND a.estado = 'CONFIRMADO' " +
+                "GROUP BY l.cuenta_contable_id, COALESCE(l.tercero_id,0)")
+                .setParameter("d", d)
+                .getResultList();
+        Map<String, BigDecimal> saldoIniMap = new HashMap<>();
+        for (Object[] s : saldos) {
+            String key = ((Number) s[0]).intValue() + "-" + ((Number) s[1]).intValue();
+            saldoIniMap.put(key, s[2] != null ? new BigDecimal(s[2].toString()) : BigDecimal.ZERO);
+        }
+
+        // Movimientos del período por (cuenta, tercero)
+        List<Object[]> rows = em.createNativeQuery(
+                "SELECT cc.cuenta_id, cc.codigo, cc.nombre, COALESCE(l.tercero_id,0), l.tercero_nombre, t.identificacion, " +
+                "       COALESCE(SUM(l.debito),0), COALESCE(SUM(l.credito),0) " +
+                "FROM asientos_contables a " +
+                "JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "LEFT JOIN terceros t ON t.tercero_id = l.tercero_id " +
+                "WHERE a.fecha BETWEEN :d AND :h AND a.estado = 'CONFIRMADO' " +
+                "GROUP BY cc.cuenta_id, cc.codigo, cc.nombre, l.tercero_id, l.tercero_nombre, t.identificacion " +
+                "ORDER BY cc.codigo, l.tercero_nombre")
+                .setParameter("d", d)
+                .setParameter("h", h)
+                .getResultList();
+
+        List<Map<String, Object>> cuentas = new ArrayList<>();
+        BigDecimal totalDebitos = BigDecimal.ZERO;
+        BigDecimal totalCreditos = BigDecimal.ZERO;
+        for (Object[] r : rows) {
+            Integer ccId = ((Number) r[0]).intValue();
+            Integer terId = ((Number) r[3]).intValue();
+            BigDecimal saldoIni = saldoIniMap.getOrDefault(ccId + "-" + terId, BigDecimal.ZERO);
+            BigDecimal deb = new BigDecimal(r[6].toString());
+            BigDecimal cre = new BigDecimal(r[7].toString());
+            totalDebitos = totalDebitos.add(deb);
+            totalCreditos = totalCreditos.add(cre);
+            Map<String, Object> m = new HashMap<>();
+            m.put("cuentaId", ccId);
+            m.put("codigo", r[1]);
+            m.put("nombre", r[2]);
+            m.put("terceroId", terId == 0 ? null : terId);
+            m.put("terceroNombre", r[4]);
+            m.put("terceroNit", r[5]);
+            m.put("saldoInicial", saldoIni);
+            m.put("debito", deb);
+            m.put("credito", cre);
+            m.put("saldoFinal", saldoIni.add(deb.subtract(cre)));
+            cuentas.add(m);
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("desde", d);
+        resp.put("hasta", h);
+        resp.put("totalDebitos", totalDebitos);
+        resp.put("totalCreditos", totalCreditos);
+        resp.put("cuentas", cuentas);
+        resp.put("porTercero", true);
+        return resp;
+    }
+
+    /**
+     * Libro auxiliar por TERCERO: todos los movimientos de un tercero en el rango,
+     * agrupables por cuenta, con saldo inicial (arrastrado) y saldo corrido por cuenta.
+     * (El libro auxiliar por CUENTA lo cubre /libro-mayor.)
+     */
+    @GetMapping("/libro-auxiliar-tercero")
+    @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<Map<String, Object>> libroAuxiliarTercero(
+            @RequestParam Integer terceroId,
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+
+        LocalDate d = desde != null ? LocalDate.parse(desde) : LocalDate.now().withDayOfMonth(1);
+        LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
+
+        // Saldo inicial por cuenta (movimientos del tercero antes de :d)
+        List<Object[]> saldos = em.createNativeQuery(
+                "SELECT l.cuenta_contable_id, COALESCE(SUM(l.debito - l.credito),0) " +
+                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "WHERE l.tercero_id = :t AND a.fecha < :d AND a.estado = 'CONFIRMADO' " +
+                "GROUP BY l.cuenta_contable_id")
+                .setParameter("t", terceroId)
+                .setParameter("d", d)
+                .getResultList();
+        Map<Integer, BigDecimal> saldoIniMap = new HashMap<>();
+        for (Object[] s : saldos)
+            saldoIniMap.put(((Number) s[0]).intValue(), s[1] != null ? new BigDecimal(s[1].toString()) : BigDecimal.ZERO);
+
+        // Movimientos del período
+        List<Object[]> rows = em.createNativeQuery(
+                "SELECT cc.cuenta_id, cc.codigo, cc.nombre, a.fecha, a.numero_asiento, " +
+                "       a.documento_origen_tipo, a.estado, l.debito, l.credito, l.descripcion " +
+                "FROM asientos_contables a " +
+                "JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "WHERE l.tercero_id = :t AND a.fecha BETWEEN :d AND :h AND a.estado = 'CONFIRMADO' " +
+                "ORDER BY cc.codigo, a.fecha, a.id")
+                .setParameter("t", terceroId)
+                .setParameter("d", d)
+                .setParameter("h", h)
+                .getResultList();
+
+        List<Map<String, Object>> movimientos = new ArrayList<>();
+        Map<Integer, BigDecimal> saldoCorrido = new HashMap<>();
+        BigDecimal totalDebito = BigDecimal.ZERO;
+        BigDecimal totalCredito = BigDecimal.ZERO;
+        for (Object[] r : rows) {
+            Integer ccId = ((Number) r[0]).intValue();
+            BigDecimal deb = new BigDecimal(r[7].toString());
+            BigDecimal cre = new BigDecimal(r[8].toString());
+            BigDecimal base = saldoCorrido.getOrDefault(ccId, saldoIniMap.getOrDefault(ccId, BigDecimal.ZERO));
+            BigDecimal nuevo = base.add(deb.subtract(cre));
+            saldoCorrido.put(ccId, nuevo);
+            totalDebito = totalDebito.add(deb);
+            totalCredito = totalCredito.add(cre);
+            Map<String, Object> m = new HashMap<>();
+            m.put("cuentaId", ccId);
+            m.put("cuentaCodigo", r[1]);
+            m.put("cuentaNombre", r[2]);
+            m.put("fecha", r[3] != null ? r[3].toString() : null);
+            m.put("asiento", r[4]);
+            m.put("tipoDocumento", r[5]);
+            m.put("estado", r[6]);
+            m.put("debito", deb);
+            m.put("credito", cre);
+            m.put("descripcion", r[9]);
+            m.put("saldo", nuevo);
+            movimientos.add(m);
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("terceroId", terceroId);
+        resp.put("desde", d.toString());
+        resp.put("hasta", h.toString());
+        resp.put("movimientos", movimientos);
+        resp.put("totalDebito", totalDebito);
+        resp.put("totalCredito", totalCredito);
+        return ResponseEntity.ok(resp);
+    }
+
+    // Saldo (débito − crédito) acumulado hasta una fecha, para cuentas cuyo código
+    // empieza por el prefijo dado. Positivo = naturaleza débito; negativo = crédito.
+    @SuppressWarnings("unchecked")
+    private BigDecimal saldoDMC(String prefijo, LocalDate hastaInclusive) {
+        Object r = em.createNativeQuery(
+                "SELECT COALESCE(SUM(l.debito - l.credito),0) " +
+                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "WHERE cc.codigo LIKE :p AND a.fecha <= :h AND a.estado = 'CONFIRMADO'")
+                .setParameter("p", prefijo + "%")
+                .setParameter("h", hastaInclusive)
+                .getSingleResult();
+        return r != null ? new BigDecimal(r.toString()) : BigDecimal.ZERO;
+    }
+
+    /**
+     * Estado de cambios en el patrimonio: por cada cuenta de patrimonio (clase 3)
+     * con movimiento, muestra saldo inicial, aumentos (créditos), disminuciones
+     * (débitos) y saldo final del período. Naturaleza crédito → saldo = crédito − débito.
+     */
+    @GetMapping("/estado-cambios-patrimonio")
+    @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<Map<String, Object>> cambiosPatrimonio(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+
+        LocalDate d = desde != null ? LocalDate.parse(desde) : LocalDate.now().withDayOfYear(1);
+        LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
+
+        // Movimientos del período por cuenta de patrimonio (clase 3)
+        List<Object[]> rows = em.createNativeQuery(
+                "SELECT cc.cuenta_id, cc.codigo, cc.nombre, " +
+                "       COALESCE(SUM(l.credito),0) AS aumentos, COALESCE(SUM(l.debito),0) AS disminuciones " +
+                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "WHERE cc.codigo LIKE '3%' AND a.fecha BETWEEN :d AND :h AND a.estado = 'CONFIRMADO' " +
+                "GROUP BY cc.cuenta_id, cc.codigo, cc.nombre ORDER BY cc.codigo")
+                .setParameter("d", d)
+                .setParameter("h", h)
+                .getResultList();
+
+        // Saldo inicial por cuenta (crédito − débito antes de :d)
+        List<Object[]> ini = em.createNativeQuery(
+                "SELECT l.cuenta_contable_id, COALESCE(SUM(l.credito - l.debito),0) " +
+                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "WHERE a.fecha < :d AND a.estado = 'CONFIRMADO' GROUP BY l.cuenta_contable_id")
+                .setParameter("d", d)
+                .getResultList();
+        Map<Integer, BigDecimal> iniMap = new HashMap<>();
+        for (Object[] r : ini) iniMap.put(((Number) r[0]).intValue(), new BigDecimal(r[1].toString()));
+
+        List<Map<String, Object>> cuentas = new ArrayList<>();
+        BigDecimal totIni = BigDecimal.ZERO, totAum = BigDecimal.ZERO, totDis = BigDecimal.ZERO, totFin = BigDecimal.ZERO;
+        for (Object[] r : rows) {
+            Integer ccId = ((Number) r[0]).intValue();
+            BigDecimal saldoIni = iniMap.getOrDefault(ccId, BigDecimal.ZERO);
+            BigDecimal aum = new BigDecimal(r[3].toString());
+            BigDecimal dis = new BigDecimal(r[4].toString());
+            BigDecimal fin = saldoIni.add(aum).subtract(dis);
+            totIni = totIni.add(saldoIni); totAum = totAum.add(aum); totDis = totDis.add(dis); totFin = totFin.add(fin);
+            Map<String, Object> m = new HashMap<>();
+            m.put("codigo", r[1]); m.put("nombre", r[2]);
+            m.put("saldoInicial", saldoIni); m.put("aumentos", aum);
+            m.put("disminuciones", dis); m.put("saldoFinal", fin);
+            cuentas.add(m);
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("desde", d.toString()); resp.put("hasta", h.toString());
+        resp.put("cuentas", cuentas);
+        resp.put("totalSaldoInicial", totIni); resp.put("totalAumentos", totAum);
+        resp.put("totalDisminuciones", totDis); resp.put("totalSaldoFinal", totFin);
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * Estado de flujo de efectivo — MÉTODO INDIRECTO derivado de las variaciones
+     * de saldo de las cuentas entre el inicio y el fin del período. Por partida
+     * doble, la variación del efectivo (clase 11) es igual a menos la suma de las
+     * variaciones de todas las demás cuentas; agrupadas por actividad producen el
+     * flujo clasificado (operación / inversión / financiación).
+     */
+    @GetMapping("/flujo-efectivo")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Map<String, Object>> flujoEfectivo(
+            @RequestParam(required = false) String desde,
+            @RequestParam(required = false) String hasta) {
+
+        LocalDate d = desde != null ? LocalDate.parse(desde) : LocalDate.now().withDayOfYear(1);
+        LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
+        LocalDate ini = d.minusDays(1);
+
+        // Variación (débito−crédito) de un grupo de cuentas entre inicio y fin.
+        // El efecto en caja de una cuenta NO-efectivo es el NEGATIVO de su variación.
+        java.util.function.Function<String, BigDecimal> delta =
+                (pref) -> saldoDMC(pref, h).subtract(saldoDMC(pref, ini));
+        java.util.function.Function<String, BigDecimal> efectoCaja = (pref) -> delta.apply(pref).negate();
+
+        // ── Operación ──
+        BigDecimal resultado = efectoCaja.apply("4").add(efectoCaja.apply("5"))
+                .add(efectoCaja.apply("6")).add(efectoCaja.apply("7")); // = utilidad del período
+        BigDecimal varDeudores   = efectoCaja.apply("13");
+        BigDecimal varInventarios= efectoCaja.apply("14");
+        BigDecimal varDiferidosAct = efectoCaja.apply("17");
+        BigDecimal varProveedores= efectoCaja.apply("22");
+        BigDecimal varCxP        = efectoCaja.apply("23");
+        BigDecimal varImpuestos  = efectoCaja.apply("24");
+        BigDecimal varLaborales  = efectoCaja.apply("25");
+        BigDecimal varOtrosPasOp = efectoCaja.apply("26").add(efectoCaja.apply("27")).add(efectoCaja.apply("28"));
+        BigDecimal totalOperacion = resultado.add(varDeudores).add(varInventarios).add(varDiferidosAct)
+                .add(varProveedores).add(varCxP).add(varImpuestos).add(varLaborales).add(varOtrosPasOp);
+
+        // ── Inversión ──
+        BigDecimal varInversiones = efectoCaja.apply("12");
+        BigDecimal varPPE         = efectoCaja.apply("15");
+        BigDecimal varIntangibles = efectoCaja.apply("16");
+        BigDecimal varOtrosNoCorr = efectoCaja.apply("18").add(efectoCaja.apply("19"));
+        BigDecimal totalInversion = varInversiones.add(varPPE).add(varIntangibles).add(varOtrosNoCorr);
+
+        // ── Financiación ──
+        BigDecimal varObligaciones = efectoCaja.apply("21");
+        BigDecimal varBonos        = efectoCaja.apply("29"); // bonos / papeles comerciales (pasivo no corriente)
+        BigDecimal varPatrimonio   = efectoCaja.apply("3");
+        BigDecimal totalFinanciacion = varObligaciones.add(varBonos).add(varPatrimonio);
+
+        BigDecimal netoComputado = totalOperacion.add(totalInversion).add(totalFinanciacion);
+        BigDecimal efectivoInicial = saldoDMC("11", ini);
+        BigDecimal efectivoFinal   = saldoDMC("11", h);
+        BigDecimal variacionEfectivo = efectivoFinal.subtract(efectivoInicial);
+        BigDecimal diferencia = variacionEfectivo.subtract(netoComputado);
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("desde", d.toString()); resp.put("hasta", h.toString());
+        resp.put("operacion", Map.of(
+                "resultadoEjercicio", resultado, "variacionDeudores", varDeudores,
+                "variacionInventarios", varInventarios, "variacionDiferidos", varDiferidosAct,
+                "variacionProveedores", varProveedores, "variacionCuentasPorPagar", varCxP,
+                "variacionImpuestos", varImpuestos, "variacionObligacionesLaborales", varLaborales,
+                "variacionOtrosPasivos", varOtrosPasOp, "total", totalOperacion));
+        resp.put("inversion", Map.of(
+                "variacionInversiones", varInversiones, "variacionPropiedadPlantaEquipo", varPPE,
+                "variacionIntangibles", varIntangibles, "variacionOtrosNoCorrientes", varOtrosNoCorr,
+                "total", totalInversion));
+        resp.put("financiacion", Map.of(
+                "variacionObligacionesFinancieras", varObligaciones, "variacionBonos", varBonos,
+                "variacionPatrimonio", varPatrimonio, "total", totalFinanciacion));
+        resp.put("efectivoInicial", efectivoInicial);
+        resp.put("efectivoFinal", efectivoFinal);
+        resp.put("variacionEfectivo", variacionEfectivo);
+        resp.put("netoComputado", netoComputado);
+        resp.put("diferenciaConciliacion", diferencia);
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
      * Estado de Resultados (Pérdidas y Ganancias) — Decreto 2649 Colombia.
      * Estructura:
      *   INGRESOS OPERACIONALES (41)
@@ -302,7 +626,9 @@ public class ReportesContablesController {
         LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
 
         // Saldo de cada cuenta del PUC en el periodo
-        Map<String, BigDecimal> saldosPorCodigo = saldosPorCodigoEnPeriodo(d, h);
+        // Excluye asientos de CIERRE/APERTURA: en un rango que incluya el 31-dic,
+        // el asiento de cierre netea las cuentas de resultado y distorsionaría el P&G.
+        Map<String, BigDecimal> saldosPorCodigo = saldosPorCodigoEnPeriodoExcluyendoCierres(d, h);
 
         // Ingresos = créditos − débitos. La devolución (4175) viene con saldo negativo
         // porque su naturaleza es débito, así que ya RESTA automáticamente al sumar "41".

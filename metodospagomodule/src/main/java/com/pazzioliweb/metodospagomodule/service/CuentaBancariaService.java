@@ -78,8 +78,9 @@ public class CuentaBancariaService {
     private void validar(CuentaBancariaDTO dto, Long idActual) {
         if (dto.getNombre() == null || dto.getNombre().isBlank())
             throw new IllegalArgumentException("El nombre es obligatorio.");
-        if (dto.getBanco() == null || dto.getBanco().isBlank())
-            throw new IllegalArgumentException("El banco es obligatorio.");
+        // El campo "banco" ya no se captura en el formulario (Caja y Bancos): la
+        // cuenta se identifica por su nombre y su cuenta contable PUC. Se autocompleta
+        // en aplicarDto() para respetar el NOT NULL de la columna.
         if (dto.getCuentaContableId() == null)
             throw new IllegalArgumentException("La cuenta contable asociada es obligatoria.");
 
@@ -92,7 +93,10 @@ public class CuentaBancariaService {
 
     private void aplicarDto(CuentaBancaria c, CuentaBancariaDTO dto) {
         c.setNombre(dto.getNombre().trim());
-        c.setBanco(dto.getBanco().trim());
+        // "banco" tolerante a null: si no viene (nuevo form sin ese campo), se
+        // autocompleta con el nombre para no violar el NOT NULL de la columna.
+        c.setBanco(dto.getBanco() != null && !dto.getBanco().isBlank()
+                ? dto.getBanco().trim() : dto.getNombre().trim());
         c.setNumeroCuenta(dto.getNumeroCuenta());
         if (dto.getTipo() != null) {
             try {
