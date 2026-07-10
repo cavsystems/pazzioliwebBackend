@@ -82,6 +82,9 @@ public class AuthController {
     // ──────────────────────────────────────────────────────────────────────────
     @PostMapping("/login/destroit")
     public ResponseEntity<Map<String, Object>> logindestroit(@RequestBody LoginRequest request) {
+        if (request.db != null && !request.db.isBlank()) {
+            TenantContext.setCurrentTenant(request.db.trim());
+        }
         try {
             Optional<Usuario> optional = usuarioRepository.findByUsuario(request.usuario.trim());
             Map<String, Object> response = new HashMap<>();
@@ -155,6 +158,8 @@ public class AuthController {
             err.put("success", false);
             err.put("message", "Error interno: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
+        } finally {
+            TenantContext.clear();
         }
     }
 
@@ -165,6 +170,14 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody LoginRequest request) {
 
+        // Fijar el schema del tenant al que se está ingresando ANTES de buscar el
+        // usuario, la sesión y su cajero. Sin esto, en el primer login (sin header
+        // X-TenantID) las consultas corren contra el schema por defecto y el cajero
+        // asociado por usuario_id no se encuentra en otros tenants → cajeroId null.
+        if (request.db != null && !request.db.isBlank()) {
+            TenantContext.setCurrentTenant(request.db.trim());
+        }
+        try {
         Optional<Usuario> optional = usuarioRepository.findByUsuario(request.usuario.trim());
         Map<String, Object> response = new HashMap<>();
         response.clear();
@@ -249,6 +262,9 @@ public class AuthController {
             response.put("message", "Credenciales inválidas");
             response.put("Activa", false);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        } finally {
+            TenantContext.clear();
         }
     }
 
