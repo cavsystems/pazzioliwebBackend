@@ -17,6 +17,7 @@ import com.pazzioliweb.usuariosbacken.dtos.UsuariobodegasidDTOS;
 public interface BodegasRepository extends JpaRepository<Bodegas, Integer>{
   Optional<Bodegas> findByCodigo(int codigo);
   Optional<Bodegas> findByNombre(String nombre);
+  Optional<Bodegas> findByNombreIgnoreCase(String nombre);
   
   
 	@Query(value = """

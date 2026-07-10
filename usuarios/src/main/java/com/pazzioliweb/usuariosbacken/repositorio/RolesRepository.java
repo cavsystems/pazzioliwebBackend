@@ -15,6 +15,7 @@ import com.pazzioliweb.usuariosbacken.entity.Roles;
 public interface RolesRepository extends JpaRepository<Roles, Long>{
 public List<RolesDTOS>  findByNombreNot(String nombre);
 public Optional<Roles>  findByCodigo(int codigo);
+public Optional<Roles>  findByNombreIgnoreCase(String nombre);
 @Query(value = """
 		select u.codigo as codigo,r.nombre as  rol ,u.usuario as usuario,
            u.contrasena as contrasena,u.avatar as avatar,

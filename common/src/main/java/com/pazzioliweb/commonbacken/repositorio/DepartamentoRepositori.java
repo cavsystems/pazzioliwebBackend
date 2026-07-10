@@ -13,4 +13,5 @@ public interface DepartamentoRepositori extends  JpaRepository<Departamento, Lon
 	public Optional<Departamento> findByCodigo(int codigo);
 	public List<Departamento> findByCodigopais(int codigoPais);
 	public Optional<Departamento> findFirstByDepartamentoContainingIgnoreCase(String nombre);
+	public List<Departamento> findByCodigoIn(List<Integer> codigos);
 }

@@ -13,4 +13,5 @@ public interface  MunicipioRepositori extends JpaRepository<Municipio, Long> {
  public List<Municipio> findByCodigoDepartamento(int codigodepartamento);
  public Optional<Municipio> findFirstByMunicipioContainingIgnoreCaseAndCodigoDepartamento(String nombre, int codigoDepartamento);
  public Optional<Municipio> findFirstByMunicipioContainingIgnoreCase(String nombre);
+ public List<Municipio> findByCodigoIn(List<Integer> codigos);
 }

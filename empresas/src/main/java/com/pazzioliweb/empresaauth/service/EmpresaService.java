@@ -157,46 +157,45 @@ public class EmpresaService {
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void crearempresa(Empresaresponse empre,String db, MultipartFile archivo) throws Exception{
 		if(!empre.getSucursales().isEmpty()) {
-			 List<Bodegas> bodegas = new ArrayList<>();
-			   for(Sucursales sucu: empre.getSucursales()) {
-				   Object[] codigos=insertjoi.obtenercodigos(sucu.getMunicipio().getCodigo(), sucu.getDepartamento().getCodigo(), sucu.getPais().getCodigo());
-				   System.out.println(sucu.getDepartamento().getCodigo());
-				  Bodegas bodega=new Bodegas();
-				  bodega.setCelular(sucu.getCelular());
-				  bodega.setCodigodepartamento((Departamento) codigos[1]);
-				  bodega.setCodigomunicipio((Municipio) codigos[0]);
-				  bodega.setCodigopais((Pais) codigos[2]);
-				  bodega.setTelefono(sucu.getTelefonofijo());
-				  bodega.setCelular(sucu.getCelular());
-				  bodega.setDireccion(sucu.getDireccion());
-				  bodega.setCodigopostal(sucu.getCodigopostal());
-				  bodega.setNombre(sucu.getNombre());
-				  bodega.setCodigosucursal(sucu.getCodigosucursal());
-				  bodega.setCorreo(sucu.getCorreo());
-				  bodegas.add(bodega);
-				  
-				  
-				  
+			List<Integer> municipioCodes = empre.getSucursales().stream()
+				.map(s -> s.getMunicipio().getCodigo()).distinct().collect(Collectors.toList());
+			List<Integer> departamentoCodes = empre.getSucursales().stream()
+				.map(s -> s.getDepartamento().getCodigo()).distinct().collect(Collectors.toList());
+			List<Integer> paisCodes = empre.getSucursales().stream()
+				.map(s -> s.getPais().getCodigo()).distinct().collect(Collectors.toList());
 
-			   }
-			   
-			   
-			   
-			   repotoribodega.saveAll(bodegas);
+			Map<Integer, Municipio> municipioMap = municipiorepositori.findByCodigoIn(municipioCodes).stream()
+				.collect(Collectors.toMap(Municipio::getCodigo, m -> m));
+			Map<Integer, Departamento> departamentoMap = departamentorepositori.findByCodigoIn(departamentoCodes).stream()
+				.collect(Collectors.toMap(Departamento::getCodigo, d -> d));
+			Map<Integer, Pais> paisMap = paisrepository.findByCodigoIn(paisCodes).stream()
+				.collect(Collectors.toMap(Pais::getCodigo, p -> p));
+
+			List<Bodegas> bodegas = new ArrayList<>();
+			for(Sucursales sucu: empre.getSucursales()) {
+				Bodegas bodega = new Bodegas();
+				bodega.setCelular(sucu.getCelular());
+				bodega.setCodigodepartamento(departamentoMap.get(sucu.getDepartamento().getCodigo()));
+				bodega.setCodigomunicipio(municipioMap.get(sucu.getMunicipio().getCodigo()));
+				bodega.setCodigopais(paisMap.get(sucu.getPais().getCodigo()));
+				bodega.setTelefono(sucu.getTelefonofijo());
+				bodega.setDireccion(sucu.getDireccion());
+				bodega.setCodigopostal(sucu.getCodigopostal());
+				bodega.setNombre(sucu.getNombre());
+				bodega.setCodigosucursal(sucu.getCodigosucursal());
+				bodega.setCorreo(sucu.getCorreo());
+				bodegas.add(bodega);
+			}
+			repotoribodega.saveAll(bodegas);
 		}
 		
 		if(!empre.getImpuestos().isEmpty()) {
-			//Impuestos impuesto=new Impuestos();
-			 List<Impuestos> impuestos = new ArrayList<>();
-			for(com.pazzioliweb.empresaback.dtos.Empresaresponse.Impuestos in:empre.getImpuestos()) {
-				Optional<Impuestos> impuestosop=impuestorepositorio.findByCodigo(in.getCodigo());
-				Impuestos impuesto=impuestosop.get();
-				impuesto.setEstado("ACTIVO");
-				impuestorepositorio.save(impuesto);
-				
-			}
-			
-			
+			List<Integer> codigosImpuestos = empre.getImpuestos().stream()
+				.map(i -> i.getCodigo())
+				.collect(Collectors.toList());
+			List<Impuestos> impuestosEntidades = impuestorepositorio.findByCodigoIn(codigosImpuestos);
+			impuestosEntidades.forEach(i -> i.setEstado("ACTIVO"));
+			impuestorepositorio.saveAll(impuestosEntidades);
 		}
 		
 		
@@ -317,14 +316,36 @@ public class EmpresaService {
 		
 		// Actualizar sucursales (bodegas) de forma segura
 		if(!empre.getSucursales().isEmpty()) {
-			// Obtener todas las bodegas existentes para comparar por nombre
-			List<Bodegas> todasLasBodegas = repotoribodega.findAll();
+			// Bodegas existentes del tenant actual
+			Map<String, Bodegas> existentesMap = repotoribodega.findAll().stream()
+				.collect(Collectors.toMap(
+					b -> b.getNombre() != null ? b.getNombre().toLowerCase().trim() : "",
+					b -> b,
+					(a, b) -> a
+				));
 
-			// Crear mapas para facilitar la comparación por nombre
-			Map<String, Bodegas> existentesMap = new HashMap<>();
-			for(Bodegas existente : todasLasBodegas) {
-				String key = existente.getNombre() != null ? existente.getNombre().toLowerCase().trim() : "";
-				existentesMap.put(key, existente);
+			// Precargar datos geográficos en 3 queries para todas las sucursales no eliminadas
+			List<Sucursales> sucursalesActivas = empre.getSucursales().stream()
+				.filter(s -> !s.isEliminar()).collect(Collectors.toList());
+
+			Map<Integer, Municipio> municipioMap = new HashMap<>();
+			Map<Integer, Departamento> departamentoMap = new HashMap<>();
+			Map<Integer, Pais> paisMap = new HashMap<>();
+
+			if (!sucursalesActivas.isEmpty()) {
+				List<Integer> municipioCodes = sucursalesActivas.stream()
+					.map(s -> s.getMunicipio().getCodigo()).distinct().collect(Collectors.toList());
+				List<Integer> departamentoCodes = sucursalesActivas.stream()
+					.map(s -> s.getDepartamento().getCodigo()).distinct().collect(Collectors.toList());
+				List<Integer> paisCodes = sucursalesActivas.stream()
+					.map(s -> s.getPais().getCodigo()).distinct().collect(Collectors.toList());
+
+				municipioMap = municipiorepositori.findByCodigoIn(municipioCodes).stream()
+					.collect(Collectors.toMap(Municipio::getCodigo, m -> m));
+				departamentoMap = departamentorepositori.findByCodigoIn(departamentoCodes).stream()
+					.collect(Collectors.toMap(Departamento::getCodigo, d -> d));
+				paisMap = paisrepository.findByCodigoIn(paisCodes).stream()
+					.collect(Collectors.toMap(Pais::getCodigo, p -> p));
 			}
 
 			List<Bodegas> bodegasActualizar = new ArrayList<>();
@@ -332,44 +353,34 @@ public class EmpresaService {
 			List<Bodegas> bodegasEliminar = new ArrayList<>();
 			Set<String> sucursalesRecibidas = new HashSet<>();
 
-			// Procesar cada sucursal recibida
 			for(Sucursales sucu : empre.getSucursales()) {
 				String nombreSucursal = sucu.getNombre() != null ? sucu.getNombre().toLowerCase().trim() : "";
 				sucursalesRecibidas.add(nombreSucursal);
-
 				Bodegas bodegaExistente = existentesMap.get(nombreSucursal);
 
-				// Verificar si se debe eliminar la bodega
 				if(sucu.isEliminar()) {
-					if(bodegaExistente != null) {
-						// Agregar a la lista de bodegas a eliminar
-						bodegasEliminar.add(bodegaExistente);
-						System.out.println("Bodega marcada para eliminación: " + nombreSucursal);
-					}
-					// Si no existe, no hacemos nada
+					if(bodegaExistente != null) bodegasEliminar.add(bodegaExistente);
 				} else {
-					// Lógica normal de actualización/creación
-					Object[] codigos = insertjoi.obtenercodigos(sucu.getMunicipio().getCodigo(), sucu.getDepartamento().getCodigo(), sucu.getPais().getCodigo());
+					Municipio municipio = municipioMap.get(sucu.getMunicipio().getCodigo());
+					Departamento departamento = departamentoMap.get(sucu.getDepartamento().getCodigo());
+					Pais pais = paisMap.get(sucu.getPais().getCodigo());
 
 					if(bodegaExistente != null) {
-						// Actualizar bodega existente (preserva ID y relaciones)
 						bodegaExistente.setCelular(sucu.getCelular());
-						bodegaExistente.setCodigodepartamento((Departamento) codigos[1]);
-						bodegaExistente.setCodigomunicipio((Municipio) codigos[0]);
-						bodegaExistente.setCodigopais((Pais) codigos[2]);
+						bodegaExistente.setCodigodepartamento(departamento);
+						bodegaExistente.setCodigomunicipio(municipio);
+						bodegaExistente.setCodigopais(pais);
 						bodegaExistente.setTelefono(sucu.getTelefonofijo());
 						bodegaExistente.setDireccion(sucu.getDireccion());
 						bodegaExistente.setCodigopostal(sucu.getCodigopostal());
-						// El nombre ya es el mismo, no se actualiza
 						bodegaExistente.setCorreo(sucu.getCorreo());
 						bodegasActualizar.add(bodegaExistente);
 					} else {
-						// Crear nueva bodega
 						Bodegas nuevaBodega = new Bodegas();
 						nuevaBodega.setCelular(sucu.getCelular());
-						nuevaBodega.setCodigodepartamento((Departamento) codigos[1]);
-						nuevaBodega.setCodigomunicipio((Municipio) codigos[0]);
-						nuevaBodega.setCodigopais((Pais) codigos[2]);
+						nuevaBodega.setCodigodepartamento(departamento);
+						nuevaBodega.setCodigomunicipio(municipio);
+						nuevaBodega.setCodigopais(pais);
 						nuevaBodega.setTelefono(sucu.getTelefonofijo());
 						nuevaBodega.setDireccion(sucu.getDireccion());
 						nuevaBodega.setCodigopostal(sucu.getCodigopostal());
@@ -381,45 +392,19 @@ public class EmpresaService {
 				}
 			}
 
-			// Identificar bodegas a desactivar (las que no vienen en la actualización)
-			List<Bodegas> bodegasDesactivar = new ArrayList<>();
-			for(Map.Entry<String, Bodegas> entry : existentesMap.entrySet()) {
-				if(!sucursalesRecibidas.contains(entry.getKey())) {
-					// Opción 1: Desactivar en lugar de eliminar
-					// entry.getValue().setEstado("INACTIVO"); // Si tuviera campo estado
-					// bodegasActualizar.add(entry.getValue()));
-
-					// Opción 2: Eliminar solo si no tienen transacciones (más seguro)
-					// Por ahora, mantenemos las bodegas existentes para no romper relaciones
-					System.out.println("Bodega no actualizada: " + entry.getKey() + " - se mantiene para preservar relaciones existentes");
-				}
-			}
-
-			// Eliminar bodegas marcadas
-			if(!bodegasEliminar.isEmpty()) {
-				repotoribodega.deleteAll(bodegasEliminar);
-				System.out.println("Bodegas eliminadas: " + bodegasEliminar.size());
-			}
-
-			// Guardar cambios
-			if(!bodegasActualizar.isEmpty()) {
-				repotoribodega.saveAll(bodegasActualizar);
-			}
-			if(!bodegasNuevas.isEmpty()) {
-				repotoribodega.saveAll(bodegasNuevas);
-			}
+			if(!bodegasEliminar.isEmpty()) repotoribodega.deleteAll(bodegasEliminar);
+			if(!bodegasActualizar.isEmpty()) repotoribodega.saveAll(bodegasActualizar);
+			if(!bodegasNuevas.isEmpty()) repotoribodega.saveAll(bodegasNuevas);
 		}
 		
 		// Actualizar impuestos
 		if(!empre.getImpuestos().isEmpty()) {
-			for(com.pazzioliweb.empresaback.dtos.Empresaresponse.Impuestos in: empre.getImpuestos()) {
-				Optional<Impuestos> impuestosOp = impuestorepositorio.findByCodigo(in.getCodigo());
-				if (impuestosOp.isPresent()) {
-					Impuestos impuesto = impuestosOp.get();
-					impuesto.setEstado("ACTIVO");
-					impuestorepositorio.save(impuesto);
-				}
-			}
+			List<Integer> codigosImpuestos = empre.getImpuestos().stream()
+				.map(i -> i.getCodigo())
+				.collect(Collectors.toList());
+			List<Impuestos> impuestosEntidades = impuestorepositorio.findByCodigoIn(codigosImpuestos);
+			impuestosEntidades.forEach(i -> i.setEstado("ACTIVO"));
+			impuestorepositorio.saveAll(impuestosEntidades);
 		}
 		
 		// Actualizar datos de la empresa
@@ -583,50 +568,22 @@ public class EmpresaService {
 	}
 	
 	private Roles obtenerRolPorNombre(String nombreRol) {
-		try {
-			if (nombreRol == null || nombreRol.trim().isEmpty()) {
-				return null;
-			}
-			
-			// Buscar rol por nombre (ignorando mayúsculas/minúsculas)
-			List<Roles> roles = rolesRepository.findAll();
-			for (Roles rol : roles) {
-				if (rol.getNombre() != null && rol.getNombre().equalsIgnoreCase(nombreRol.trim())) {
-					return rol;
-				}
-			}
-			
-			// Si no se encuentra, crear un nuevo rol con ese nombre
-			Roles nuevoRol = new Roles();
-			nuevoRol.setNombre(nombreRol.trim());
-			return rolesRepository.save(nuevoRol);
-			
-		} catch (Exception e) {
-			System.err.println("Error al obtener rol por nombre '" + nombreRol + "': " + e.getMessage());
+		if (nombreRol == null || nombreRol.trim().isEmpty()) {
 			return null;
 		}
+		return rolesRepository.findByNombreIgnoreCase(nombreRol.trim())
+			.orElseGet(() -> {
+				Roles nuevoRol = new Roles();
+				nuevoRol.setNombre(nombreRol.trim());
+				return rolesRepository.save(nuevoRol);
+			});
 	}
 	
 	private Bodegas obtenerBodegaPorNombre(String nombreBodega) {
-		try {
-			if (nombreBodega == null || nombreBodega.trim().isEmpty()) {
-				return null;
-			}
-			
-			// Buscar bodega por nombre (ignorando mayúsculas/minúsculas)
-			List<Bodegas> bodegas = repotoribodega.findAll();
-			for (Bodegas bodega : bodegas) {
-				if (bodega.getNombre() != null && bodega.getNombre().equalsIgnoreCase(nombreBodega.trim())) {
-					return bodega;
-				}
-			}
-			
-			return null; // No crear bodega si no existe
-			
-		} catch (Exception e) {
-			System.err.println("Error al obtener bodega por nombre '" + nombreBodega + "': " + e.getMessage());
+		if (nombreBodega == null || nombreBodega.trim().isEmpty()) {
 			return null;
 		}
+		return repotoribodega.findByNombreIgnoreCase(nombreBodega.trim()).orElse(null);
 	}
 	
 	private void procesarUsuariosParaEmpresa(List<Empresaresponse.usuario> usuarios) {
@@ -716,25 +673,25 @@ public class EmpresaService {
 	
 	private void asignarTodosLosPermisosAlRol(Roles rol) {
 		try {
-			// Obtener todos los permisos disponibles
 			List<Permiso> todosLosPermisos = permisoRepository.findAll();
-			
-			// Para cada permiso, crear la relación con el rol Admin
+			List<PermisoRol> relacionesExistentes = permisoRolRepository.findPermisosActivosByRol(rol.getCodigo());
+			Set<Integer> permisosYaAsignados = relacionesExistentes.stream()
+				.map(pr -> pr.getCodigopermiso().getCodigo())
+				.collect(Collectors.toSet());
+
+			List<PermisoRol> nuevosPermisos = new ArrayList<>();
 			for (Permiso permiso : todosLosPermisos) {
-				// Verificar si ya existe la relación para evitar duplicados
-				List<PermisoRol> relacionesExistentes = permisoRolRepository.findPermisosActivosByRol(rol.getCodigo());
-				boolean yaExiste = relacionesExistentes.stream()
-					.anyMatch(pr -> pr.getCodigopermiso().getCodigo() == permiso.getCodigo());
-				
-				if (!yaExiste) {
+				if (!permisosYaAsignados.contains(permiso.getCodigo())) {
 					PermisoRol permisoRol = new PermisoRol();
 					permisoRol.setCodigorol(rol);
 					permisoRol.setCodigopermiso(permiso);
 					permisoRol.setEstado("ACTIVO");
-					permisoRolRepository.save(permisoRol);
+					nuevosPermisos.add(permisoRol);
 				}
 			}
-			
+			if (!nuevosPermisos.isEmpty()) {
+				permisoRolRepository.saveAll(nuevosPermisos);
+			}
 		} catch (Exception e) {
 			System.err.println("Error al asignar permisos al rol Admin: " + e.getMessage());
 			e.printStackTrace();
