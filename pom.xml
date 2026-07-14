@@ -90,6 +90,8 @@
         <module>ventasmodule</module>
         <module>tesoreriamodule</module>
         <module>reportesmodule</module>
+        <module>parametros</module>
+
     </modules>
     <!--configuracion para gestionar versiones de dependencias configuramos el bom bill
     el cual es org.springframework.boot  esto lo hacemos esto para gestionar  las versiones de despendencias

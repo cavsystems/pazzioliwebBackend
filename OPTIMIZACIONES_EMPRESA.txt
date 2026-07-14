@@ -1,0 +1,309 @@
+================================================================================
+  OPTIMIZACIONES - CREACIÓN Y ACTUALIZACIÓN DE EMPRESA
+  Proyecto: pazzioli-web-backend
+  Fecha: 2026-07-10
+================================================================================
+
+
+PROBLEMA ORIGINAL
+-----------------
+El proceso de crear y actualizar una empresa era muy lento porque acumulaba
+decenas de queries innecesarias a la base de datos, tenía configuraciones por
+defecto que penalizaban el rendimiento, y corría Flyway completo en cada
+creación de empresa nueva.
+
+
+================================================================================
+BLOQUE 1 — QUERIES N+1 EN EL SERVICIO (EmpresaService.java)
+================================================================================
+
+PROBLEMA 1: obtenerRolPorNombre() hacía findAll() + loop en Java
+-----------------------------------------------------------------
+Antes:
+  List<Roles> roles = rolesRepository.findAll();  // carga TODOS los roles
+  for (Roles rol : roles) {
+      if (rol.getNombre().equalsIgnoreCase(nombreRol)) return rol;
+  }
+
+Después:
+  return rolesRepository.findByNombreIgnoreCase(nombreRol.trim())
+      .orElseGet(() -> { ... crear rol nuevo ... });
+
+Archivo modificado: RolesRepository.java
+  + Método agregado: findByNombreIgnoreCase(String nombre)
+
+Ganancia: 1 query en vez de cargar toda la tabla de roles.
+
+
+PROBLEMA 2: obtenerBodegaPorNombre() hacía findAll() + loop en Java
+--------------------------------------------------------------------
+Antes:
+  List<Bodegas> bodegas = repotoribodega.findAll(); // carga TODAS las bodegas
+  for (Bodegas bodega : bodegas) {
+      if (bodega.getNombre().equalsIgnoreCase(nombreBodega)) return bodega;
+  }
+
+Después:
+  return repotoribodega.findByNombreIgnoreCase(nombreBodega.trim()).orElse(null);
+
+Archivo modificado: BodegasRepository.java
+  + Método agregado: findByNombreIgnoreCase(String nombre)
+
+Ganancia: 1 query en vez de cargar toda la tabla de bodegas.
+
+
+PROBLEMA 3: asignarTodosLosPermisosAlRol() — N+1 queries + N saves individuales
+---------------------------------------------------------------------------------
+Antes (si hay 50 permisos → 50 SELECT + 50 INSERT):
+  for (Permiso permiso : todosLosPermisos) {
+      List<PermisoRol> existentes = permisoRolRepository        // <-- dentro del bucle!
+                                      .findPermisosActivosByRol(rol.getCodigo());
+      if (!yaExiste) {
+          permisoRolRepository.save(permisoRol);               // <-- save individual!
+      }
+  }
+
+Después (siempre 2 queries: 1 SELECT + 1 saveAll):
+  List<PermisoRol> existentes = permisoRolRepository
+                                  .findPermisosActivosByRol(rol.getCodigo()); // UNA VEZ
+  Set<Integer> yaAsignados = existentes.stream()
+      .map(pr -> pr.getCodigopermiso().getCodigo()).collect(Collectors.toSet());
+
+  List<PermisoRol> nuevos = new ArrayList<>();
+  for (Permiso permiso : todosLosPermisos) {
+      if (!yaAsignados.contains(permiso.getCodigo())) {
+          nuevos.add(...);
+      }
+  }
+  if (!nuevos.isEmpty()) permisoRolRepository.saveAll(nuevos); // UN SOLO BATCH
+
+Ganancia: Pasó de 100 queries (para 50 permisos) a 2 queries siempre.
+
+
+PROBLEMA 4: Impuestos — findByCodigo() + save() individual por cada impuesto
+------------------------------------------------------------------------------
+Afectaba tanto crearempresa() como updateEmpresa().
+
+Antes (N queries + N saves):
+  for (Impuesto i : empre.getImpuestos()) {
+      Optional<Impuestos> op = impuestorepositorio.findByCodigo(i.getCodigo());
+      op.get().setEstado("ACTIVO");
+      impuestorepositorio.save(impuesto);   // save individual
+  }
+
+Después (siempre 2 queries: 1 SELECT IN + 1 saveAll):
+  List<Integer> codigos = empre.getImpuestos().stream()
+      .map(i -> i.getCodigo()).collect(Collectors.toList());
+  List<Impuestos> entidades = impuestorepositorio.findByCodigoIn(codigos);
+  entidades.forEach(i -> i.setEstado("ACTIVO"));
+  impuestorepositorio.saveAll(entidades);
+
+Archivo modificado: ImpuestosRepositori.java
+  + Método agregado: findByCodigoIn(List<Integer> codigos)
+
+Ganancia: N queries reducidas a 2, sin importar cuántos impuestos haya.
+
+
+PROBLEMA 5: Sucursales — obtenercodigos() con 3 queries por cada sucursal
+--------------------------------------------------------------------------
+Afectaba tanto crearempresa() como updateEmpresa().
+
+Antes (si hay 3 sucursales → 9 queries):
+  for (Sucursales sucu : empre.getSucursales()) {
+      Object[] codigos = insertjoi.obtenercodigos(
+          sucu.getMunicipio().getCodigo(),      // 1 query SELECT municipio
+          sucu.getDepartamento().getCodigo(),   // 1 query SELECT departamento
+          sucu.getPais().getCodigo()            // 1 query SELECT pais
+      );
+  }
+
+Después (siempre 3 queries para todas las sucursales):
+  // Recoger todos los códigos únicos antes del bucle
+  List<Integer> municipioCodes  = sucursales.stream().map(...).distinct().collect(...);
+  List<Integer> departamentoCodes = sucursales.stream().map(...).distinct().collect(...);
+  List<Integer> paisCodes       = sucursales.stream().map(...).distinct().collect(...);
+
+  // 3 queries para cargar todo de una vez
+  Map<Integer, Municipio>    municipioMap    = municipiorepositori.findByCodigoIn(municipioCodes)...
+  Map<Integer, Departamento> departamentoMap = departamentorepositori.findByCodigoIn(departamentoCodes)...
+  Map<Integer, Pais>         paisMap         = paisrepository.findByCodigoIn(paisCodes)...
+
+  // Bucle sin queries — usa los Maps (O(1) lookup)
+  for (Sucursales sucu : empre.getSucursales()) {
+      bodega.setCodigomunicipio(municipioMap.get(sucu.getMunicipio().getCodigo()));
+      bodega.setCodigodepartamento(departamentoMap.get(sucu.getDepartamento().getCodigo()));
+      bodega.setCodigopais(paisMap.get(sucu.getPais().getCodigo()));
+  }
+
+Archivos modificados:
+  + MunicipioRepositori.java   → findByCodigoIn(List<Integer> codigos)
+  + DepartamentoRepositori.java → findByCodigoIn(List<Integer> codigos)
+  + PaisRepositori.java        → findByCodigoIn(List<Integer> codigos)
+
+Ganancia: N×3 queries reducidas a siempre 3, sin importar cuántas sucursales haya.
+
+
+================================================================================
+BLOQUE 2 — CONFIGURACIÓN DE BASE DE DATOS (application.properties)
+================================================================================
+
+PROBLEMA 6: spring.jpa.show-sql=true
+-------------------------------------
+Con show-sql activado, cada query SQL se imprimía en el log del sistema.
+En un proceso con decenas de queries (como crear empresa) esto añade overhead
+de I/O significativo.
+
+Cambio:
+  spring.jpa.show-sql=false
+
+Ganancia: Eliminado overhead de logging por cada query.
+
+
+PROBLEMA 7: Sin rewriteBatchedStatements en la URL del datasource
+-----------------------------------------------------------------
+Sin esta opción, el driver JDBC de MySQL enviaba cada INSERT de un saveAll()
+como una petición individual al servidor. Con esta opción, los agrupa en
+un solo envío de red.
+
+Cambio en la URL del datasource:
+  Antes:
+    ?serverTimezone=America/Bogota
+
+  Después:
+    ?serverTimezone=America/Bogota&rewriteBatchedStatements=true&cachePrepStmts=true&useServerPrepStmts=true
+
+Ganancia: Los saveAll() de bodegas, impuestos y permisos se envían en batch real.
+
+
+PROBLEMA 8: Sin configuración de batch en Hibernate
+----------------------------------------------------
+Hibernate por defecto no agrupa los INSERTs antes de enviarlos. Estas propiedades
+activan el agrupamiento interno de Hibernate para complementar rewriteBatchedStatements.
+
+Propiedades agregadas:
+  spring.jpa.properties.hibernate.jdbc.batch_size=50
+  spring.jpa.properties.hibernate.order_inserts=true
+  spring.jpa.properties.hibernate.order_updates=true
+  spring.jpa.properties.hibernate.jdbc.batch_versioned_data=true
+
+Ganancia: Hibernate agrupa hasta 50 INSERTs del mismo tipo antes de enviarlos.
+
+
+================================================================================
+BLOQUE 3 — FLYWAY: SCHEMA PLANTILLA (el cuello de botella más grande)
+================================================================================
+
+PROBLEMA 9: Flyway corría el script completo (307KB, 2034 líneas) en cada empresa nueva
+----------------------------------------------------------------------------------------
+El archivo V1__migration_usuarios.sql contiene:
+  - 50+ sentencias CREATE TABLE
+  - INSERT masivo de ~750 actividades económicas CIIU
+  - Datos de referencia de impuestos, países, departamentos, etc.
+
+Cada empresa nueva ejecutaba todo esto desde cero vía JDBC → 8-15 segundos.
+
+SOLUCIÓN: Schema Plantilla (_tenant_template)
+---------------------------------------------
+En vez de correr Flyway por cada empresa, se corre UNA SOLA VEZ al iniciar
+la aplicación sobre un schema llamado "_tenant_template". Cuando se crea una
+empresa nueva, MySQL copia ese schema internamente.
+
+Flujo nuevo:
+
+  AL INICIAR LA APP (1 vez):
+    TenantTemplateInitializer → initTemplateSchema()
+      → Flyway corre sobre "_tenant_template"
+      → Todas las tablas y datos quedan listos como plantilla
+
+  AL CREAR CADA EMPRESA:
+    initTenantSchema(schema)
+      → Verifica que _tenant_template existe y tiene tablas
+      → Llama a clonarSchemaDesdeTemplate(schema):
+            CREATE SCHEMA IF NOT EXISTS `nuevo_schema`
+            SET FOREIGN_KEY_CHECKS = 0
+            Por cada tabla del template:
+              CREATE TABLE IF NOT EXISTS `nuevo`.`tabla` LIKE `_tenant_template`.`tabla`
+              INSERT IGNORE INTO `nuevo`.`tabla` SELECT * FROM `_tenant_template`.`tabla`
+            SET FOREIGN_KEY_CHECKS = 1
+
+Comparación de tiempos:
+  Antes (Flyway por cada empresa): ~8-15 segundos
+  Después (clonar template):       ~0.5-1 segundo
+
+Archivos modificados/creados:
+  + TenantService.java           → initTemplateSchema(), initTenantSchema() con clon,
+                                   clonarSchemaDesdeTemplate()
+  + TenantTemplateInitializer.java (NUEVO) → llama initTemplateSchema() al arrancar
+
+Notas importantes:
+  - La primera vez que arranque la app tardará igual (Flyway sobre _tenant_template).
+    A partir de ahí, todas las empresas nuevas son rápidas.
+  - Si se agregan migraciones Flyway nuevas (V2__, V3__, etc.), al reiniciar la app
+    el template se actualiza automáticamente.
+  - Las empresas ya existentes no se actualizan automáticamente con migraciones nuevas.
+    Eso requiere un proceso separado de migración de tenants.
+  - El usuario de MySQL necesita privilegios CREATE, SELECT e INSERT en todos los schemas.
+
+
+================================================================================
+RESUMEN DE ARCHIVOS MODIFICADOS
+================================================================================
+
+  application.properties
+    - show-sql desactivado
+    - rewriteBatchedStatements=true en URL
+    - Hibernate batch_size=50 y order_inserts/updates
+
+  EmpresaService.java
+    - obtenerRolPorNombre()      → usa findByNombreIgnoreCase (era findAll + loop)
+    - obtenerBodegaPorNombre()   → usa findByNombreIgnoreCase (era findAll + loop)
+    - asignarTodosLosPermisosAlRol() → carga existentes 1 vez + saveAll batch
+    - crearempresa() impuestos   → findByCodigoIn + saveAll (era N findByCodigo + N save)
+    - updateEmpresa() impuestos  → findByCodigoIn + saveAll (era N findByCodigo + N save)
+    - crearempresa() sucursales  → 3 queries batch + Maps (era 3 queries por sucursal)
+    - updateEmpresa() sucursales → 3 queries batch + Maps (era 3 queries por sucursal)
+
+  RolesRepository.java
+    + findByNombreIgnoreCase(String nombre)
+
+  BodegasRepository.java
+    + findByNombreIgnoreCase(String nombre)
+
+  ImpuestosRepositori.java
+    + findByCodigoIn(List<Integer> codigos)
+
+  MunicipioRepositori.java
+    + findByCodigoIn(List<Integer> codigos)
+
+  DepartamentoRepositori.java
+    + findByCodigoIn(List<Integer> codigos)
+
+  PaisRepositori.java
+    + findByCodigoIn(List<Integer> codigos)
+
+  TenantService.java
+    - initTenantSchema()     → ahora clona desde template
+    + initTemplateSchema()   → corre Flyway sobre _tenant_template
+    + clonarSchemaDesdeTemplate() → copia tablas y datos con SQL nativo
+
+  TenantTemplateInitializer.java  (ARCHIVO NUEVO)
+    - Inicializa el schema plantilla al arrancar la aplicación
+
+
+================================================================================
+RESUMEN DE GANANCIA ESTIMADA
+================================================================================
+
+  Problema                         | Antes          | Después
+  ---------------------------------|----------------|------------------
+  Buscar rol por nombre            | findAll tabla  | 1 query directa
+  Buscar bodega por nombre         | findAll tabla  | 1 query directa
+  Asignar permisos al rol Admin    | N×2 queries    | 2 queries
+  Actualizar impuestos             | N×2 queries    | 2 queries
+  Procesar sucursales (crear)      | N×3 queries    | 3 queries
+  Procesar sucursales (actualizar) | N×3 queries    | 3 queries
+  saveAll() en MySQL               | N INSERTs      | 1 batch
+  Logging SQL                      | Activo         | Desactivado
+  Crear schema de empresa nueva    | ~8-15 segundos | ~0.5-1 segundo
+
+================================================================================
