@@ -459,8 +459,21 @@ public class VentaServiceImpl implements VentaService {
         // y consecutivo real. Si ya tenía un comprobante real, no se cambia.
         asignarComprobanteAVenta(venta, tieneCredito);
 
+        // Blindaje fiscal: NO completar la venta si faltan las cuentas contables indispensables
+        // (IVA generado, anticipos de retención sufrida, ingresos). Antes estas validaciones se
+        // lanzaban DENTRO de generarAsientoVenta, cuyo try/catch las convertía en "asiento
+        // fallido": la venta quedaba COMPLETADA y facturada pero sin asiento ni IVA registrado.
+        // Validar aquí —antes de COMPLETAR y de emitir el evento de facturación— hace que la
+        // operación se revierta de forma limpia con un mensaje claro para configurar el PUC.
+        validarCuentasFiscalesVenta(venta);
+
         venta.setEstado("COMPLETADA");
         Venta ventaGuardada = ventaRepository.save(venta);
+
+        // ✅ Descargue de inventario SALIDA + Kardex — PRIMERO y dentro de la transacción: si falla,
+        // toda la venta se revierte (no queda COMPLETADA sin descontar stock). Debe ir antes del
+        // asiento (REQUIRES_NEW) para no dejar asientos huérfanos si el inventario falla.
+        generarMovimientoInventarioVenta(ventaGuardada);
 
         // Actualizar último movimiento del cliente
         try {
@@ -482,6 +495,12 @@ public class VentaServiceImpl implements VentaService {
         BigDecimal montoElectronico = BigDecimal.ZERO;
         BigDecimal montoCredito = BigDecimal.ZERO;
         int plazoDiasCredito = 30;
+        // El vencimiento de la CxC toma por defecto el plazo comercial del CLIENTE (tercero).
+        // Si el método de pago trae un plazo explícito (>0), ese tiene prioridad (ver abajo).
+        Terceros clienteCxc = ventaGuardada.getCliente();
+        if (clienteCxc != null && clienteCxc.getPlazo() != null && clienteCxc.getPlazo() > 0) {
+            plazoDiasCredito = clienteCxc.getPlazo();
+        }
 
         for (VentaMetodoPago vmp : ventaGuardada.getMetodosPago()) {
             MetodosPago mp = vmp.getMetodoPago();
@@ -500,13 +519,21 @@ public class VentaServiceImpl implements VentaService {
             }
         }
 
+        // Cuadre de caja de la VENTA:
+        //  - montoTotal = recaudo de CONTADO real (efectivo + electrónico), NO el bruto de la
+        //    venta. El bruto incluía la parte a crédito (que se registra aparte como
+        //    CUENTA_POR_COBRAR) y las retenciones sufridas, inflando el totalRecaudo de la sesión.
+        //  - montoCosto = COGS real (Σ cantidad × costo promedio), NO la base gravada; antes se
+        //    pasaba la gravada, distorsionando por completo el margen/utilidad del arqueo.
+        BigDecimal recaudoContado = montoEfectivo.add(montoElectronico);
+        BigDecimal cogsVenta = calcularCostoTotalVenta(ventaGuardada);
         detalleCajeroService.registrarMovimiento(
                 sesionComp.getDetalleCajeroId(),
                 MovimientoCajero.TipoMovimiento.VENTA,
                 ventaGuardada.getNumeroVenta(),
                 ventaGuardada.getId(),
-                ventaGuardada.getTotalVenta(),
-                ventaGuardada.getGravada(),
+                recaudoContado,
+                cogsVenta,
                 montoEfectivo,
                 montoElectronico,
                 "Venta " + ventaGuardada.getNumeroVenta(),
@@ -539,11 +566,9 @@ public class VentaServiceImpl implements VentaService {
             System.out.println("Error al publicar evento VentaCompletada (facturación): " + e.getMessage());
         }
 
-        // ✅ Generar asiento contable (partida doble) — soporta venta contado, crédito y mixta
+        // ✅ Generar asiento contable (partida doble) — soporta venta contado, crédito y mixta.
+        // El inventario ya se descargó arriba (antes del asiento) de forma atómica.
         generarAsientoVenta(ventaGuardada);
-
-        // ✅ Generar movimiento de inventario SALIDA + Kardex (trazabilidad por producto)
-        generarMovimientoInventarioVenta(ventaGuardada);
     }
 
     /**
@@ -560,12 +585,14 @@ public class VentaServiceImpl implements VentaService {
                 // Costo unitario para Kardex: obtener costo del producto si no hay costo promedio anterior
                 double cant = d.getCantidad().doubleValue();
                 double precio = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
-                double ivaPct = d.getIva() != null ? d.getIva().doubleValue() : 0.0;
-                // El total de la línea = total del documento (con IVA) si está disponible,
-                // sino lo calculamos: precio * cant * (1 + iva/100)
+                // OJO: DetalleVenta.iva es un MONTO (valor del IVA de la línea), NO un porcentaje.
+                double ivaMonto = d.getIva() != null ? d.getIva().doubleValue() : 0.0;
+                // El total de la línea con IVA = total del documento si está disponible; si no,
+                // se calcula como base + IVA (monto). Antes el fallback trataba el IVA como
+                // porcentaje (precio*cant*(1+iva/100)), lo que daba un total absurdo.
                 double totalLineaConIva = d.getTotal() != null
                         ? d.getTotal().doubleValue()
-                        : (precio * cant * (1.0 + ivaPct / 100.0));
+                        : (precio * cant + ivaMonto);
                 
                 // Obtener costo del producto desde ProductoVariante -> Producto
                 // Usar codigo_producto (SKU) en lugar de referencia_variantes
@@ -595,6 +622,9 @@ public class VentaServiceImpl implements VentaService {
                     ex.printStackTrace();
                 }
                 
+                // Persistir el costo real de la venta en la línea (para reversar el COGS exacto en
+                // una devolución posterior, aunque el costo del producto cambie luego).
+                if (costoUnitario > 0) d.setCostoUnitario(java.math.BigDecimal.valueOf(costoUnitario));
                 items.add(new MovimientoInventarioAutoService.ItemMovimiento(
                         d.getCodigoProducto(),
                         d.getReferenciaVariantes(),
@@ -625,8 +655,14 @@ public class VentaServiceImpl implements VentaService {
                     comprobanteId,
                     consecutivo
             );
+        } catch (VentaException ve) {
+            throw ve;
         } catch (Exception ex) {
-            System.out.println("[MovInv-Venta] Error generando movimiento (no crítico): " + ex.getMessage());
+            // El descargue de inventario es CRÍTICO: si falla, la venta NO debe quedar COMPLETADA
+            // sin descontar stock. Se propaga para revertir toda la operación (por eso este
+            // movimiento corre ANTES del asiento/caja, dentro de la misma transacción).
+            throw new VentaException("No se pudo registrar el movimiento de inventario de la venta "
+                    + venta.getNumeroVenta() + ": " + ex.getMessage());
         }
     }
 
@@ -637,6 +673,49 @@ public class VentaServiceImpl implements VentaService {
      *   CRÉDITO Ingresos por ventas (4135) por subtotal sin IVA
      *   CRÉDITO IVA generado (240801)      por el IVA total
      */
+    /**
+     * Valida que existan en el PUC las cuentas contables indispensables para asentar la venta.
+     * Se invoca ANTES de marcar la venta como COMPLETADA para que, si falta alguna, la operación
+     * se revierta completa (no se factura ni descarga inventario) en lugar de quedar con un
+     * "asiento fallido" silencioso. Solo exige la cuenta cuando el concepto respectivo aplica.
+     */
+    private void validarCuentasFiscalesVenta(Venta venta) {
+        BigDecimal iva = venta.getIva() != null ? venta.getIva() : BigDecimal.ZERO;
+        if (iva.compareTo(BigDecimal.ZERO) > 0 && configContable.ivaGenerado().isEmpty()) {
+            throw new VentaException("No se puede completar la venta: tiene IVA $" + iva +
+                    " pero la cuenta '240801 IVA generado' no está configurada en el PUC. " +
+                    "Configúrela antes de facturar (no se puede acumular IVA en Ingresos).");
+        }
+        BigDecimal rf = venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO;
+        BigDecimal ri = venta.getReteiva()    != null ? venta.getReteiva()    : BigDecimal.ZERO;
+        BigDecimal rc = venta.getReteica()    != null ? venta.getReteica()    : BigDecimal.ZERO;
+        if (rf.compareTo(BigDecimal.ZERO) > 0 && configContable.anticipoRetefuente().isEmpty()) {
+            throw new VentaException("No se puede completar la venta: tiene Retefuente sufrida pero " +
+                    "la cuenta '135515' (anticipo retefuente) no está en el PUC.");
+        }
+        if (ri.compareTo(BigDecimal.ZERO) > 0 && configContable.anticipoReteiva().isEmpty()) {
+            throw new VentaException("No se puede completar la venta: tiene ReteIVA sufrida pero " +
+                    "la cuenta '135517' (anticipo reteIVA) no está en el PUC.");
+        }
+        if (rc.compareTo(BigDecimal.ZERO) > 0 && configContable.anticipoReteica().isEmpty()) {
+            throw new VentaException("No se puede completar la venta: tiene ReteICA sufrida pero " +
+                    "la cuenta '135518' (anticipo reteICA) no está en el PUC.");
+        }
+        if (configContable.ingresosVentas().isEmpty()) {
+            throw new VentaException("No se puede completar la venta: la cuenta '4135 Ingresos por " +
+                    "ventas' no está configurada en el PUC.");
+        }
+        // Si la venta tiene parte a CRÉDITO, la cuenta 1305 (CxC clientes) es indispensable; sin
+        // ella el asiento se omitía en silencio (venta COMPLETADA y facturada, pero sin asiento).
+        boolean tieneCredito = venta.getMetodosPago() != null && venta.getMetodosPago().stream()
+                .anyMatch(vmp -> vmp.getMetodoPago() != null
+                        && vmp.getMetodoPago().getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito);
+        if (tieneCredito && configContable.cxcClientes().isEmpty()) {
+            throw new VentaException("No se puede completar la venta a crédito: la cuenta '1305 " +
+                    "Clientes' (CxC) no está configurada en el PUC.");
+        }
+    }
+
     private void generarAsientoVenta(Venta venta) {
         try {
             java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
@@ -646,9 +725,31 @@ public class VentaServiceImpl implements VentaService {
                         : (venta.getCliente().getNombre1() != null ? venta.getCliente().getNombre1() : ""))
                     : "";
 
+            // Blindaje: el cliente paga el NETO (= bruto − retenciones sufridas). Los métodos de
+            // pago deben sumar ese neto (el POS ya los envía netos). Si por algún flujo vinieran
+            // en BRUTO con retención > 0, se escalan proporcionalmente para que el asiento SIEMPRE
+            // cuadre (retención = anticipo). Con retención = 0 el factor es 1 (no cambia nada).
+            BigDecimal totalVentaBruto = venta.getTotalVenta() != null ? venta.getTotalVenta() : BigDecimal.ZERO;
+            BigDecimal retTotalVenta = (venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO)
+                    .add(venta.getReteiva() != null ? venta.getReteiva() : BigDecimal.ZERO)
+                    .add(venta.getReteica() != null ? venta.getReteica() : BigDecimal.ZERO);
+            BigDecimal netoPagos = totalVentaBruto.subtract(retTotalVenta).max(BigDecimal.ZERO);
+            BigDecimal sumaMetodos = venta.getMetodosPago().stream()
+                    .map(m -> m.getMonto() != null ? m.getMonto() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            // Se escala cuando la suma de métodos NO iguala el neto (por retención en bruto O por
+            // SOBREPAGO): así el débito de los pagos = neto = créditos y el asiento cuadra aunque el
+            // cajero haya digitado de más (el excedente es "cambio", no ingreso). Con suma = neto, factor = 1.
+            final BigDecimal factorPago = (sumaMetodos.signum() > 0
+                    && sumaMetodos.subtract(netoPagos).abs().compareTo(new BigDecimal("0.02")) > 0)
+                    ? netoPagos.divide(sumaMetodos, 6, java.math.RoundingMode.HALF_UP)
+                    : BigDecimal.ONE;
+
             // Débitos por métodos de pago
             for (VentaMetodoPago vmp : venta.getMetodosPago()) {
                 MetodosPago metodo = vmp.getMetodoPago();
+                BigDecimal montoLinea = (vmp.getMonto() != null ? vmp.getMonto() : BigDecimal.ZERO)
+                        .multiply(factorPago).setScale(2, java.math.RoundingMode.HALF_UP);
                 if (metodo.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) {
                     // Crédito → débito a CxC
                     CuentaContable cxc = configContable.cxcClientes().orElse(null);
@@ -657,7 +758,7 @@ public class VentaServiceImpl implements VentaService {
                         return;
                     }
                     AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
-                            .debito(cxc.getId(), vmp.getMonto(), "CxC venta " + venta.getNumeroVenta());
+                            .debito(cxc.getId(), montoLinea, "CxC venta " + venta.getNumeroVenta());
                     if (venta.getCliente() != null) {
                         l.conTercero(venta.getCliente().getTerceroId(), nombreCliente);
                     }
@@ -669,7 +770,7 @@ public class VentaServiceImpl implements VentaService {
                         System.out.println("[AsientoVenta] Método '" + metodo.getDescripcion() + "' sin cuenta. Asiento omitido.");
                         return;
                     }
-                    lineas.add(AsientoContableService.LineaDTO.debito(cta.getId(), vmp.getMonto(),
+                    lineas.add(AsientoContableService.LineaDTO.debito(cta.getId(), montoLinea,
                             "Cobro contado por " + metodo.getDescripcion()));
                 }
             }
@@ -777,22 +878,27 @@ public class VentaServiceImpl implements VentaService {
      * (cantidad × costo) de cada detalle de la venta. Usa producto.costo como
      * referencia (el costo promedio actual del producto). Try/catch defensivo.
      */
+    /**
+     * Costo total de la mercancía vendida: Σ (cantidad × costo promedio) por detalle.
+     * Reutilizado por el asiento de costo (6135/1435) y por el cuadre de caja (para que el
+     * "totalCosto" de la sesión refleje el COGS real y no la base gravada de la venta).
+     */
+    private java.math.BigDecimal calcularCostoTotalVenta(Venta venta) {
+        java.math.BigDecimal totalCosto = java.math.BigDecimal.ZERO;
+        for (DetalleVenta d : venta.getItems()) {
+            if (d.getCantidad() == null || d.getCantidad() <= 0) continue;
+            java.math.BigDecimal costoUnit = obtenerCostoVarianteParaVenta(
+                    d.getCodigoProducto(), d.getReferenciaVariantes(), venta.getBodega());
+            if (costoUnit == null) continue;
+            totalCosto = totalCosto.add(costoUnit.multiply(java.math.BigDecimal.valueOf(d.getCantidad())));
+        }
+        return totalCosto;
+    }
+
     private void generarAsientoCostoVenta(Venta venta, String nombreCliente) {
         try {
-            // Calcular el costo total: sum(cantidad × precio_compra_promedio) por detalle.
-            // Buscamos el costo desde el producto vía ProductoVarianteRepository indirectamente:
-            // usamos la query SQL directa para obtener costo*cantidad por venta.
-            java.math.BigDecimal totalCosto = java.math.BigDecimal.ZERO;
-            for (DetalleVenta d : venta.getItems()) {
-                if (d.getCantidad() == null || d.getCantidad() <= 0) continue;
-                // Resolvemos costo del producto/variante. La bodega es a nivel de venta (DetalleVenta no la tiene).
-                java.math.BigDecimal costoUnit = obtenerCostoVarianteParaVenta(
-                        d.getCodigoProducto(),
-                        d.getReferenciaVariantes(),
-                        venta.getBodega());
-                if (costoUnit == null) continue;
-                totalCosto = totalCosto.add(costoUnit.multiply(java.math.BigDecimal.valueOf(d.getCantidad())));
-            }
+            // Costo total = sum(cantidad × costo promedio) por detalle (ver calcularCostoTotalVenta).
+            java.math.BigDecimal totalCosto = calcularCostoTotalVenta(venta);
             if (totalCosto.compareTo(java.math.BigDecimal.ZERO) <= 0) return; // nada que costear
 
             CuentaContable costoCta = configContable.costoVentas().orElse(null);
@@ -1002,29 +1108,26 @@ public class VentaServiceImpl implements VentaService {
             try {
                 Integer bodegaCodigo = venta.getBodega() != null ? venta.getBodega().getCodigo() : null;
                 if (bodegaCodigo != null) {
+                    // La venta SACÓ stock (SALIDA); anularla lo REINGRESA con un movimiento REAL de
+                    // kardex (documentoTipo "VENTA-ANUL") al costo de venta, para que existencias,
+                    // kardex y el mayor 1435 queden consistentes. Antes se sumaba a existencias a
+                    // mano y el kardex quedaba desincronizado.
+                    java.util.List<MovimientoInventarioAutoService.ItemMovimiento> items =
+                            MovimientoInventarioAutoService.nuevaLista();
                     for (DetalleVenta det : venta.getItems()) {
-                        java.util.Optional<ProductoVariante> varOpt =
-                                productoVarianteRepository.findBySku(det.getCodigoProducto());
-                        if (varOpt.isEmpty() && det.getReferenciaVariantes() != null) {
-                            varOpt = productoVarianteRepository.findBySku(det.getReferenciaVariantes());
-                        }
-                        if (varOpt.isEmpty()) continue;
-                        Existencias exist = existenciasRepository
-                                .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
-                                        varOpt.get().getProductoVarianteId(), bodegaCodigo)
-                                .orElse(null);
-                        if (exist != null) {
-                            BigDecimal cant = det.getCantidad() != null
-                                    ? BigDecimal.valueOf(det.getCantidad()) : BigDecimal.ZERO;
-                            BigDecimal saldoActual = exist.getExistencia() != null
-                                    ? exist.getExistencia() : BigDecimal.ZERO;
-                            exist.setExistencia(saldoActual.add(cant));
-                            existenciasRepository.save(exist);
-                        }
+                        if (det.getCantidad() == null || det.getCantidad() <= 0) continue;
+                        java.math.BigDecimal costoUnit = obtenerCostoVarianteParaVenta(
+                                det.getCodigoProducto(), det.getReferenciaVariantes(), venta.getBodega());
+                        double costo = costoUnit != null ? costoUnit.doubleValue() : 0.0;
+                        items.add(new MovimientoInventarioAutoService.ItemMovimiento(
+                                det.getCodigoProducto(), det.getReferenciaVariantes(),
+                                det.getCantidad().doubleValue(), costo));
                     }
+                    movimientoInventarioAutoService.registrarAjusteAnulacion(
+                            "VENTA-ANUL", venta.getId(), bodegaCodigo, LocalDate.now(), items, true);
                 }
             } catch (Exception ex) {
-                System.out.println("[AnularVenta] Error restaurando existencias: " + ex.getMessage());
+                System.out.println("[AnularVenta] Error restaurando inventario: " + ex.getMessage());
             }
 
             // ── Anular CxC del cliente si era venta a crédito (busca por numeroVenta) ──
@@ -1043,26 +1146,52 @@ public class VentaServiceImpl implements VentaService {
             } catch (Exception ex) {
                 System.out.println("[AnularVenta] Error anulando CxC: " + ex.getMessage());
             }
-        }
 
-        // ✅ Registrar movimiento ANULACION en cajero
-        DatosSesiones sesionAnul = obtenerSesionActiva();
-        if (sesionAnul != null && sesionAnul.getDetalleCajeroId() != null) {
-            try {
-                detalleCajeroService.registrarMovimiento(
-                        sesionAnul.getDetalleCajeroId(),
-                        MovimientoCajero.TipoMovimiento.ANULACION,
-                        venta.getNumeroVenta(),
-                        venta.getId(),
-                        venta.getTotalVenta(),
-                        venta.getGravada(),
-                        venta.getTotalVenta(),
-                        BigDecimal.ZERO,
-                        "Anulación venta " + venta.getNumeroVenta(),
-                        venta.getComprobante()
-                );
-            } catch (Exception e) {
-                System.out.println("Error al registrar anulación en cajero: " + e.getMessage());
+            // ✅ Reversa de CAJA — DENTRO de teniaAsientos (una venta PENDIENTE nunca tocó la caja).
+            // Espeja el movimiento VENTA: resta SOLO el recaudo de CONTADO real (efectivo/electrónico
+            // que entraron, excluyendo crédito y retenciones) con tipo ANULACION (signo −1) y montos
+            // POSITIVOS → neto −recaudoContado. Antes usaba el bruto (totalVenta) como efectivo →
+            // descuadraba la caja en ventas a crédito/mixtas/con retención.
+            //
+            // NOTA (por diseño, no bug): la reversa se registra en la sesión de cajero ABIERTA actual,
+            // no en la sesión original de la venta. registrarMovimiento() rechaza sesiones CERRADAS
+            // ("La sesión de cajero está cerrada"), y una anulación normalmente ocurre cuando la sesión
+            // original ya cerró; físicamente el reembolso sale del cajón abierto ahora. La parte a
+            // CRÉDITO no se reversa en caja (el movimiento CUENTA_POR_COBRAR original tiene
+            // afectaCaja=false/signo=0: nunca afectó el cuadre); la cartera se reversa arriba sobre la
+            // entidad CuentaPorCobrar (fuente autoritativa), no sobre el arqueo.
+            DatosSesiones sesionAnul = obtenerSesionActiva();
+            if (sesionAnul != null && sesionAnul.getDetalleCajeroId() != null) {
+                try {
+                    BigDecimal montoEfectivo = BigDecimal.ZERO;
+                    BigDecimal montoElectronico = BigDecimal.ZERO;
+                    if (venta.getMetodosPago() != null) {
+                        for (VentaMetodoPago vmp : venta.getMetodosPago()) {
+                            MetodosPago mp = vmp.getMetodoPago();
+                            if (mp != null && mp.getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) continue;
+                            String sigla = (mp != null && mp.getSigla() != null) ? mp.getSigla().toUpperCase() : "";
+                            if (sigla.startsWith("EF")) montoEfectivo = montoEfectivo.add(vmp.getMonto());
+                            else montoElectronico = montoElectronico.add(vmp.getMonto());
+                        }
+                    }
+                    BigDecimal recaudoContado = montoEfectivo.add(montoElectronico);
+                    if (recaudoContado.compareTo(BigDecimal.ZERO) > 0) {
+                        detalleCajeroService.registrarMovimiento(
+                                sesionAnul.getDetalleCajeroId(),
+                                MovimientoCajero.TipoMovimiento.ANULACION,
+                                venta.getNumeroVenta(),
+                                venta.getId(),
+                                recaudoContado,
+                                calcularCostoTotalVenta(venta),
+                                montoEfectivo,
+                                montoElectronico,
+                                "Anulación venta " + venta.getNumeroVenta(),
+                                venta.getComprobante()
+                        );
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error al registrar anulación en cajero: " + e.getMessage());
+                }
             }
         }
     }

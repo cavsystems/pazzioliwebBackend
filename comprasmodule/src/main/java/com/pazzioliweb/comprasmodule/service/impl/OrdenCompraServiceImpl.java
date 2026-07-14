@@ -219,10 +219,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             detalle.setReferenciaVariantes(itemDto.getReferenciaVariantes());
             detalle.setCantidad(itemDto.getCantidad());
             detalle.setPrecioUnitario(itemDto.getPrecioUnitario());
-            detalle.setDescuento(itemDto.getDescuento() != null ? itemDto.getDescuento() : BigDecimal.ZERO);
+            detalle.setDescuento(itemDto.getDescuento() != null ? itemDto.getDescuento() : BigDecimal.ZERO); // PORCENTAJE
             detalle.setIva(itemDto.getIvaPorcentaje() != null ? itemDto.getIvaPorcentaje() : BigDecimal.ZERO);
             BigDecimal subtotal = detalle.getPrecioUnitario().multiply(BigDecimal.valueOf(detalle.getCantidad()));
-            BigDecimal subtotalConDescuento = subtotal.subtract(detalle.getDescuento());
+            BigDecimal subtotalConDescuento = subtotal.subtract(montoDescuentoLinea(subtotal, detalle.getDescuento()));
             BigDecimal ivaAmount = subtotalConDescuento.multiply(detalle.getIva()).divide(BigDecimal.valueOf(100));
             detalle.setTotal(subtotalConDescuento.add(ivaAmount));
             detalle.setOrdenCompra(ordenExistente);
@@ -409,7 +409,28 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
      * CRÉDITO directo a la cuenta del medio de pago. Como el sistema actual
      * solo crea CxP, la salida de dinero se contabiliza después al pagar con CE.
      */
+    /**
+     * Blindaje anti-descuadre: si la compra practica retención pero falta la cuenta 2365xx, aborta
+     * ANTES de construir el asiento. Sin esto, la línea de retención se omitía y el asiento quedaba
+     * descuadrado (débitos ≠ créditos) → caía en "asiento fallido": la compra se registraba SIN
+     * contabilizar. Debe invocarse FUERA de los try que capturan a asientoFallido, para que la
+     * operación se revierta completa con un mensaje claro (mismo criterio que en ventas, A3).
+     */
+    private void validarCuentasRetencionCompra(BigDecimal rf, BigDecimal rv, BigDecimal rc) {
+        if (rf != null && rf.compareTo(BigDecimal.ZERO) > 0 && configContable.retefuentePagar().isEmpty())
+            throw new OrdenCompraException("No se puede registrar la compra: practica Retefuente pero la "
+                    + "cuenta '236505 Retefuente por pagar' no está configurada en el PUC.");
+        if (rv != null && rv.compareTo(BigDecimal.ZERO) > 0 && configContable.reteivaPagar().isEmpty())
+            throw new OrdenCompraException("No se puede registrar la compra: practica ReteIVA pero la "
+                    + "cuenta '236540 ReteIVA por pagar' no está configurada en el PUC.");
+        if (rc != null && rc.compareTo(BigDecimal.ZERO) > 0 && configContable.reteicaPagar().isEmpty())
+            throw new OrdenCompraException("No se puede registrar la compra: practica ReteICA pero la "
+                    + "cuenta '236570 ReteICA por pagar' no está configurada en el PUC.");
+    }
+
     private void generarAsientoCompra(OrdenCompra orden, RealizarOrdenRequestDTO request) {
+        // Fuera del try: si falta la cuenta de una retención practicada, aborta y revierte.
+        validarCuentasRetencionCompra(orden.getRetefuente(), orden.getReteiva(), orden.getReteica());
         try {
             java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
 
@@ -543,7 +564,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
 
             asientoService.generarAsiento(
                     orden.getNumeroOrden() != null ? orden.getNumeroOrden() : ("OC-" + orden.getId()),
-                    orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                    orden.getFechaEmision() != null ? orden.getFechaEmision() : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now()),
                     "Compra " + orden.getNumeroOrden() + (request.getProvedor() != null ? " - " + request.getProvedor().getNombre() : ""),
                     tipo,
                     orden.getId(),
@@ -739,6 +760,16 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         return orden;
     }
 
+    /**
+     * El descuento por línea se maneja como PORCENTAJE (así se ingresa en las tiendas: "10% de
+     * descuento para este producto"). Este helper devuelve el monto del descuento en pesos =
+     * subtotal × %/100. El campo `descuento` del detalle almacena el porcentaje.
+     */
+    private BigDecimal montoDescuentoLinea(BigDecimal subtotal, BigDecimal descuentoPct) {
+        if (subtotal == null || descuentoPct == null || descuentoPct.compareTo(BigDecimal.ZERO) <= 0) return BigDecimal.ZERO;
+        return subtotal.multiply(descuentoPct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+    }
+
     private List<DetalleOrdenCompra> crearDetallesDesdeRequest(OrdenCompra orden, List<RealizarOrdenRequestDTO.ProductoRequestPayloadDTO> products) {
         List<DetalleOrdenCompra> detalles = new ArrayList<>();
         for (RealizarOrdenRequestDTO.ProductoRequestPayloadDTO product : products) {
@@ -753,10 +784,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                     detalle.setReferenciaVariantes(variante.getReferenciaVariantes());
                     detalle.setCantidad(variante.getCantidad());
                     detalle.setPrecioUnitario(product.getCosto());
-                    detalle.setDescuento(variante.getDescuento() != null ? variante.getDescuento() : BigDecimal.ZERO);
+                    detalle.setDescuento(variante.getDescuento() != null ? variante.getDescuento() : BigDecimal.ZERO); // PORCENTAJE
                     detalle.setIva(product.getImpuesto() != null ? BigDecimal.valueOf(product.getImpuesto()) : BigDecimal.ZERO);
                     BigDecimal subtotal = detalle.getPrecioUnitario().multiply(BigDecimal.valueOf(detalle.getCantidad()));
-                    BigDecimal subtotalConDescuento = subtotal.subtract(detalle.getDescuento());
+                    BigDecimal subtotalConDescuento = subtotal.subtract(montoDescuentoLinea(subtotal, detalle.getDescuento()));
                     BigDecimal ivaAmount = subtotalConDescuento.multiply(detalle.getIva()).divide(BigDecimal.valueOf(100));
                     detalle.setTotal(subtotalConDescuento.add(ivaAmount));
                     detalle.setSku(variante.getSku());
@@ -779,7 +810,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 detalle.setDescuento(BigDecimal.ZERO);
                 detalle.setIva(product.getImpuesto() != null ? BigDecimal.valueOf(product.getImpuesto()) : BigDecimal.ZERO);
                 BigDecimal subtotal = detalle.getPrecioUnitario().multiply(BigDecimal.valueOf(detalle.getCantidad()));
-                BigDecimal subtotalConDescuento = subtotal.subtract(detalle.getDescuento());
+                BigDecimal subtotalConDescuento = subtotal.subtract(montoDescuentoLinea(subtotal, detalle.getDescuento()));
                 BigDecimal ivaAmount = subtotalConDescuento.multiply(detalle.getIva()).divide(BigDecimal.valueOf(100));
                 detalle.setTotal(subtotalConDescuento.add(ivaAmount));
                 detalle.setRecibido(false);
@@ -850,7 +881,19 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         cuenta.setNit(request.getProvedor().getIdentificacion());
         cuenta.setNombre(request.getProvedor().getNombre());
         cuenta.setNumeroFactura(orden.getNumeroOrden());
-        cuenta.setFechaVencimiento(orden.getFechaEntregaEsperada());
+        // Vencimiento: se deriva del PLAZO COMERCIAL del proveedor (Terceros.plazo)
+        // desde la fecha de emisión — simétrico con CxC. Si el proveedor no tiene plazo
+        // configurado, se conserva la fecha de entrega esperada de la orden (comportamiento previo).
+        LocalDate vencimiento = orden.getFechaEntregaEsperada();
+        Integer proveedorId = request.getProvedor().getTerceroId();
+        if (proveedorId != null && orden.getFechaEmision() != null) {
+            com.pazzioliweb.tercerosmodule.entity.Terceros prov =
+                    tercerosRepository.findByTerceroId(proveedorId).orElse(null);
+            if (prov != null && prov.getPlazo() != null && prov.getPlazo() > 0) {
+                vencimiento = orden.getFechaEmision().plusDays(prov.getPlazo());
+            }
+        }
+        cuenta.setFechaVencimiento(vencimiento);
         cuenta.setValorNeto(saldoPendiente);  // solo el saldo no pagado (total neto - pagado)
         cuenta.setEstado("PENDIENTE");
         cuenta.setProveedorId(request.getProvedor().getTerceroId());
@@ -905,14 +948,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 productoDTO.setCodigo(detalle.getCodigoProducto());
                 productoDTO.setCosto(detalle.getPrecioUnitario());
 
-                // Add sale price, assuming 30% markup
-                List<ProductoActualizarCrearDTO.PrecioDTO> precios = new ArrayList<>();
-                ProductoActualizarCrearDTO.PrecioDTO precioVenta = new ProductoActualizarCrearDTO.PrecioDTO();
-                precioVenta.setIdTipoPrecio(1); // Assuming 1 is the ID for sale price type
-                precioVenta.setValor(detalle.getPrecioUnitario().multiply(BigDecimal.valueOf(1.3)));
-                precios.add(precioVenta);
-                productoDTO.setPrecios(precios);
-
+                // Solo se actualiza el COSTO al recibir. NO se pisa el precio de venta: antes se
+                // forzaba costo × 1.3 (markup fijo del 30%), sobrescribiendo el precio configurado
+                // del producto. El precio de venta lo define el maestro de productos, no la compra.
                 productoService.actualizarOCrearProducto(productoDTO);
             }
         }
@@ -1045,8 +1083,12 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         OrdenCompra orden = ordenCompraRepository.findById(ordenId)
                 .orElseThrow(() -> new OrdenCompraException("Orden de compra no encontrada: " + ordenId));
 
-        if ("RECIBIDA".equals(orden.getEstado()) || "ANULADA".equals(orden.getEstado())) {
-            throw new OrdenCompraException("La orden ya fue recibida o está anulada");
+        // Bloquear re-finalización: RECIBIDA_PARCIAL incluida. Volver a finalizar duplicaría el
+        // comprobante/consecutivo, la CxP y el movimiento de inventario (el asiento es idempotente,
+        // así quedaría mayor 1435 < kardex). El ingreso debe completarse en una sola finalización.
+        if ("RECIBIDA".equals(orden.getEstado()) || "RECIBIDA_PARCIAL".equals(orden.getEstado())
+                || "ANULADA".equals(orden.getEstado())) {
+            throw new OrdenCompraException("La orden ya fue recibida (total o parcialmente) o está anulada; no se puede volver a finalizar.");
         }
 
         // Validar periodo contable
@@ -1058,6 +1100,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             } catch (Exception ignore) {}
         }
         periodoContableService.validarPeriodoAbierto(fechaRef);
+        // El asiento y el kardex se fechan con la fecha de emisión de la orden; al ingresar se
+        // alinea con la fecha de la factura (= periodo validado) para no contabilizar en un
+        // periodo distinto al validado (antes el asiento podía caer en el periodo viejo de la OC).
+        orden.setFechaEmision(fechaRef);
 
         // 1. Actualizar items con precios y cantidades definitivas
         BigDecimal gravada = BigDecimal.ZERO;
@@ -1082,17 +1128,19 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 detalle.setCantidadRecibida(cant);
                 detalle.setRecibido(Boolean.TRUE.equals(itemDto.getRecibido()));
 
-                // Recalcular total del item
+                // Recalcular total del item. `desc` es PORCENTAJE → el monto = subtotal × %/100.
                 BigDecimal precio = detalle.getPrecioUnitario() != null ? detalle.getPrecioUnitario() : BigDecimal.ZERO;
-                BigDecimal desc   = detalle.getDescuento() != null ? detalle.getDescuento() : BigDecimal.ZERO;
+                BigDecimal descPct = detalle.getDescuento() != null ? detalle.getDescuento() : BigDecimal.ZERO;
                 BigDecimal ivaPct = detalle.getIva() != null ? detalle.getIva() : BigDecimal.ZERO;
-                BigDecimal base   = precio.multiply(BigDecimal.valueOf(cant)).subtract(desc).max(BigDecimal.ZERO);
+                BigDecimal subtotalItem = precio.multiply(BigDecimal.valueOf(cant));
+                BigDecimal montoDesc = montoDescuentoLinea(subtotalItem, descPct);
+                BigDecimal base   = subtotalItem.subtract(montoDesc).max(BigDecimal.ZERO);
                 BigDecimal ivaAmt = base.multiply(ivaPct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
                 detalle.setTotal(base.add(ivaAmt));
 
                 gravada = gravada.add(base);
                 ivaTotal = ivaTotal.add(ivaAmt);
-                descuentosTotal = descuentosTotal.add(desc);
+                descuentosTotal = descuentosTotal.add(montoDesc);
             }
         }
 
@@ -1102,11 +1150,16 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         BigDecimal rf = dto.getRetefuente() != null ? dto.getRetefuente() : BigDecimal.ZERO;
         BigDecimal rv = dto.getReteiva()    != null ? dto.getReteiva()    : BigDecimal.ZERO;
         BigDecimal ric = dto.getReteica()   != null ? dto.getReteica()    : BigDecimal.ZERO;
-        BigDecimal descFinal = dto.getDescuentos() != null ? dto.getDescuentos() : BigDecimal.ZERO;
+        // Se PERSISTE el monto de descuento calculado (para reportes/PDF/DIAN). El front no lo
+        // envía, así que se usa el sumado por línea (descuentosTotal).
+        BigDecimal descFinal = dto.getDescuentos() != null ? dto.getDescuentos() : descuentosTotal;
 
+        // OJO: gravadaFinal YA está neta de descuento (base = subtotal − montoDescuento), por eso
+        // el total neto NO vuelve a restar el descuento (hacerlo lo contaría dos veces y descuadraría
+        // el asiento). Solo se restan las retenciones practicadas.
         BigDecimal totalBruto = gravadaFinal.add(ivaFinal);
         BigDecimal totalNeto  = dto.getTotalFinal() != null ? dto.getTotalFinal()
-                : totalBruto.subtract(rf).subtract(rv).subtract(ric).subtract(descFinal).max(BigDecimal.ZERO);
+                : totalBruto.subtract(rf).subtract(rv).subtract(ric).max(BigDecimal.ZERO);
 
         // Actualizar totales en la orden
         orden.setGravada(gravadaFinal);
@@ -1197,7 +1250,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             cuentaPorPagarService.crear(cxp);
         }
 
-        // 7. Generar asiento contable — igual que generarAsientoCompra pero con datos del DTO
+        // 7. Generar asiento contable — igual que generarAsientoCompra pero con datos del DTO.
+        // Blindaje anti-descuadre FUERA del try: si falta la cuenta de una retención practicada,
+        // abortar (se revierte la finalización) en vez de dejar un asiento fallido silencioso.
+        validarCuentasRetencionCompra(rf, rv, ric);
         try {
             generarAsientoCompraFinalizar(orden, dto, totalPagado, totalNeto, totalBruto, gravadaFinal, ivaFinal, rf, rv, ric);
         } catch (Exception ex) {
@@ -1208,29 +1264,22 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                     "Error asiento finalización: " + ex.getMessage(), ex);
         }
 
-        // 8. Actualizar inventario
-        for (DetalleOrdenCompra detalle : orden.getItems()) {
-            Integer cant = detalle.getCantidadRecibida();
-            if (cant == null || cant <= 0) continue;
-            try {
-                productoClient.actualizarInventario(
-                        detalle.getCodigoProducto(),
-                        detalle.getReferenciaVariantes(),
-                        cant,
-                        orden.getBodega().getCodigo());
-            } catch (Exception ex) {
-                throw new OrdenCompraException("Error actualizando inventario de "
-                        + detalle.getCodigoProducto() + ": " + ex.getMessage());
-            }
-        }
+        // 8. Inventario: lo mantiene ÚNICAMENTE el movimiento de kardex (paso 9). Antes se sumaba
+        // aquí con productoClient.actualizarInventario Y otra vez en el kardex → en un producto sin
+        // kardex previo el saldo base se leía ya incrementado y quedaba doble (original + 2×cant).
+        // Un solo escritor (registrarEntradaPorCompra) evita el doble conteo, igual que en ventas/devoluciones.
 
-        // 9. Movimiento inventario (Kardex)
+        // 9. Movimiento inventario (Kardex) — ÚNICO punto que actualiza existencias
         try {
             List<com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService.ItemMovimiento> kardexItems =
                     com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService.nuevaLista();
             for (DetalleOrdenCompra d : orden.getItems()) {
                 if (d.getCantidadRecibida() == null || d.getCantidadRecibida() <= 0) continue;
-                double costoUnit = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
+                // Costo unitario NETO de descuento (descuento por línea = %), para que la
+                // valorización del kardex coincida con el débito contable a Inventarios (gravada
+                // neta). Antes usaba el precio bruto → auxiliar de inventario ≠ mayor 1435.
+                double descPct   = d.getDescuento() != null ? d.getDescuento().doubleValue() : 0.0;
+                double costoUnit = (d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0) * (1.0 - descPct / 100.0);
                 double ivaPct    = d.getIva() != null ? d.getIva().doubleValue() : 0.0;
                 double base      = costoUnit * d.getCantidadRecibida();
                 kardexItems.add(new com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService.ItemMovimiento(
@@ -1247,7 +1296,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 movimientoInventarioAutoService.registrarEntradaPorCompra(
                         orden.getNumeroOrden(), orden.getId(),
                         orden.getBodega().getCodigo(),
-                        orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                        orden.getFechaEmision() != null ? orden.getFechaEmision() : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now()),
                         kardexItems, tipoComp, comprobanteId, consecutivo);
             }
         } catch (Exception ex) {
@@ -1400,7 +1449,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         String tipoDoc = orden.getComprobante() != null ? orden.getComprobante().getTipoMovimiento().name() : "CC";
         asientoService.generarAsiento(
                 orden.getNumeroOrden(),
-                orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                orden.getFechaEmision() != null ? orden.getFechaEmision() : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now()),
                 "Compra " + orden.getNumeroOrden() + (orden.getProveedor() != null ? " - " + orden.getProveedor().getRazonSocial() : ""),
                 tipoDoc, orden.getId(), orden.getComprobante(), lineas);
     }

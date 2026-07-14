@@ -45,6 +45,11 @@ public class ComprobanteEgreso {
     @Column(name = "monto_concepto_abierto", precision = 18, scale = 2)
     private BigDecimal montoConceptoAbierto;
 
+    /** Saldo a favor de la empresa (anticipo al proveedor) consumido en este egreso (se acredita a
+     *  anticipos 1330 en el asiento y se repone al tercero si el egreso se anula). */
+    @Column(name = "saldo_favor_usado", precision = 18, scale = 2, nullable = false)
+    private BigDecimal saldoFavorUsado = BigDecimal.ZERO;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "concepto_abierto_id")
     private ConceptoAbierto conceptoAbiertoRef;

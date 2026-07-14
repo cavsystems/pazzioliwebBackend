@@ -81,6 +81,21 @@ public class ConfiguracionContableService {
     public static final String COD_ANTICIPO_RETEIVA    = "135517";
     /** ReteICA que NOS practicaron — anticipo de ICA: 135518 */
     public static final String COD_ANTICIPO_RETEICA    = "135518";
+    /** Descuento comercial condicionado RECIBIDO de un proveedor (ingreso financiero): 421040.
+     *  Se usa al pagar (Comprobante de Egreso) cuando el proveedor nos concede pronto pago. */
+    public static final String COD_DESCUENTO_CONDICIONADO = "421040";
+    /** Descuento comercial condicionado CONCEDIDO a un cliente (gasto financiero): 530535.
+     *  Se usa en el Recibo de Caja cuando le concedemos pronto pago al cliente. NO debe ir a
+     *  421040 (cuenta de INGRESO): un descuento otorgado es un gasto, no un menor ingreso. */
+    public static final String COD_DESCUENTO_CONCEDIDO   = "530535";
+    /** Averías / pérdida en recaudo: 539540 */
+    public static final String COD_AVERIAS             = "539540";
+    /** Fletes: 513535 */
+    public static final String COD_FLETES              = "513535";
+    /** Anticipos y avances recibidos DE CLIENTES (saldo a favor del cliente): 2805 (o subcuenta). */
+    public static final String COD_ANTICIPO_CLIENTES   = "2805";
+    /** Anticipos y avances A PROVEEDORES (saldo a favor de la empresa): 1330 (o subcuenta). */
+    public static final String COD_ANTICIPO_PROVEEDORES = "1330";
 
     @Transactional(readOnly = true)
     public Optional<CuentaContable> buscarPorCodigo(String codigo) {
@@ -138,4 +153,10 @@ public class ConfiguracionContableService {
     public Optional<CuentaContable> anticipoRetefuente()   { return buscarPorCodigo(cod("COD_ANTICIPO_RETEFUENTE",  COD_ANTICIPO_RETEFUENTE)); }
     public Optional<CuentaContable> anticipoReteiva()      { return buscarPorCodigo(cod("COD_ANTICIPO_RETEIVA",     COD_ANTICIPO_RETEIVA)); }
     public Optional<CuentaContable> anticipoReteica()      { return buscarPorCodigo(cod("COD_ANTICIPO_RETEICA",     COD_ANTICIPO_RETEICA)); }
+    public Optional<CuentaContable> descuentoCondicionado(){ return buscarPorCodigo(cod("COD_DESCUENTO_CONDICIONADO", COD_DESCUENTO_CONDICIONADO)); }
+    public Optional<CuentaContable> descuentoConcedido()   { return buscarPorCodigo(cod("COD_DESCUENTO_CONCEDIDO",   COD_DESCUENTO_CONCEDIDO)); }
+    public Optional<CuentaContable> averias()              { return buscarPorCodigo(cod("COD_AVERIAS",               COD_AVERIAS)); }
+    public Optional<CuentaContable> fletes()               { return buscarPorCodigo(cod("COD_FLETES",                COD_FLETES)); }
+    public Optional<CuentaContable> anticipoClientes()     { return buscarPorCodigo(cod("COD_ANTICIPO_CLIENTES",    COD_ANTICIPO_CLIENTES)); }
+    public Optional<CuentaContable> anticipoProveedores()  { return buscarPorCodigo(cod("COD_ANTICIPO_PROVEEDORES", COD_ANTICIPO_PROVEEDORES)); }
 }

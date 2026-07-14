@@ -69,6 +69,9 @@
         <class>com.pazzioliweb.comprobantesmodule.entity.CentroCosto</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.TipoComprobanteManual</class>
         <class>com.pazzioliweb.comprobantesmodule.entity.NotaEstadoFinanciero</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.ActivoFijo</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.DepreciacionDetalle</class>
+        <class>com.pazzioliweb.comprobantesmodule.entity.AuditoriaMantenimiento</class>
         <!-- Cajas -->
         <class>com.pazzioliweb.cajasmodule.entity.Cajas</class>
         
@@ -95,6 +98,8 @@
         <class>com.pazzioliweb.comprasmodule.entity.Legalizacion</class>
         <class>com.pazzioliweb.comprasmodule.entity.ConfiguracionCompras</class>
         <class>com.pazzioliweb.comprasmodule.entity.ManifestoImportacion</class>
+        <class>com.pazzioliweb.comprasmodule.entity.DevolucionCompra</class>
+        <class>com.pazzioliweb.comprasmodule.entity.DetalleDevolucionCompra</class>
         <!-- Ventas -->
         <class>com.pazzioliweb.ventasmodule.entity.DetalleVenta</class>
         <class>com.pazzioliweb.ventasmodule.entity.Devolucion</class>

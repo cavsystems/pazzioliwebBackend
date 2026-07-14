@@ -14,5 +14,6 @@ public class CuentaContableDTO {
     private Boolean esMovimiento;
     private Boolean requiereTercero;
     private Boolean requiereDocumentoCruce;
+    private Boolean requiereCentroCosto;
     private String estado;
 }

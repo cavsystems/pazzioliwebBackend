@@ -50,6 +50,11 @@ public class CuentaContable {
     @Column(name = "requiere_documento_cruce", nullable = false)
     private Boolean requiereDocumentoCruce = false;
 
+    /** Si es true, al digitar esta cuenta en un asiento se exige centro de costo.
+     *  Útil para cuentas de gasto/costo (5/6/7) que se reportan por centro de costo. */
+    @Column(name = "requiere_centro_costo", nullable = false)
+    private Boolean requiereCentroCosto = false;
+
     @Column(nullable = false, length = 15)
     private String estado = "ACTIVO";
 

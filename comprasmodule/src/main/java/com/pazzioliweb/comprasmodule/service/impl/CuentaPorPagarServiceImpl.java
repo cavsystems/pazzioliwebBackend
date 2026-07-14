@@ -52,7 +52,9 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
     @Transactional(readOnly = true)
     public List<CuentaPorPagarDTO> listarPendientes() {
         List<CuentaPorPagar> pendientes = cuentaPorPagarRepository.findAll().stream()
-                .filter(c -> "PENDIENTE".equals(c.getEstado()))
+                .filter(c -> "PENDIENTE".equals(c.getEstado())
+                        || "PARCIAL".equals(c.getEstado())
+                        || "VENCIDA".equals(c.getEstado()))
                 .collect(Collectors.toList());
         return pendientes.stream().map(this::toDTO).collect(Collectors.toList());
     }
@@ -69,10 +71,12 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
     @Override
     @Transactional
     public void pagar(Long id) {
-        CuentaPorPagar cuenta = cuentaPorPagarRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Cuenta por pagar no encontrada"));
-        cuenta.setEstado("PAGADA");
-        cuentaPorPagarRepository.save(cuenta);
+        // El pago de una CxP debe hacerse con un COMPROBANTE DE EGRESO (CE): reduce el saldo, mueve
+        // caja/banco y genera el asiento (DR 2205 / CR bancos). Marcar aquí PAGADA sin reducir saldo
+        // ni contabilizar dejaba el mayor 2205 sin bajar y sin salida de tesorería → mayor ≠ auxiliar.
+        // Se deshabilita este atajo para no dejar pagos sin respaldo contable.
+        throw new RuntimeException("El pago de una cuenta por pagar debe registrarse con un Comprobante de Egreso (CE), "
+                + "no marcando PAGADA directamente. Use el módulo de Egresos.");
     }
 
     @Override

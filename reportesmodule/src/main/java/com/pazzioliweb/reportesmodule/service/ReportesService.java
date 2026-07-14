@@ -120,5 +120,11 @@ public interface ReportesService {
 
     /** Comparativa mensual facturación vs recaudo. */
     List<FacturacionVsRecaudoDTO> getFacturacionVsRecaudo(LocalDate inicio, LocalDate fin);
+
+    /**
+     * Certificado de retención en la fuente por tercero y periodo.
+     * @param tipo "PRACTICADAS" (a proveedores, desde compras) o "SUFRIDAS" (por nosotros, desde ventas).
+     */
+    CertificadoRetencionDTO getCertificadoRetencion(String tipo, Integer terceroId, LocalDate inicio, LocalDate fin);
 }
 

@@ -42,6 +42,12 @@ public class DetalleDevolucion {
     @Column(name = "total_linea", nullable = false)
     private BigDecimal totalLinea = BigDecimal.ZERO;
 
+    /** Costo unitario (promedio) con que se registró la devolución. Se persiste para que el
+     *  reingreso de inventario, la reversa de COGS y la anulación usen SIEMPRE el mismo costo
+     *  (evita que 1435, kardex y existencias diverjan si el costo del producto cambia después). */
+    @Column(name = "costo_unitario", nullable = false)
+    private BigDecimal costoUnitario = BigDecimal.ZERO;
+
     /** Motivo específico del ítem */
     @Column(length = 500)
     private String motivo;

@@ -45,6 +45,11 @@ public class ReciboCaja {
     @Column(name = "monto_concepto_abierto", precision = 18, scale = 2)
     private BigDecimal montoConceptoAbierto;
 
+    /** Saldo a favor del cliente consumido en este recibo (se debita a anticipos 2805 en el asiento
+     *  y se repone al tercero si el recibo se anula). */
+    @Column(name = "saldo_favor_usado", precision = 18, scale = 2, nullable = false)
+    private BigDecimal saldoFavorUsado = BigDecimal.ZERO;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "concepto_abierto_id")
     private ConceptoAbierto conceptoAbiertoRef;
