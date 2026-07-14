@@ -1,6 +1,7 @@
 package com.pazzioliweb.parametros.parametroscontroller;
 
 import com.pazzioliweb.parametros.dtos.ParametroCreateDTO;
+import com.pazzioliweb.parametros.dtos.ParametroGlobalResponseDTO;
 import com.pazzioliweb.parametros.entity.Parametros;
 import com.pazzioliweb.parametros.service.ParametrosService;
 import org.springframework.http.ResponseEntity;
@@ -30,5 +31,13 @@ public class ParametrosController {
             @RequestParam String categoriaparametro) {
         List<Parametros> parametros = parametrosService.buscarPorCategorias(categoriacomprobante, categoriaparametro);
         return ResponseEntity.ok(parametros);
+    }
+
+    @GetMapping("/globales")
+    public ResponseEntity<List<ParametroGlobalResponseDTO>> obtenerParametrosGlobales(
+            @RequestParam(required = false) String categoriaparametro,
+            @RequestParam(required = false) String categoriacomprobante) {
+        List<ParametroGlobalResponseDTO> resultado = parametrosService.obtenerParametrosGlobalesConJoin(categoriaparametro, categoriacomprobante);
+        return ResponseEntity.ok(resultado);
     }
 }

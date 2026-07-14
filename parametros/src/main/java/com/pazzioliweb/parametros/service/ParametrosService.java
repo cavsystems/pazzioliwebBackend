@@ -3,6 +3,7 @@ package com.pazzioliweb.parametros.service;
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import com.pazzioliweb.parametros.dtos.ParametroCreateDTO;
+import com.pazzioliweb.parametros.dtos.ParametroGlobalResponseDTO;
 import com.pazzioliweb.parametros.entity.Parametros;
 import com.pazzioliweb.parametros.entity.Parametroscomprobantes;
 import com.pazzioliweb.parametros.entity.Parametrosglobales;
@@ -66,6 +67,10 @@ public class ParametrosService {
 
     public List<Parametros> buscarPorCategorias(String categoriacomprobante, String categoriaparametro) {
         return parametrosRepository.findByCategoriacomprobanteAndCategoriaparametro(categoriacomprobante, categoriaparametro);
+    }
+
+    public List<ParametroGlobalResponseDTO> obtenerParametrosGlobalesConJoin(String categoriaparametro, String categoriacomprobante) {
+        return parametrosglobalesRepository.findJoinByCategorias(categoriaparametro, categoriacomprobante);
     }
 
     private void crearParametroGlobal(Parametros parametro, String valor) {
