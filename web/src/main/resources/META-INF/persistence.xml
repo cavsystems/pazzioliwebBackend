@@ -122,5 +122,9 @@
         <class>com.pazzioliweb.tesoreriamodule.entity.ReciboCajaMedioPago</class>
         <class>com.pazzioliweb.tesoreriamodule.entity.ComprobanteEgresoMedioPago</class>
         <class>com.pazzioliweb.tesoreriamodule.entity.ComprobanteEgresoMedioPago</class>
+        <!-- Parametros -->
+        <class>com.pazzioliweb.parametros.entity.Parametros</class>
+        <class>com.pazzioliweb.parametros.entity.Parametroscomprobantes</class>
+        <class>com.pazzioliweb.parametros.entity.Parametrosglobales</class>
     </persistence-unit>
 </persistence>

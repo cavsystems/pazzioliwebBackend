@@ -21,5 +21,36 @@ public class Parametroscomprobantes {
     @Column(name = "valor", nullable = false)
     private String valor;
 
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public Parametros getParametros() {
+        return parametros;
+    }
+
+    public void setParametros(Parametros parametros) {
+        this.parametros = parametros;
+    }
+
+    public ComprobanteContable getComprobanteContable() {
+        return comprobanteContable;
+    }
+
+    public void setComprobanteContable(ComprobanteContable comprobanteContable) {
+        this.comprobanteContable = comprobanteContable;
+    }
+
+    public String getValor() {
+        return valor;
+    }
+
+    public void setValor(String valor) {
+        this.valor = valor;
+    }
 
 }
