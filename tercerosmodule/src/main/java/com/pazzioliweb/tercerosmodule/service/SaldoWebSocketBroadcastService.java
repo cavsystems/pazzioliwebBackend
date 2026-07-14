@@ -25,7 +25,11 @@ public class SaldoWebSocketBroadcastService {
             payload.put("terceroId", terceroId);
             payload.put("saldo", nuevoSaldo);
             payload.put("timestamp", System.currentTimeMillis());
-            
+            // Incluir el tenant/schema: el terceroId es por schema, así que el front debe filtrar
+            // por tenant además del terceroId (evita que el saldo del tercero #N del tenant A
+            // actualice la pantalla del tenant B que ve su propio tercero #N).
+            payload.put("tenant", com.pazzioliweb.commonbacken.conexiondb.TenantContext.getCurrentTenant());
+
             messagingTemplate.convertAndSend(TOPIC, payload);
             log.info("[WS-Broadcast] Saldo actualizado para tercero {} -> {}", terceroId, nuevoSaldo);
         } catch (Exception ex) {

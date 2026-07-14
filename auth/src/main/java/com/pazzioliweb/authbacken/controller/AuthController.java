@@ -280,6 +280,10 @@ public class AuthController {
      */
     private void verificarYAbrirSesionCajero(Usuario usuario, DatosSesiones datos, Claims claims) {
         try {
+            System.out.println("[cajero] tenant=" + TenantContext.getCurrentTenant()
+                    + " usuarioCodigo=" + usuario.getCodigo()
+                    + " permisos=" + datos.getPermisos());
+
             // ✅ Verificar por PERMISO de venta, no por rol
             // Así un admin, supervisor o cualquier rol con permiso VENTA también abre caja
             boolean tienePermisoVenta = datos.getPermisos() != null
@@ -287,11 +291,17 @@ public class AuthController {
                     .anyMatch(p -> p.equalsIgnoreCase("VENTA"));
 
             if (!tienePermisoVenta) {
+                System.out.println("[cajero] usuario SIN permiso VENTA → no abre caja");
                 return; // Usuario sin permiso de venta → no necesita sesión de caja
             }
 
+            java.util.Optional<Cajero> cajeroOpt =
+                    cajeroRepository.findByUsuario_CodigoAndEstado(usuario.getCodigo(), Cajero.EstadoCajero.ACTIVO);
+            System.out.println("[cajero] cajero encontrado=" + cajeroOpt.isPresent()
+                    + (cajeroOpt.isPresent() ? " cajeroId=" + cajeroOpt.get().getCajeroId() : ""));
+
             // ✅ Búsqueda directa: Usuario → Cajero (one-to-one por usuario_id)
-            cajeroRepository.findByUsuario_CodigoAndEstado(usuario.getCodigo(), Cajero.EstadoCajero.ACTIVO)
+            cajeroOpt
                     .ifPresent(cajero -> {
                         // Abre sesión de caja o retorna la existente si ya hay una abierta
                         DetalleCajero detalle = detalleCajeroService.abrirSesionCajero(cajero, BigDecimal.ZERO);
@@ -310,6 +320,7 @@ public class AuthController {
 
         } catch (Exception e) {
             System.out.println("⚠️ Error al verificar sesión de cajero: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

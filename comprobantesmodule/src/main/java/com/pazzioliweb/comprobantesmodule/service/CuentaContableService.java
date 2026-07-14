@@ -103,14 +103,15 @@ public class CuentaContableService {
                 throw new RuntimeException("Ya existe una cuenta contable con código " + dto.getCodigo());
             }
         });
-        // Regla PUC: solo las auxiliares (más de 6 dígitos) pueden ser de movimiento.
-        // Las cuentas de 6 dígitos o menos son cuentas mayores/subcuentas de agrupación.
+        // Regla PUC: las cuentas de agrupación (clase 1 díg, grupo 2, cuenta 4) NO reciben
+        // movimiento. Desde SUBCUENTA (6 dígitos) en adelante SÍ pueden ser de movimiento
+        // (el sistema postea impuestos/retenciones a subcuentas de 6 díg. como 240810, 236505).
         // Se valida solo al CREAR para no alterar cuentas existentes ya en uso.
         if (idActual == null
                 && Boolean.TRUE.equals(dto.getEsMovimiento())
-                && dto.getCodigo().trim().length() <= 6) {
-            throw new RuntimeException("Las cuentas de 6 dígitos o menos no pueden ser de movimiento. "
-                    + "Cree una cuenta auxiliar de más de 6 dígitos para registrar movimientos.");
+                && dto.getCodigo().trim().length() < 6) {
+            throw new RuntimeException("Las cuentas de menos de 6 dígitos (clase, grupo, cuenta) no pueden ser de "
+                    + "movimiento. Use una subcuenta de 6 dígitos o una auxiliar más detallada.");
         }
         // Al CREAR, verificar que existan todas las cuentas PADRE del PUC en los
         // niveles estándar (1, 2, 4, 6, 8…) previos al código que se crea.
@@ -143,6 +144,7 @@ public class CuentaContableService {
         if (dto.getEsMovimiento() != null) cc.setEsMovimiento(dto.getEsMovimiento());
         if (dto.getRequiereTercero() != null) cc.setRequiereTercero(dto.getRequiereTercero());
         if (dto.getRequiereDocumentoCruce() != null) cc.setRequiereDocumentoCruce(dto.getRequiereDocumentoCruce());
+        if (dto.getRequiereCentroCosto() != null) cc.setRequiereCentroCosto(dto.getRequiereCentroCosto());
         if (dto.getEstado() != null) cc.setEstado(dto.getEstado());
     }
 
@@ -158,6 +160,7 @@ public class CuentaContableService {
         dto.setEsMovimiento(cc.getEsMovimiento());
         dto.setRequiereTercero(cc.getRequiereTercero());
         dto.setRequiereDocumentoCruce(cc.getRequiereDocumentoCruce());
+        dto.setRequiereCentroCosto(cc.getRequiereCentroCosto());
         dto.setEstado(cc.getEstado());
         return dto;
     }

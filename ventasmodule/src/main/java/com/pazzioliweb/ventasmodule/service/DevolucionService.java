@@ -30,6 +30,12 @@ public interface DevolucionService {
     /** Detalle de una devolución por su ID. */
     DevolucionDTO getDevolucionById(Long devolucionId);
 
+    /**
+     * Anula una devolución REGISTRADA y revierte todos sus efectos: asiento contable
+     * (DV y DV-COSTO), existencias reingresadas, movimiento de caja y estado de la venta.
+     */
+    DevolucionDTO anularDevolucion(Long devolucionId, String motivo, String usuario);
+
 
 
     PedidoDTO convertirAPedido(Long Ventaid,Long DevolucionId);

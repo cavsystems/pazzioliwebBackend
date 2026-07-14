@@ -92,4 +92,19 @@ public class DevolucionController {
         devolucionService.convertirAPedido(ventaId, devolucionId);
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * Anula una devolución REGISTRADA y revierte todos sus efectos (asiento, inventario, caja).
+     * Body: { "motivo": "...", "usuario": "..." }
+     */
+    @PostMapping("/{id}/anular")
+    public ResponseEntity<DevolucionDTO> anularDevolucion(@PathVariable Long id,
+                                                          @RequestBody(required = false) java.util.Map<String, String> body,
+                                                          jakarta.servlet.http.HttpServletRequest request) {
+        String motivo = body != null ? body.get("motivo") : null;
+        String usuario = body != null ? body.getOrDefault("usuario",
+                request.getUserPrincipal() != null ? request.getUserPrincipal().getName() : "sistema")
+                : "sistema";
+        return ResponseEntity.ok(devolucionService.anularDevolucion(id, motivo, usuario));
+    }
 }

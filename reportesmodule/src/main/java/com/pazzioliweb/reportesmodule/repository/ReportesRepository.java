@@ -245,7 +245,7 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
                 COALESCE(SUM(v.total_venta), 0)                                       AS totalComprado,
                 COALESCE((SELECT SUM(saldo) FROM cuentas_por_cobrar
                            WHERE cliente_id = t.tercero_id
-                             AND estado IN ('PENDIENTE','PARCIAL')), 0)               AS saldoCartera
+                             AND estado IN ('PENDIENTE','PARCIAL','VENCIDA')), 0)               AS saldoCartera
             FROM ventas v
             JOIN terceros t ON t.tercero_id = v.cliente_id
             WHERE v.estado = 'COMPLETADA'
@@ -358,14 +358,14 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
     @Query(value = """
             SELECT COALESCE(SUM(cxc.saldo), 0)
             FROM cuentas_por_cobrar cxc
-            WHERE cxc.estado IN ('PENDIENTE', 'PARCIAL')
+            WHERE cxc.estado IN ('PENDIENTE', 'PARCIAL', 'VENCIDA')
             """, nativeQuery = true)
     BigDecimal carteraPendienteTotal();
 
     @Query(value = """
             SELECT COUNT(*)
             FROM cuentas_por_cobrar cxc
-            WHERE cxc.estado IN ('PENDIENTE', 'PARCIAL')
+            WHERE cxc.estado IN ('PENDIENTE', 'PARCIAL', 'VENCIDA')
               AND cxc.fecha_vencimiento < CURDATE()
             """, nativeQuery = true)
     Long contarCuentasVencidas();
@@ -537,9 +537,9 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
     // ══════════════════════════════════════════════════════════════
 
     @Query(value = """
-            SELECT COALESCE(SUM(cpp.valor_neto), 0)
+            SELECT COALESCE(SUM(cpp.saldo), 0)
             FROM cuentas_por_pagar cpp
-            WHERE cpp.estado IN ('PENDIENTE', 'PARCIAL')
+            WHERE cpp.estado IN ('PENDIENTE', 'PARCIAL', 'VENCIDA')
             """, nativeQuery = true)
     BigDecimal cuentasPorPagarTotal();
 
@@ -740,7 +740,7 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
                 COUNT(*)                AS cantidad,
                 COALESCE(SUM(saldo), 0) AS totalSaldo
             FROM cuentas_por_cobrar
-            WHERE estado IN ('PENDIENTE','PARCIAL')
+            WHERE estado IN ('PENDIENTE','PARCIAL','VENCIDA')
               AND saldo > 0
             GROUP BY rangoEdad, ordenRango
             ORDER BY ordenRango ASC
@@ -800,7 +800,7 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
                 COUNT(*)                AS cantidad,
                 COALESCE(SUM(saldo), 0) AS totalSaldo
             FROM cuentas_por_pagar
-            WHERE estado IN ('PENDIENTE','PARCIAL')
+            WHERE estado IN ('PENDIENTE','PARCIAL','VENCIDA')
               AND saldo > 0
             GROUP BY rangoEdad, ordenRango
             ORDER BY ordenRango ASC
@@ -1205,5 +1205,97 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
     List<Object[]> productosSinMovimiento(@Param("inicio") LocalDate inicio,
                                           @Param("fin") LocalDate fin,
                                           @Param("topN") int topN);
+
+    // ══════════════════════════════════════════════════════════════
+    // CERTIFICADOS DE RETENCIÓN EN LA FUENTE
+    // ══════════════════════════════════════════════════════════════
+
+    /** Datos del tercero para el encabezado del certificado: nit, nombre, dirección. */
+    @Query(value = """
+            SELECT t.identificacion,
+                   CASE WHEN t.razon_social IS NOT NULL AND TRIM(t.razon_social) <> ''
+                        THEN t.razon_social
+                        ELSE TRIM(CONCAT_WS(' ', t.nombre_1, t.nombre_2, t.apellido_1, t.apellido_2)) END,
+                   t.direccion
+              FROM terceros t
+             WHERE t.tercero_id = :terceroId
+            """, nativeQuery = true)
+    List<Object[]> infoTercero(@Param("terceroId") Integer terceroId);
+
+    /**
+     * Retenciones PRACTICADAS a un proveedor (empresa = agente retenedor).
+     * Fuente: ordenes_compra ya legalizadas (excluye PENDIENTE y ANULADA).
+     * Devuelve [baseGravada, retefuente, reteiva, reteica, numDocumentos].
+     */
+    @Query(value = """
+            SELECT COALESCE(SUM(oc.gravada), 0),
+                   COALESCE(SUM(oc.iva), 0),
+                   COALESCE(SUM(oc.retefuente), 0),
+                   COALESCE(SUM(oc.reteiva), 0),
+                   COALESCE(SUM(oc.reteica), 0),
+                   COUNT(*)
+              FROM ordenes_compra oc
+             WHERE oc.proveedor_id = :terceroId
+               AND oc.estado NOT IN ('PENDIENTE', 'ANULADA')
+               AND oc.fecha_emision BETWEEN :inicio AND :fin
+               AND (COALESCE(oc.retefuente,0) + COALESCE(oc.reteiva,0) + COALESCE(oc.reteica,0)) > 0
+            """, nativeQuery = true)
+    List<Object[]> retencionesPracticadas(@Param("terceroId") Integer terceroId,
+                                          @Param("inicio") LocalDate inicio,
+                                          @Param("fin") LocalDate fin);
+
+    /** Detalle documento-por-documento de retenciones practicadas (compras). */
+    @Query(value = """
+            SELECT oc.numero_orden, oc.fecha_emision,
+                   COALESCE(oc.gravada, 0), COALESCE(oc.iva, 0),
+                   COALESCE(oc.retefuente, 0), COALESCE(oc.reteiva, 0), COALESCE(oc.reteica, 0)
+              FROM ordenes_compra oc
+             WHERE oc.proveedor_id = :terceroId
+               AND oc.estado NOT IN ('PENDIENTE', 'ANULADA')
+               AND oc.fecha_emision BETWEEN :inicio AND :fin
+               AND (COALESCE(oc.retefuente,0) + COALESCE(oc.reteiva,0) + COALESCE(oc.reteica,0)) > 0
+             ORDER BY oc.fecha_emision, oc.numero_orden
+            """, nativeQuery = true)
+    List<Object[]> retencionesPracticadasDetalle(@Param("terceroId") Integer terceroId,
+                                                 @Param("inicio") LocalDate inicio,
+                                                 @Param("fin") LocalDate fin);
+
+    /**
+     * Retenciones SUFRIDAS: las que un cliente le practicó a la empresa.
+     * Fuente: ventas COMPLETADA / DEVOLUCION_PARCIAL.
+     * Devuelve [baseGravada, retefuente, reteiva, reteica, numDocumentos].
+     */
+    @Query(value = """
+            SELECT COALESCE(SUM(v.gravada), 0),
+                   COALESCE(SUM(v.iva), 0),
+                   COALESCE(SUM(v.retefuente), 0),
+                   COALESCE(SUM(v.reteiva), 0),
+                   COALESCE(SUM(v.reteica), 0),
+                   COUNT(*)
+              FROM ventas v
+             WHERE v.cliente_id = :terceroId
+               AND v.estado IN ('COMPLETADA', 'DEVOLUCION_PARCIAL')
+               AND v.fecha_emision BETWEEN :inicio AND :fin
+               AND (COALESCE(v.retefuente,0) + COALESCE(v.reteiva,0) + COALESCE(v.reteica,0)) > 0
+            """, nativeQuery = true)
+    List<Object[]> retencionesSufridas(@Param("terceroId") Integer terceroId,
+                                       @Param("inicio") LocalDate inicio,
+                                       @Param("fin") LocalDate fin);
+
+    /** Detalle documento-por-documento de retenciones sufridas (ventas). */
+    @Query(value = """
+            SELECT v.numero_venta, v.fecha_emision,
+                   COALESCE(v.gravada, 0), COALESCE(v.iva, 0),
+                   COALESCE(v.retefuente, 0), COALESCE(v.reteiva, 0), COALESCE(v.reteica, 0)
+              FROM ventas v
+             WHERE v.cliente_id = :terceroId
+               AND v.estado IN ('COMPLETADA', 'DEVOLUCION_PARCIAL')
+               AND v.fecha_emision BETWEEN :inicio AND :fin
+               AND (COALESCE(v.retefuente,0) + COALESCE(v.reteiva,0) + COALESCE(v.reteica,0)) > 0
+             ORDER BY v.fecha_emision, v.numero_venta
+            """, nativeQuery = true)
+    List<Object[]> retencionesSufridasDetalle(@Param("terceroId") Integer terceroId,
+                                              @Param("inicio") LocalDate inicio,
+                                              @Param("fin") LocalDate fin);
 }
 

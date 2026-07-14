@@ -56,13 +56,19 @@ public class LegalizacionServiceImpl implements LegalizacionService {
     @Transactional
     public   OrdenCompraDTO  legalizarCompra(LegalizacionRequestDTO request) {
 
-            // Validar periodo contable abierto (la fecha de la factura define el periodo de afectación).
+            RealizarOrdenRequestDTO realizarRequest = request.getOrdenCompraData();
+
+            // Validar periodo contable abierto (la fecha de la factura define el periodo de afectación),
+            // y ANCLAR la fecha de emisión de la orden a la fecha de la factura, para que el asiento y
+            // el kardex (que se fechan con fechaEmision) caigan en el mismo periodo validado.
             try {
-                LocalDate fechaFact = LocalDate.parse(request.getFechaFactura(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-                periodoContableService.validarPeriodoAbierto(fechaFact);
+                if (request.getFechaFactura() != null && !request.getFechaFactura().isBlank()) {
+                    LocalDate fechaFact = LocalDate.parse(request.getFechaFactura(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                    periodoContableService.validarPeriodoAbierto(fechaFact);
+                    if (realizarRequest != null) realizarRequest.setFechainicial(request.getFechaFactura());
+                }
             } catch (java.time.format.DateTimeParseException ignored) { /* dejar validar por realizarOrden */ }
 
-            RealizarOrdenRequestDTO realizarRequest = request.getOrdenCompraData();
             // 1. Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
             OrdenCompraDTO ordenCreada = ordenCompraService.realizarOrden(realizarRequest);
 

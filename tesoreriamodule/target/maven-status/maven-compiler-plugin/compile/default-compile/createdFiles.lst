@@ -7,6 +7,7 @@ com\pazzioliweb\tesoreriamodule\controller\ComprobanteEgresoController.class
 com\pazzioliweb\tesoreriamodule\dtos\CrearComprobanteEgresoDTO$MedioPagoDTO.class
 com\pazzioliweb\tesoreriamodule\dtos\CrearReciboCajaDTO$MedioPagoDTO.class
 com\pazzioliweb\tesoreriamodule\entity\ReciboCaja.class
+com\pazzioliweb\tesoreriamodule\service\CarteraVencimientoService.class
 com\pazzioliweb\tesoreriamodule\dtos\CrearReciboCajaDTO.class
 com\pazzioliweb\tesoreriamodule\entity\ComprobanteEgresoMedioPago.class
 com\pazzioliweb\tesoreriamodule\entity\ReciboCajaMedioPago.class
@@ -23,3 +24,4 @@ com\pazzioliweb\tesoreriamodule\repository\ReciboCajaRepository.class
 com\pazzioliweb\tesoreriamodule\entity\ComprobanteEgreso.class
 com\pazzioliweb\tesoreriamodule\dtos\ComprobanteEgresoResponseDTO.class
 com\pazzioliweb\tesoreriamodule\dtos\ComprobanteEgresoResponseDTO$MedioPagoResponseDTO.class
+com\pazzioliweb\tesoreriamodule\scheduler\CarteraVencimientoScheduler.class

@@ -441,6 +441,64 @@ public class ReportesServiceImpl implements ReportesService {
         return result;
     }
 
+    @Override
+    public CertificadoRetencionDTO getCertificadoRetencion(String tipo, Integer terceroId, LocalDate inicio, LocalDate fin) {
+        CertificadoRetencionDTO dto = new CertificadoRetencionDTO();
+        boolean sufridas = "SUFRIDAS".equalsIgnoreCase(tipo);
+        dto.setTipo(sufridas ? "SUFRIDAS" : "PRACTICADAS");
+        dto.setTerceroId(terceroId);
+        dto.setFechaInicio(inicio);
+        dto.setFechaFin(fin);
+        dto.setAnio(inicio != null ? inicio.getYear() : null);
+
+        // Datos del tercero (encabezado del certificado)
+        List<Object[]> ti = repo.infoTercero(terceroId);
+        if (ti != null && !ti.isEmpty()) {
+            Object[] t = ti.get(0);
+            dto.setTerceroNit(str(t[0]));
+            dto.setTerceroNombre(str(t[1]));
+            dto.setTerceroDireccion(str(t[2]));
+        }
+
+        // Agregado de retenciones del periodo.
+        // Base por concepto: Renta e ICA sobre la base gravable; IVA sobre el valor del IVA.
+        List<Object[]> agg = sufridas
+                ? repo.retencionesSufridas(terceroId, inicio, fin)
+                : repo.retencionesPracticadas(terceroId, inicio, fin);
+        if (agg != null && !agg.isEmpty()) {
+            Object[] a = agg.get(0);
+            BigDecimal gravada = toBigDecimal(a[0]);
+            BigDecimal iva = toBigDecimal(a[1]);
+            dto.setBaseSujeta(gravada);
+            dto.setBaseRenta(gravada);
+            dto.setBaseIva(iva);
+            dto.setBaseIca(gravada);
+            dto.setRetefuente(toBigDecimal(a[2]));
+            dto.setReteiva(toBigDecimal(a[3]));
+            dto.setReteica(toBigDecimal(a[4]));
+            dto.setNumDocumentos(toLong(a[5]));
+        }
+
+        // Detalle documento por documento
+        List<Object[]> det = sufridas
+                ? repo.retencionesSufridasDetalle(terceroId, inicio, fin)
+                : repo.retencionesPracticadasDetalle(terceroId, inicio, fin);
+        List<CertificadoRetencionDocDTO> detalle = new ArrayList<>();
+        if (det != null) {
+            for (Object[] r : det) {
+                detalle.add(new CertificadoRetencionDocDTO(
+                        str(r[0]),
+                        toLocalDate(r[1]),
+                        toBigDecimal(r[2]), toBigDecimal(r[3]),
+                        toBigDecimal(r[4]), toBigDecimal(r[5]), toBigDecimal(r[6])));
+            }
+        }
+        dto.setDetalle(detalle);
+
+        dto.setTotalRetenido(dto.getRetefuente().add(dto.getReteiva()).add(dto.getReteica()));
+        return dto;
+    }
+
     private BigDecimal toBigDecimal(Object obj) {
         if (obj == null) return BigDecimal.ZERO;
         if (obj instanceof BigDecimal bd) return bd;

@@ -161,9 +161,19 @@ public class ReciboCajaService {
         recibo.setRetefuente(dto.getRetefuente() != null ? dto.getRetefuente() : BigDecimal.ZERO);
         recibo.setReteica(dto.getReteica() != null ? dto.getReteica() : BigDecimal.ZERO);
         recibo.setReteiva(dto.getReteiva() != null ? dto.getReteiva() : BigDecimal.ZERO);
+        // Blindaje contable: la retención sufrida se reconoce AL FACTURAR (la CxC ya quedó por el
+        // neto y el anticipo 1355xx se debitó en la venta). En un abono a CxC NO se vuelve a
+        // practicar; hacerlo recaudaría de menos y sobrevaluaría la cuenta 1305. Solo el concepto
+        // abierto (ingreso que no proviene de una venta) puede llevar retención sufrida.
+        if (!esConceptoAbierto) {
+            recibo.setRetefuente(BigDecimal.ZERO);
+            recibo.setReteica(BigDecimal.ZERO);
+            recibo.setReteiva(BigDecimal.ZERO);
+        }
         recibo.setDescuento(dto.getDescuento() != null ? dto.getDescuento() : BigDecimal.ZERO);
         recibo.setAverias(dto.getAverias() != null ? dto.getAverias() : BigDecimal.ZERO);
         recibo.setFletes(dto.getFletes() != null ? dto.getFletes() : BigDecimal.ZERO);
+        recibo.setSaldoFavorUsado(dto.getSaldoFavorUsado() != null ? dto.getSaldoFavorUsado() : BigDecimal.ZERO);
         recibo.setConcepto(dto.getConcepto());
         recibo.setCentroCosto(dto.getCentroCosto());
         recibo.setCajeroId(dto.getCajeroId());
@@ -192,6 +202,14 @@ public class ReciboCajaService {
                     recibo.setCuentaContable(ca.getCuentaContable());
                 }
             }
+        }
+
+        // Un recibo de CONCEPTO ABIERTO exige cuenta contable: es la contrapartida (ingreso) del
+        // asiento. Sin ella, el asiento se omitía en silencio y quedaba un recibo con movimiento de
+        // caja pero sin efecto contable. Se valida antes de guardar para rechazarlo con claridad.
+        if (esConceptoAbierto && recibo.getCuentaContable() == null) {
+            throw new RuntimeException("El recibo de concepto abierto requiere una cuenta contable "
+                    + "(la contrapartida de ingreso). Seleccione la cuenta o el concepto configurado.");
         }
 
         // Tercero (solo si NO es concepto abierto)
@@ -234,6 +252,19 @@ public class ReciboCajaService {
                 CuentaPorCobrar cxc = cxcRepository.findById(detDto.getCuentaPorCobrarId())
                         .orElseThrow(() -> new RuntimeException("CxC no encontrada: " + detDto.getCuentaPorCobrarId()));
 
+                // Integridad del abono: la CxC debe estar pendiente, pertenecer al mismo cliente del
+                // recibo, y el abono no puede exceder el saldo (evita sobre-acreditar 1305 o abonar
+                // documentos ya pagados/anulados o de otro tercero → auxiliar ≠ mayor).
+                if ("ANULADA".equalsIgnoreCase(cxc.getEstado()) || "PAGADA".equalsIgnoreCase(cxc.getEstado()))
+                    throw new RuntimeException("La cuenta por cobrar " + cxc.getId() + " no está pendiente (estado " + cxc.getEstado() + ").");
+                if (recibo.getTercero() != null && cxc.getCliente() != null
+                        && cxc.getCliente().getTerceroId() != null
+                        && !cxc.getCliente().getTerceroId().equals(recibo.getTercero().getTerceroId()))
+                    throw new RuntimeException("La cuenta por cobrar " + cxc.getId() + " no pertenece al cliente del recibo.");
+                BigDecimal saldoCxc = cxc.getSaldo() != null ? cxc.getSaldo() : BigDecimal.ZERO;
+                if (detDto.getMontoAbonado() != null && detDto.getMontoAbonado().subtract(saldoCxc).compareTo(new BigDecimal("0.01")) > 0)
+                    throw new RuntimeException("El abono (" + detDto.getMontoAbonado() + ") excede el saldo de la cuenta por cobrar (" + saldoCxc + ").");
+
                 DetalleReciboCaja detalle = new DetalleReciboCaja();
                 detalle.setReciboCaja(recibo);
                 detalle.setCuentaPorCobrar(cxc);
@@ -265,6 +296,18 @@ public class ReciboCajaService {
 
         if (totalCobrar.compareTo(BigDecimal.ZERO) <= 0) {
             throw new RuntimeException("El total a cobrar debe ser mayor a 0");
+        }
+
+        // Cobertura backend: Σ(medios) + saldo a favor usado debe igualar el total a cobrar. Este es
+        // el invariante que hace cuadrar el asiento (débitos = créditos). Si no cuadra, se aborta la
+        // operación (antes solo lo validaba el front → una llamada directa dejaba asiento fallido).
+        BigDecimal sumaMedios = recibo.getMediosPago().stream()
+                .map(m -> m.getMonto() != null ? m.getMonto() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cubierto = sumaMedios.add(recibo.getSaldoFavorUsado());
+        if (cubierto.subtract(totalCobrar).abs().compareTo(BigDecimal.ONE) > 0) {
+            throw new RuntimeException("Los medios de pago ($" + sumaMedios + ") más el saldo a favor ($"
+                    + recibo.getSaldoFavorUsado() + ") no cuadran con el total a cobrar ($" + totalCobrar + ").");
         }
 
         recibo.setTotal(totalCobrar);
@@ -333,54 +376,110 @@ public class ReciboCajaService {
             java.math.BigDecimal retc = recibo.getReteica()    != null ? recibo.getReteica()    : java.math.BigDecimal.ZERO;
             java.math.BigDecimal totalRetenciones = retf.add(reti).add(retc);
 
-            if (retf.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            // La retención SUFRIDA se reconoce en la VENTA (al facturar). En un recibo que ABONA
+            // una CxC NO se vuelve a registrar (evita doble anticipo de impuesto). Solo se registra
+            // aquí cuando el recibo es de CONCEPTO ABIERTO (ingreso que no proviene de una venta).
+            boolean esConceptoAbiertoRC = Boolean.TRUE.equals(recibo.getConceptoAbierto());
+
+            // Retención efectivamente DEBITADA como anticipo (solo si la cuenta 1355xx existe).
+            // El crédito a la contrapartida se calcula con este valor —no con el total teórico—
+            // para que el asiento cuadre aunque falte alguna cuenta de anticipo en el PUC.
+            java.math.BigDecimal retPosted = java.math.BigDecimal.ZERO;
+
+            if (esConceptoAbiertoRC && retf.compareTo(java.math.BigDecimal.ZERO) > 0) {
                 CuentaContable ctaRetf = configContable.anticipoRetefuente().orElse(null);
                 if (ctaRetf != null) {
                     AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
                             .debito(ctaRetf.getId(), retf, "Retefuente que nos practicaron");
                     if (recibo.getTercero() != null) l.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
                     lineas.add(l);
+                    retPosted = retPosted.add(retf);
                 } else {
                     System.out.println("[AsientoRC] Cuenta 135515 (anticipo retefuente) no configurada. Retención no se contabiliza por separado.");
                 }
             }
-            if (reti.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            if (esConceptoAbiertoRC && reti.compareTo(java.math.BigDecimal.ZERO) > 0) {
                 CuentaContable ctaReti = configContable.anticipoReteiva().orElse(null);
                 if (ctaReti != null) {
                     AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
                             .debito(ctaReti.getId(), reti, "ReteIVA que nos practicaron");
                     if (recibo.getTercero() != null) l.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
                     lineas.add(l);
+                    retPosted = retPosted.add(reti);
                 } else {
                     System.out.println("[AsientoRC] Cuenta 135517 (anticipo reteIVA) no configurada.");
                 }
             }
-            if (retc.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            if (esConceptoAbiertoRC && retc.compareTo(java.math.BigDecimal.ZERO) > 0) {
                 CuentaContable ctaRetc = configContable.anticipoReteica().orElse(null);
                 if (ctaRetc != null) {
                     AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
                             .debito(ctaRetc.getId(), retc, "ReteICA que nos practicaron");
                     if (recibo.getTercero() != null) l.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
                     lineas.add(l);
+                    retPosted = retPosted.add(retc);
                 } else {
                     System.out.println("[AsientoRC] Cuenta 135518 (anticipo reteICA) no configurada.");
                 }
             }
 
-            // Crédito a la contrapartida (CxC se cancela por valor BRUTO = total + retenciones).
+            // Deducciones del recaudo (descuento pronto pago concedido, averías, fletes): se debitan a
+            // su contrapartida y aumentan el crédito a CxC/concepto, para saldar por el BRUTO (coincide
+            // con el auxiliar). Solo se contabilizan si la cuenta correspondiente existe en el PUC.
+            java.math.BigDecimal descR = recibo.getDescuento() != null ? recibo.getDescuento() : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal averR = recibo.getAverias()   != null ? recibo.getAverias()   : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal fletR = recibo.getFletes()    != null ? recibo.getFletes()    : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal dedPosted = java.math.BigDecimal.ZERO;
+            if (descR.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                // Descuento CONCEDIDO al cliente = gasto financiero (530535), NO débito a la cuenta de
+                // ingreso 421040 (esa es para descuentos RECIBIDOS de proveedores, ver CE).
+                CuentaContable c = configContable.descuentoConcedido().orElse(null);
+                if (c != null) { lineas.add(AsientoContableService.LineaDTO.debito(c.getId(), descR, "Descuento pronto pago concedido")); dedPosted = dedPosted.add(descR); }
+            }
+            if (averR.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                CuentaContable c = configContable.averias().orElse(null);
+                if (c != null) { lineas.add(AsientoContableService.LineaDTO.debito(c.getId(), averR, "Averías en recaudo")); dedPosted = dedPosted.add(averR); }
+            }
+            if (fletR.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                CuentaContable c = configContable.fletes().orElse(null);
+                if (c != null) { lineas.add(AsientoContableService.LineaDTO.debito(c.getId(), fletR, "Fletes en recaudo")); dedPosted = dedPosted.add(fletR); }
+            }
+
+            // Saldo a favor del cliente consumido: se DEBITA a Anticipos y avances recibidos (2805),
+            // bajando ese pasivo. Junto con los medios de pago (que suman total − saldoFavor) cuadra
+            // el crédito a la contrapartida. Antes el saldo a favor no entraba a la partida doble →
+            // el asiento descuadraba y quedaba "fallido" aunque cartera y caja sí se afectaban.
+            java.math.BigDecimal saldoFavorRC = recibo.getSaldoFavorUsado() != null ? recibo.getSaldoFavorUsado() : java.math.BigDecimal.ZERO;
+            if (saldoFavorRC.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                CuentaContable ctaAnt = configContable.anticipoClientes().orElse(null);
+                if (ctaAnt != null) {
+                    AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                            .debito(ctaAnt.getId(), saldoFavorRC, "Saldo a favor del cliente aplicado");
+                    if (recibo.getTercero() != null) l.conTercero(recibo.getTercero().getTerceroId(), recibo.getTerceroNombre());
+                    lineas.add(l);
+                } else {
+                    System.out.println("[AsientoRC] Cuenta 2805 (anticipos de clientes) no configurada; el saldo a favor no se contabiliza.");
+                }
+            }
+
+            // Crédito a la contrapartida (CxC/concepto).
             CuentaContable contrapartida;
             String desc;
             java.math.BigDecimal montoCredito;
-            if (Boolean.TRUE.equals(recibo.getConceptoAbierto())) {
-                // Concepto abierto: usa la cuenta del concepto, o la del recibo. Sin retenciones aplicables.
+            if (esConceptoAbiertoRC) {
+                // Concepto abierto: ingreso que no viene de una venta. Se reconoce por el BRUTO
+                // (= recaudado + retenciones que nos practicaron y ya debitamos como anticipo).
                 contrapartida = recibo.getCuentaContable();
                 desc = "Concepto abierto " + (recibo.getConcepto() != null ? recibo.getConcepto() : "");
-                montoCredito = recibo.getTotal();
+                // Solo la retención efectivamente debitada (retPosted): así el crédito no incluye
+                // retención que no se pudo anticipar por falta de cuenta → evita descuadre.
+                montoCredito = recibo.getTotal().add(retPosted).add(dedPosted);
             } else {
-                // Abono a CxC: usa la cuenta de Clientes (1305) del PUC. CxC bruta = total + retenciones sufridas.
+                // Abono a CxC (1305): se cancela por lo efectivamente recaudado + deducciones contabilizadas.
+                // La retención sufrida YA se registró en la venta, por eso aquí NO se suma (evita doble anticipo).
                 contrapartida = configContable.cxcClientes().orElse(null);
                 desc = "Abono a Clientes (CxC) " + (recibo.getTerceroNombre() != null ? recibo.getTerceroNombre() : "");
-                montoCredito = recibo.getTotal().add(totalRetenciones);
+                montoCredito = recibo.getTotal().add(dedPosted);
             }
             if (contrapartida == null) {
                 System.out.println("[AsientoRC] Sin cuenta contrapartida. Asiento se omite. (configure cuenta 1305 Clientes en el PUC)");
@@ -539,6 +638,25 @@ public class ReciboCajaService {
         recibo.setAnuladoPorUsuarioId(usuarioId);
         recibo = reciboRepository.save(recibo);
 
+        // Reversar el asiento contable del recibo (marca el asiento como ANULADO).
+        // Sin esto, la cartera y la caja se corregían pero el mayor seguía mostrando el ingreso
+        // → balance de comprobación descuadrado contra cartera y arqueo. Es idempotente:
+        // si el asiento no existe (p. ej. quedó como fallido) no hace nada.
+        asientoService.anularAsientoDeDocumento("RC", recibo.getId());
+
+        // Reponer el saldo a favor del cliente que este recibo hubiera consumido (se descontó al
+        // crear). Sin esto, anular hacía que el cliente perdiera definitivamente ese saldo.
+        if (recibo.getSaldoFavorUsado() != null
+                && recibo.getSaldoFavorUsado().compareTo(BigDecimal.ZERO) > 0
+                && recibo.getTercero() != null) {
+            try {
+                tercerosService.aumentarSaldofavorCliente(
+                        recibo.getTercero().getTerceroId(), null, recibo.getSaldoFavorUsado().doubleValue());
+            } catch (Exception ex) {
+                System.out.println("[AnularRC] Error reponiendo saldo a favor: " + ex.getMessage());
+            }
+        }
+
         // Movimiento de cajero inverso
         registrarAnulacionCajero(recibo);
 
@@ -559,15 +677,19 @@ public class ReciboCajaService {
                     else montoElectronico = montoElectronico.add(mp.getMonto());
                 }
             }
+            // El RC sumó a la caja con tipo RECIBO_CAJA (signo +1) y montos POSITIVOS. Para reversar,
+            // se pasa el tipo ANULACION (signo −1) con montos POSITIVOS → el enum aplica el signo y
+            // el neto es −total (resta lo que el recibo había sumado). Antes se negaban los montos y,
+            // con el signo −1 del enum, el resultado quedaba +total → duplicaba el ingreso en caja.
             detalleCajeroService.registrarMovimiento(
                     detalleCajeroId,
                     MovimientoCajero.TipoMovimiento.ANULACION,
                     (recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : "RC-" + recibo.getConsecutivo()) + "-A",
                     recibo.getId(),
-                    recibo.getTotal().negate(),
+                    recibo.getTotal(),
                     BigDecimal.ZERO,
-                    montoEfectivo.negate(),
-                    montoElectronico.negate(),
+                    montoEfectivo,
+                    montoElectronico,
                     "Anulación Recibo Caja " + (recibo.getNumeroDocumento() != null ? recibo.getNumeroDocumento() : recibo.getConsecutivo()),
                     recibo.getComprobante()
             );

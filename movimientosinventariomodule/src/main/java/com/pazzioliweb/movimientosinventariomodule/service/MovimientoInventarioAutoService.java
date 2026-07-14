@@ -158,6 +158,71 @@ public class MovimientoInventarioAutoService {
         registrarEntradaPorDevolucion(numeroDevolucion, devolucionId, bodegaCodigo, fecha, items, null, null);
     }
 
+    /**
+     * Crea un movimiento de SALIDA por una devolución de COMPRA (la mercancía sale del inventario
+     * de vuelta al proveedor). Valora la salida al costo promedio vigente del kardex.
+     */
+    @Transactional
+    public void registrarSalidaPorDevolucionCompra(String numeroDevolucion, Long devolucionId,
+                                                   Integer bodegaCodigo, LocalDate fecha,
+                                                   List<ItemMovimiento> items, Integer comprobanteId, Integer consecutivo) {
+        crearMovimientoAuto("DC", "Devolución compra " + numeroDevolucion, devolucionId, "DC",
+                TipoMovimiento.SALIDA, bodegaCodigo, fecha, items, false, comprobanteId, consecutivo);
+    }
+
+    /** Compat: sobrecarga sin comprobanteId y consecutivo. */
+    @Transactional
+    public void registrarSalidaPorDevolucionCompra(String numeroDevolucion, Long devolucionId,
+                                                   Integer bodegaCodigo, LocalDate fecha, List<ItemMovimiento> items) {
+        registrarSalidaPorDevolucionCompra(numeroDevolucion, devolucionId, bodegaCodigo, fecha, items, null, null);
+    }
+
+    /**
+     * Ajuste de inventario por ANULACIÓN de un documento (devuelve el stock/kardex al estado previo
+     * con un movimiento real, en vez de tocar `existencias` a mano). `documentoTipo` debe terminar
+     * en "-ANUL" y ser único por documento (idempotencia). `entrada=true` reingresa stock (revierte
+     * una salida: venta anulada, devolución de compra anulada); `entrada=false` lo saca (revierte
+     * una entrada: devolución de venta anulada). El costo pasado se respeta (no se promedia) para
+     * que el kardex quede coherente con la reversa del asiento contable.
+     */
+    /** True si ya existe un movimiento de inventario para (tipo, documento). Se usa antes de reversar
+     *  en una anulación: si el movimiento original nunca se creó (falló en su momento), NO se debe
+     *  aplicar el ajuste inverso (evita stock fantasma o negativo). */
+    @Transactional(readOnly = true)
+    public boolean existeMovimiento(String documentoTipo, Long documentoId) {
+        return movimientoRepo.findByDocumentoOrigenTipoAndDocumentoOrigenId(documentoTipo, documentoId).isPresent();
+    }
+
+    /**
+     * Existencia disponible de una variante en una bodega (según la tabla existencias, sincronizada
+     * con el kardex). Resuelve la variante con la misma cadena de fallback que el registro de
+     * movimientos (codigo_contable+referencia → SKU). Devuelve 0.0 si no se resuelve la variante o
+     * no hay registro de existencias. Se usa para validar stock antes de una salida (p. ej. devolución
+     * de compra al proveedor), evitando existencias/kardex negativos.
+     */
+    @Transactional(readOnly = true)
+    public double existenciaDisponible(String codigoProducto, String referenciaVariantes, Integer bodegaCodigo) {
+        if (bodegaCodigo == null) return 0.0;
+        Optional<ProductoVariante> opt =
+                varianteRepo.findByProducto_CodigoContableAndReferenciaVariantes(codigoProducto, referenciaVariantes);
+        if (opt.isEmpty()) opt = varianteRepo.findBySku(codigoProducto);
+        if (opt.isEmpty() && referenciaVariantes != null) opt = varianteRepo.findBySku(referenciaVariantes);
+        if (opt.isEmpty()) return 0.0;
+        return existenciasRepo
+                .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
+                        opt.get().getProductoVarianteId(), bodegaCodigo)
+                .map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0)
+                .orElse(0.0);
+    }
+
+    @Transactional
+    public void registrarAjusteAnulacion(String documentoTipo, Long documentoId, Integer bodegaCodigo,
+                                         LocalDate fecha, List<ItemMovimiento> items, boolean entrada) {
+        crearMovimientoAuto(documentoTipo, "Anulación inventario " + documentoTipo, documentoId, documentoTipo,
+                entrada ? TipoMovimiento.ENTRADA : TipoMovimiento.SALIDA,
+                bodegaCodigo, fecha, items, false, null, null);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  Núcleo: crea el MovimientoInventario + detalles + Kardex
     // ─────────────────────────────────────────────────────────────────────────
@@ -264,19 +329,19 @@ public class MovimientoInventarioAutoService {
             saldototal=ultimoOpt.get().getTotalCosto();
 
             } else {
-                // Si no hay kardex previo, usar el stock actual de la tabla existencias
+                // Si no hay kardex previo, partir del stock actual de la tabla existencias.
+                // Antes se forzaba saldoAnterior=0.0, lo que en una entrada sobrescribía las
+                // existencias con solo la cantidad del movimiento (setExistencia más abajo) y
+                // BORRABA el stock preexistente cargado sin kardex (p. ej. saldos iniciales).
                 Long varianteId = variante.getProductoVarianteId();
                 Optional<Existencias> existenciasOpt = existenciasRepo
                         .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
                                 varianteId, bodega.getCodigo());
-                //saldoAnterior = existenciasOpt.map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0).orElse(0.0);
-                saldoAnterior=0.0;
+                saldoAnterior = existenciasOpt
+                        .map(e -> e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0)
+                        .orElse(0.0);
                 promedioAnterior = 0.0;
-                saldototal= 0.0;
-
-
-
-
+                saldototal = 0.0;
             }
 
 
@@ -284,9 +349,20 @@ public class MovimientoInventarioAutoService {
 
             double promedioNuevo = promedioAnterior;
 
-            // Para SALIDAS, valorar al costo promedio vigente
+            // Para SALIDAS, valorar al costo promedio vigente. EXCEPTO devolución de compra ("DC")
+            // y reversas de anulación ("-ANUL"), que deben salir/entrar al costo EXACTO que pasa el
+            // llamador (para que el kardex coincida con el asiento contable de la nota débito/reversa).
             double costoUnitarioFinal = item.costoUnitario;
-            if (salida > 0 && promedioAnterior > 0) {
+            boolean respetaCostoLlamador = "DC".equals(documentoTipo)
+                    || (documentoTipo != null && documentoTipo.endsWith("-ANUL"));
+            if (salida > 0 && promedioAnterior > 0 && !respetaCostoLlamador) {
+                costoUnitarioFinal = promedioAnterior;
+            }
+            // Para ENTRADAS por devolución (DV): si el llamador NO pasó un costo válido (≤0), se
+            // recurre al promedio vigente del kardex. Si pasó un costo válido (el costo promedio
+            // del producto, el MISMO que usa el asiento de reversa de COGS), se respeta para que
+            // la valorización del kardex y el saldo del mayor (cuenta 1435) coincidan exactamente.
+            if (entrada > 0 && "DV".equals(documentoTipo) && item.costoUnitario <= 0 && promedioAnterior > 0) {
                 costoUnitarioFinal = promedioAnterior;
             }
 

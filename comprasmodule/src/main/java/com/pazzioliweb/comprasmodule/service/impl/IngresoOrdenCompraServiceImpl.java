@@ -128,34 +128,10 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
             }
         }
 
-        // Paso 2: actualizar inventario SOLO de los items que tienen cantidad recibida > 0
-        int actualizados = 0;
-        int omitidos = 0;
-        for (DetalleOrdenCompra detalle : orden.getItems()) {
-            Integer cant = detalle.getCantidadRecibida();
-            if (cant == null || cant <= 0) {
-                omitidos++;
-                continue;
-            }
-            try {
-                log.info("📦 Sumando inventario: producto={}, variante={}, cantidad=+{}, bodega={}",
-                        detalle.getCodigoProducto(), detalle.getReferenciaVariantes(),
-                        cant, orden.getBodega().getCodigo());
-                productoClient.actualizarInventario(
-                        detalle.getCodigoProducto(),
-                        detalle.getReferenciaVariantes(),
-                        cant,
-                        orden.getBodega().getCodigo()
-                );
-                actualizados++;
-            } catch (Exception ex) {
-                log.error("❌ Error sumando inventario del detalle {} (producto {}): {}",
-                        detalle.getId(), detalle.getCodigoProducto(), ex.getMessage());
-                throw ex;  // propagar para hacer rollback completo
-            }
-        }
-        log.info("Inventario actualizado: {} items sumados, {} omitidos (cantidad recibida = 0)",
-                actualizados, omitidos);
+        // Paso 2: el inventario/existencias lo mantiene ÚNICAMENTE el movimiento de kardex
+        // (generarMovimientoInventarioCompra, más abajo). Antes se sumaba aquí con
+        // productoClient.actualizarInventario Y otra vez en el kardex → doble conteo en productos
+        // sin kardex previo (el saldo base se leía ya incrementado). Un solo escritor lo evita.
 
         // Paso 3: definir estado
         boolean allReceived = orden.getItems().stream()
@@ -218,7 +194,10 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
                     MovimientoInventarioAutoService.nuevaLista();
             for (DetalleOrdenCompra d : orden.getItems()) {
                 if (d.getCantidadRecibida() == null || d.getCantidadRecibida() <= 0) continue;
-                double costoUnit = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
+                // Costo unitario NETO de descuento (descuento por línea = %), para que el kardex
+                // coincida con el débito contable a Inventarios (gravada neta). Igual que el flujo nuevo.
+                double descPct = d.getDescuento() != null ? d.getDescuento().doubleValue() : 0.0;
+                double costoUnit = (d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0) * (1.0 - descPct / 100.0);
                 double cant = d.getCantidadRecibida().doubleValue();
                 // IVA viene como porcentaje (p.ej. 19). Si en algún registro está como valor absoluto
                 // (mayor que 100 sería raro), lo tratamos como porcentaje igual.
@@ -249,7 +228,8 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
                     orden.getNumeroOrden(),
                     orden.getId(),
                     orden.getBodega().getCodigo(),
-                    orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now(),
+                    orden.getFechaEmision() != null ? orden.getFechaEmision()
+                            : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now()),
                     items,
                     tipoComprobante,
                     comprobanteId,

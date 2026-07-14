@@ -473,5 +473,25 @@ public class ReportesController {
         LocalDate[] r = defaults(inicio, fin);
         return ResponseEntity.ok(reportesService.getHistoricoProducto(sku, r[0], r[1]));
     }
+
+    // ════════════════════════════════════════════════
+    // CERTIFICADO DE RETENCIÓN EN LA FUENTE
+    // ════════════════════════════════════════════════
+
+    /**
+     * Certificado de retención en la fuente por tercero y periodo.
+     * tipo = PRACTICADAS (a proveedores, desde compras) | SUFRIDAS (por nosotros, desde ventas).
+     * Si no se envían fechas, usa el año actual completo.
+     */
+    @GetMapping("/certificado-retencion")
+    public ResponseEntity<CertificadoRetencionDTO> certificadoRetencion(
+            @RequestParam(defaultValue = "PRACTICADAS") String tipo,
+            @RequestParam Integer terceroId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate ini = inicio != null ? inicio : LocalDate.now().withDayOfYear(1);
+        LocalDate f = fin != null ? fin : ini.withMonth(12).withDayOfMonth(31);
+        return ResponseEntity.ok(reportesService.getCertificadoRetencion(tipo, terceroId, ini, f));
+    }
 }
 

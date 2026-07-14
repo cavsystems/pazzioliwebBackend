@@ -171,14 +171,17 @@ public class ConciliacionBancariaController {
         for (Map<String, Object> fila : filas) {
             LocalDate fechaExtracto = LocalDate.parse(fila.get("fecha").toString());
             BigDecimal montoExtracto = new BigDecimal(fila.get("monto").toString()).abs();
+            // Valor CON signo del extracto: + = entrada (depósito) → débito al banco; − = salida → crédito.
+            BigDecimal montoExtractoSigned = new BigDecimal(fila.get("monto").toString());
             String referencia = fila.get("referencia") != null ? fila.get("referencia").toString() : null;
             String descripcionExtracto = fila.get("descripcion") != null ? fila.get("descripcion").toString() : "";
 
             // Buscar candidato que coincida: monto exacto + fecha dentro de tolerancia
             AsientoContableLinea match = null;
             for (AsientoContableLinea l : candidatos) {
-                BigDecimal mLinea = l.getDebito().subtract(l.getCredito()).abs();
-                if (mLinea.compareTo(montoExtracto) != 0) continue;
+                // Comparar CON signo: un depósito no debe conciliar contra un retiro del mismo monto.
+                BigDecimal mLinea = l.getDebito().subtract(l.getCredito());
+                if (mLinea.compareTo(montoExtractoSigned) != 0) continue;
                 LocalDate fLinea = l.getAsiento().getFecha();
                 long diff = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(fLinea, fechaExtracto));
                 if (diff <= toleranciaDias) { match = l; break; }

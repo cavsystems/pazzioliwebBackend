@@ -1,6 +1,7 @@
 package com.pazzioliweb.ventasmodule.service.impl;
 
 import com.pazzioliweb.cajerosmodule.entity.MovimientoCajero;
+import com.pazzioliweb.metodospagomodule.entity.MetodosPago;
 import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
@@ -187,16 +188,26 @@ public class DevolucionServiceImpl implements DevolucionService {
             detalle.setPrecioUnitario(detalleOriginal.getPrecioUnitario());
             detalle.setIvaLinea(ivaLineaDevuelta);
             detalle.setTotalLinea(totalLineaDevuelta);
+            // Costo a reversar = COGS REAL con que salió la venta (persistido en DetalleVenta). Si la
+            // venta es antigua y no lo tiene, se cae al costo promedio actual del producto. Se persiste
+            // en el detalle de devolución y se reutiliza en kardex, reversa de COGS y anulación.
+            BigDecimal costoDev = (detalleOriginal.getCostoUnitario() != null
+                        && detalleOriginal.getCostoUnitario().compareTo(BigDecimal.ZERO) > 0)
+                    ? detalleOriginal.getCostoUnitario()
+                    : obtenerCostoVarianteParaDevolucion(detalleOriginal.getCodigoProducto(), detalleOriginal.getReferenciaVariantes());
+            detalle.setCostoUnitario(costoDev != null ? costoDev : BigDecimal.ZERO);
             detalle.setMotivo(itemReq.getMotivo() != null ? itemReq.getMotivo() : request.getMotivo());
             detalles.add(detalle);
 
             totalDevuelto = totalDevuelto.add(totalLineaDevuelta);
             ivaDevuelto   = ivaDevuelto.add(ivaLineaDevuelta);
 
-            // 6. Restaurar inventario (existencias)
-            restaurarInventario(detalleOriginal.getCodigoProducto(),
-                    venta.getBodega().getCodigo(),
-                    itemReq.getCantidadDevolver());
+            // NOTA: las existencias NO se tocan aquí. El reingreso de stock lo hace de forma
+            // ÚNICA el movimiento de inventario (registrarEntradaPorDevolucion), igual que en
+            // compras/ventas. Antes se sumaba aquí (restaurarInventario) Y además el movimiento
+            // sobrescribía existencias con setExistencia(saldoNuevo): en productos sin kardex el
+            // saldo base era 0 y el SET borraba el stock previo. Un solo escritor evita esa doble
+            // escritura y la pérdida de stock.
         }
 
         BigDecimal totalNeto = totalDevuelto; // totalDevuelto ya incluye IVA (es el total de línea)
@@ -221,8 +232,13 @@ public class DevolucionServiceImpl implements DevolucionService {
         // 8. Actualizar estado de la venta
         actualizarEstadoVenta(venta);
 
-        // 9. Registrar movimiento en cajero para el cuadre de caja
-        registrarMovimientoEnCajero(venta, guardada, totalNeto);
+        // 9. Registrar movimiento en cajero para el cuadre de caja.
+        //    Por caja/CxC solo se reembolsa el NETO (bruto − retenciones sufridas reversadas),
+        //    exactamente lo que el asiento acredita en caja (montoContrapartida). Antes se pasaba
+        //    el bruto (totalNeto con IVA, sin descontar retención) → el egreso de caja quedaba
+        //    inflado respecto al asiento y descuadraba el arqueo en ventas con retención.
+        BigDecimal montoReembolsoCaja = totalNeto.subtract(calcularRetencionesReversadas(venta, totalNeto));
+        registrarMovimientoEnCajero(venta, guardada, montoReembolsoCaja);
 
         // 10. Generar asiento contable de devolución (reversa de venta)
         generarAsientoDevolucion(guardada, venta, totalNeto);
@@ -244,11 +260,132 @@ public class DevolucionServiceImpl implements DevolucionService {
         return toDTO(guardada);
     }
 
+    @Override
+    @Transactional
+    public DevolucionDTO anularDevolucion(Long devolucionId, String motivo, String usuario) {
+        Devolucion dev = devolucionRepository.findById(devolucionId)
+                .orElseThrow(() -> new VentaException("Devolución no encontrada: " + devolucionId));
+        if ("ANULADA".equalsIgnoreCase(dev.getEstado()))
+            throw new VentaException("La devolución ya está anulada.");
+        if (motivo == null || motivo.isBlank())
+            throw new VentaException("El motivo de anulación es obligatorio.");
+
+        // Bloquear si el periodo contable del documento está cerrado.
+        LocalDate fechaDoc = dev.getFechaCreacion() != null ? dev.getFechaCreacion() : LocalDate.now();
+        periodoContableService.validarPeriodoAbierto(fechaDoc);
+
+        Venta venta = dev.getVenta();
+
+        // 1. Reversar los asientos contables de la devolución (principal + reversa de costo).
+        //    Idempotente: si alguno no existe (p. ej. quedó fallido) no hace nada.
+        asientoService.anularAsientoDeDocumento("DV", dev.getId());
+        asientoService.anularAsientoDeDocumento("DV-COSTO", dev.getId());
+
+        // 2. Revertir el reingreso de inventario: sacar de existencias lo que la devolución reingresó.
+        revertirInventarioAnulacion(dev, venta);
+
+        // 3. Revertir el movimiento de caja (solo la porción de contado que la devolución reembolsó).
+        revertirCajaAnulacion(dev, venta);
+
+        // 4. Marcar la devolución como ANULADA.
+        dev.setEstado("ANULADA");
+        dev.setMotivoAnulacion(motivo);
+        dev.setFechaAnulacion(LocalDate.now());
+        dev.setUsuarioAnulacion(usuario);
+        devolucionRepository.save(dev);
+
+        // 5. Recalcular el estado de la venta: al anular, sus ítems dejan de contar como devueltos
+        //    (totalDevueltoPorDetalle solo cuenta devoluciones REGISTRADAS).
+        if (venta != null) actualizarEstadoVenta(venta);
+
+        return toDTO(dev);
+    }
+
+    /**
+     * Revierte el reingreso de inventario que hizo la devolución: la devolución fue una ENTRADA
+     * (DV), así que anularla registra una SALIDA real de kardex (documentoTipo "DV-ANUL"), para que
+     * existencias, kardex y el mayor 1435 queden consistentes. Antes se restaba de existencias a
+     * mano y el kardex quedaba con la entrada original (saldo inflado y divergente).
+     */
+    private void revertirInventarioAnulacion(Devolucion dev, Venta venta) {
+        if (dev.getItems() == null || venta == null || venta.getBodega() == null) return;
+        try {
+            // Solo reversar si la ENTRADA original ("DV") realmente se registró; si falló en su
+            // momento, no sacar stock (evitaría existencias negativas).
+            if (!movimientoInventarioAutoService.existeMovimiento("DV", dev.getId())) return;
+            List<MovimientoInventarioAutoService.ItemMovimiento> items = MovimientoInventarioAutoService.nuevaLista();
+            for (DetalleDevolucion d : dev.getItems()) {
+                if (d.getCantidadDevuelta() == null || d.getCantidadDevuelta() <= 0) continue;
+                if (d.getDetalleVenta() == null) continue;
+                String cod = d.getDetalleVenta().getCodigoProducto();
+                // Mismo costo PERSISTIDO del registro (no recalcular con el costo actual del producto).
+                double costo = d.getCostoUnitario() != null ? d.getCostoUnitario().doubleValue() : 0.0;
+                items.add(new MovimientoInventarioAutoService.ItemMovimiento(
+                        cod, d.getDetalleVenta().getReferenciaVariantes(), d.getCantidadDevuelta().doubleValue(), costo));
+            }
+            movimientoInventarioAutoService.registrarAjusteAnulacion(
+                    "DV-ANUL", dev.getId(), venta.getBodega().getCodigo(), LocalDate.now(), items, false);
+        } catch (Exception ex) {
+            System.out.println("[AnularDevolucion] Reversa de inventario (no crítica): " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Registra en la caja activa el movimiento inverso a la devolución (tipo ANULACION con montos
+     * negados → suma de vuelta a la caja lo que la devolución había reembolsado). Solo la porción
+     * de CONTADO (la parte a crédito nunca tocó la caja). Best-effort: si no hay sesión activa, se omite.
+     */
+    private void revertirCajaAnulacion(Devolucion dev, Venta venta) {
+        DatosSesiones sesion = obtenerSesionActiva();
+        if (sesion == null || sesion.getDetalleCajeroId() == null || venta == null) return;
+        try {
+            BigDecimal totalDevuelto = dev.getTotalNeto() != null ? dev.getTotalNeto() : BigDecimal.ZERO;
+            BigDecimal montoEfectivo = BigDecimal.ZERO;
+            BigDecimal montoElectronico = BigDecimal.ZERO;
+            if (venta.getMetodosPago() != null && !venta.getMetodosPago().isEmpty()) {
+                BigDecimal totalVenta = venta.getTotalVenta();
+                BigDecimal totEf = BigDecimal.ZERO, totEl = BigDecimal.ZERO;
+                for (VentaMetodoPago vmp : venta.getMetodosPago()) {
+                    if (vmp.getMetodoPago().getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) continue;
+                    String sigla = vmp.getMetodoPago().getSigla().toUpperCase();
+                    if (sigla.startsWith("EF")) totEf = totEf.add(vmp.getMonto()); else totEl = totEl.add(vmp.getMonto());
+                }
+                if (totalVenta != null && totalVenta.compareTo(BigDecimal.ZERO) > 0) {
+                    montoEfectivo   = totalDevuelto.multiply(totEf.divide(totalVenta, 10, java.math.RoundingMode.HALF_UP)).setScale(2, java.math.RoundingMode.HALF_UP);
+                    montoElectronico = totalDevuelto.multiply(totEl.divide(totalVenta, 10, java.math.RoundingMode.HALF_UP)).setScale(2, java.math.RoundingMode.HALF_UP);
+                } else if (totEf.add(totEl).compareTo(BigDecimal.ZERO) > 0) {
+                    montoEfectivo = totalDevuelto;
+                }
+            } else {
+                montoEfectivo = totalDevuelto;
+            }
+            BigDecimal cajaTotal = montoEfectivo.add(montoElectronico);
+            if (cajaTotal.compareTo(BigDecimal.ZERO) <= 0) return; // venta a crédito: no hubo egreso de caja
+
+            detalleCajeroService.registrarMovimiento(
+                    sesion.getDetalleCajeroId(),
+                    MovimientoCajero.TipoMovimiento.ANULACION,
+                    dev.getNumeroDevolucion() + "-A",
+                    dev.getId(),
+                    cajaTotal.negate(),
+                    BigDecimal.ZERO,
+                    montoEfectivo.negate(),
+                    montoElectronico.negate(),
+                    "Anulación devolución " + dev.getNumeroDevolucion(),
+                    dev.getComprobante()
+            );
+        } catch (Exception e) {
+            System.out.println("[AnularDevolucion] Error revirtiendo caja: " + e.getMessage());
+        }
+    }
+
     /**
      * Registra un MovimientoInventario tipo ENTRADA por la devolución (la mercancía
-     * vuelve a la bodega de origen). Genera Kardex para trazabilidad.
-     * Try/catch defensivo: si falla, no rompe la devolución (las existencias ya
-     * fueron restauradas vía restaurarInventario).
+     * vuelve a la bodega de origen), genera Kardex y actualiza existencias. Es el ÚNICO
+     * punto que reingresa el stock de la devolución (fuente de verdad única, como en
+     * compras/ventas). El try/catch registra el error sin abortar la devolución para no
+     * dejar huérfano el asiento contable (REQUIRES_NEW ya confirmado); un fallo aquí queda
+     * logueado para reproceso manual del movimiento de inventario.
      */
     private void generarMovimientoInventarioDevolucion(Devolucion devolucion, Venta venta) {
         try {
@@ -256,7 +393,8 @@ public class DevolucionServiceImpl implements DevolucionService {
                     MovimientoInventarioAutoService.nuevaLista();
             for (DetalleDevolucion d : devolucion.getItems()) {
                 if (d.getCantidadDevuelta() == null || d.getCantidadDevuelta() <= 0) continue;
-                double costo = d.getPrecioUnitario() != null ? d.getPrecioUnitario().doubleValue() : 0.0;
+                // Costo PERSISTIDO en el registro (mismo valor para kardex, COGS y anulación).
+                double costo = d.getCostoUnitario() != null ? d.getCostoUnitario().doubleValue() : 0.0;
                 items.add(new MovimientoInventarioAutoService.ItemMovimiento(
                         d.getDetalleVenta().getCodigoProducto(),
                         d.getDetalleVenta().getReferenciaVariantes(),
@@ -311,10 +449,15 @@ public class DevolucionServiceImpl implements DevolucionService {
                 System.out.println("[AsientoDevolucion] Cuenta 4175 Devoluciones no configurada. Asiento omitido.");
                 return;
             }
-            lineas.add(com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.debito(
-                    devVent.getId(),
-                    subtotal.compareTo(BigDecimal.ZERO) > 0 ? subtotal : totalDevuelto,
-                    "Devolución venta " + venta.getNumeroVenta()));
+            // DR Devoluciones por la BASE sin IVA. Si la base es 0 (caso borde: línea 100% IVA),
+            // no se agrega la línea: el IVA revertido y la contrapartida ya cuadran. Antes se usaba
+            // totalDevuelto (que incluye IVA) y además se debitaba el IVA aparte → doble débito.
+            if (subtotal.compareTo(BigDecimal.ZERO) > 0) {
+                lineas.add(com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.debito(
+                        devVent.getId(),
+                        subtotal,
+                        "Devolución venta " + venta.getNumeroVenta()));
+            }
 
             // DÉBITO IVA generado (revierte)
             if (iva.compareTo(BigDecimal.ZERO) > 0) {
@@ -331,15 +474,12 @@ public class DevolucionServiceImpl implements DevolucionService {
             // cliente pagó solo el NETO. Al devolver se reversan (crédito) en proporción
             // a lo devuelto; así la caja/CxC refleja únicamente el NETO realmente
             // reembolsado y el anticipo no queda colgado en los libros.
-            BigDecimal totalVentaBruto = (venta.getTotalVenta() != null && venta.getTotalVenta().compareTo(BigDecimal.ZERO) > 0)
-                    ? venta.getTotalVenta() : totalDevuelto;
-            BigDecimal proporcion = totalDevuelto.divide(totalVentaBruto, 6, java.math.RoundingMode.HALF_UP);
-            BigDecimal retefuenteRev = (venta.getRetefuente() != null ? venta.getRetefuente() : BigDecimal.ZERO)
-                    .multiply(proporcion).setScale(2, java.math.RoundingMode.HALF_UP);
-            BigDecimal reteivaRev = (venta.getReteiva() != null ? venta.getReteiva() : BigDecimal.ZERO)
-                    .multiply(proporcion).setScale(2, java.math.RoundingMode.HALF_UP);
-            BigDecimal reteicaRev = (venta.getReteica() != null ? venta.getReteica() : BigDecimal.ZERO)
-                    .multiply(proporcion).setScale(2, java.math.RoundingMode.HALF_UP);
+            // Proporción de lo devuelto sobre el BRUTO de la venta. Si el bruto no es válido
+            // (null/≤0), la proporción es 0: NO se reversan retenciones (antes el fallback usaba
+            // totalDevuelto como base → proporción 1 → reversaba el 100% aun en devolución parcial).
+            BigDecimal retefuenteRev = retencionReversada(venta.getTotalVenta(), venta.getRetefuente(), totalDevuelto);
+            BigDecimal reteivaRev = retencionReversada(venta.getTotalVenta(), venta.getReteiva(), totalDevuelto);
+            BigDecimal reteicaRev = retencionReversada(venta.getTotalVenta(), venta.getReteica(), totalDevuelto);
             String nombreTerceroRet = venta.getCliente() != null
                     ? (venta.getCliente().getRazonSocial() != null && !venta.getCliente().getRazonSocial().isBlank()
                         ? venta.getCliente().getRazonSocial() : venta.getCliente().getNombre1())
@@ -447,10 +587,9 @@ public class DevolucionServiceImpl implements DevolucionService {
             for (DetalleDevolucion d : devolucion.getItems()) {
                 if (d.getCantidadDevuelta() == null || d.getCantidadDevuelta() <= 0) continue;
                 if (d.getDetalleVenta() == null) continue;
-                BigDecimal costoUnit = obtenerCostoVarianteParaDevolucion(
-                        d.getDetalleVenta().getCodigoProducto(),
-                        d.getDetalleVenta().getReferenciaVariantes());
-                if (costoUnit == null) continue;
+                // Mismo costo PERSISTIDO que usa el reingreso de kardex → 1435 = kardex.
+                BigDecimal costoUnit = d.getCostoUnitario();
+                if (costoUnit == null || costoUnit.compareTo(BigDecimal.ZERO) <= 0) continue;
                 totalCosto = totalCosto.add(costoUnit.multiply(BigDecimal.valueOf(d.getCantidadDevuelta())));
             }
             if (totalCosto.compareTo(BigDecimal.ZERO) <= 0) return;
@@ -624,35 +763,53 @@ public class DevolucionServiceImpl implements DevolucionService {
     // =========================================================================
 
     /**
-     * Restaura las existencias en bodega para un producto devuelto.
-     */
-    private void restaurarInventario(String sku, int codigoBodega, int cantidad) {
-        ProductoVariante variante = productoVarianteRepository.findBySku(sku)
-                .orElseThrow(() -> new VentaException("Producto variante no encontrado: " + sku));
-
-        Existencias existencia = existenciasRepository
-                .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
-                        variante.getProductoVarianteId(), codigoBodega)
-                .orElseThrow(() -> new VentaException(
-                        "Existencias no encontradas para SKU " + sku + " en bodega " + codigoBodega));
-
-        existencia.setExistencia(existencia.getExistencia().add(BigDecimal.valueOf(cantidad)));
-        existenciasRepository.save(existencia);
-    }
-
-    /**
      * Actualiza el estado de la venta según cuántos ítems han sido devueltos totalmente.
      * - Si todos los ítems de la venta fueron devueltos en su totalidad → DEVUELTA
      * - Si solo algunos ítems o parcialmente → DEVOLUCION_PARCIAL
      */
     private void actualizarEstadoVenta(Venta venta) {
-        boolean todosDevueltos = venta.getItems().stream().allMatch(detalle -> {
-            Integer totalDevuelto = devolucionRepository.totalDevueltoPorDetalle(detalle.getId());
-            return (totalDevuelto != null) && totalDevuelto >= detalle.getCantidad();
-        });
+        // totalDevueltoPorDetalle solo suma devoluciones VIGENTES (estado REGISTRADA), por lo que al
+        // anular una devolución el conteo baja. Recalculamos el estado sobre lo vigente:
+        //  - 0 devuelto  → COMPLETADA (se restaura; p.ej. tras anular la única devolución)
+        //  - todo devuelto → DEVUELTA
+        //  - algo devuelto → DEVOLUCION_PARCIAL
+        int totalVigente = 0;
+        boolean todosDevueltos = true;
+        for (var detalle : venta.getItems()) {
+            Integer devuelto = devolucionRepository.totalDevueltoPorDetalle(detalle.getId());
+            int d = devuelto != null ? devuelto : 0;
+            totalVigente += d;
+            if (d < detalle.getCantidad()) {
+                todosDevueltos = false;
+            }
+        }
 
-        venta.setEstado(todosDevueltos ? "DEVUELTA" : "DEVOLUCION_PARCIAL");
+        if (totalVigente == 0) {
+            venta.setEstado("COMPLETADA");
+        } else {
+            venta.setEstado(todosDevueltos ? "DEVUELTA" : "DEVOLUCION_PARCIAL");
+        }
         ventaRepository.save(venta);
+    }
+
+    /**
+     * Retención sufrida reversada por una devolución: retencionTotal × (devuelto / brutoVenta),
+     * redondeada a 2 decimales. Si el bruto de la venta no es válido (null/≤0) la proporción es 0
+     * (no se reversa nada). Se usa tanto en el asiento como en el cálculo del reembolso de caja
+     * para que ambos usen exactamente el mismo neto.
+     */
+    private BigDecimal retencionReversada(BigDecimal brutoVenta, BigDecimal retencionTotal, BigDecimal totalDevuelto) {
+        if (brutoVenta == null || brutoVenta.compareTo(BigDecimal.ZERO) <= 0) return BigDecimal.ZERO;
+        BigDecimal ret = retencionTotal != null ? retencionTotal : BigDecimal.ZERO;
+        BigDecimal proporcion = totalDevuelto.divide(brutoVenta, 6, java.math.RoundingMode.HALF_UP);
+        return ret.multiply(proporcion).setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** Suma de las tres retenciones sufridas reversadas (retefuente + reteiva + reteica). */
+    private BigDecimal calcularRetencionesReversadas(Venta venta, BigDecimal totalDevuelto) {
+        return retencionReversada(venta.getTotalVenta(), venta.getRetefuente(), totalDevuelto)
+                .add(retencionReversada(venta.getTotalVenta(), venta.getReteiva(), totalDevuelto))
+                .add(retencionReversada(venta.getTotalVenta(), venta.getReteica(), totalDevuelto));
     }
 
     /**
@@ -667,8 +824,11 @@ public class DevolucionServiceImpl implements DevolucionService {
         }
 
         try {
-            // Desglosar el monto devuelto en efectivo/electrónico
-            // proporcional a cómo se pagó la venta original
+            // Solo la porción pagada de CONTADO (efectivo/electrónico) salió/entró por caja; la
+            // parte a CRÉDITO nunca tocó la caja (se reversa vía CxC en el asiento). Antes se
+            // repartía TODO el monto devuelto entre efectivo/electrónico —incluida la parte a
+            // crédito, bucketeada como "electrónico"— generando un egreso de caja fantasma en las
+            // devoluciones de ventas a crédito.
             BigDecimal montoEfectivoDevuelto   = BigDecimal.ZERO;
             BigDecimal montoElectronicoDevuelto = BigDecimal.ZERO;
 
@@ -678,6 +838,8 @@ public class DevolucionServiceImpl implements DevolucionService {
                 BigDecimal totalElectronico = BigDecimal.ZERO;
 
                 for (VentaMetodoPago vmp : venta.getMetodosPago()) {
+                    // Excluir los métodos a crédito: no ingresaron a caja.
+                    if (vmp.getMetodoPago().getTipoNegociacion() == MetodosPago.TipoNegociacion.Credito) continue;
                     String sigla = vmp.getMetodoPago().getSigla().toUpperCase();
                     if (sigla.startsWith("EF")) {
                         totalEfectivo = totalEfectivo.add(vmp.getMonto());
@@ -686,17 +848,27 @@ public class DevolucionServiceImpl implements DevolucionService {
                     }
                 }
 
-                if (totalVenta.compareTo(BigDecimal.ZERO) > 0) {
+                if (totalVenta != null && totalVenta.compareTo(BigDecimal.ZERO) > 0) {
+                    // Proporción sobre el total de la venta: refunda por caja solo la fracción de
+                    // contado (para ventas mixtas devuelve la parte contado; para 100% crédito, 0).
                     BigDecimal propEfec = totalEfectivo.divide(totalVenta, 10, java.math.RoundingMode.HALF_UP);
                     BigDecimal propElec = totalElectronico.divide(totalVenta, 10, java.math.RoundingMode.HALF_UP);
                     montoEfectivoDevuelto   = totalDevuelto.multiply(propEfec).setScale(2, java.math.RoundingMode.HALF_UP);
                     montoElectronicoDevuelto = totalDevuelto.multiply(propElec).setScale(2, java.math.RoundingMode.HALF_UP);
-                } else {
+                } else if (totalEfectivo.add(totalElectronico).compareTo(BigDecimal.ZERO) > 0) {
+                    // Sin total de venta válido pero con pagos de contado: todo a efectivo.
                     montoEfectivoDevuelto = totalDevuelto;
                 }
+                // Si no hubo pagos de contado (venta 100% crédito), ambos quedan en 0.
             } else {
-                // Sin métodos de pago registrados: todo efectivo
+                // Sin métodos de pago registrados: se asume contado (efectivo).
                 montoEfectivoDevuelto = totalDevuelto;
+            }
+
+            BigDecimal cajaDevuelta = montoEfectivoDevuelto.add(montoElectronicoDevuelto);
+            if (cajaDevuelta.compareTo(BigDecimal.ZERO) <= 0) {
+                // Venta a crédito: no hay egreso de caja (la devolución se refleja en la CxC).
+                return;
             }
 
             detalleCajeroService.registrarMovimiento(
@@ -704,7 +876,7 @@ public class DevolucionServiceImpl implements DevolucionService {
                     MovimientoCajero.TipoMovimiento.DEVOLUCION,
                     devolucion.getNumeroDevolucion(),
                     devolucion.getId(),
-                    totalDevuelto,
+                    cajaDevuelta,
                     BigDecimal.ZERO, // costo
                     montoEfectivoDevuelto,
                     montoElectronicoDevuelto,
@@ -715,15 +887,6 @@ public class DevolucionServiceImpl implements DevolucionService {
         } catch (Exception e) {
             System.out.println("[DevolucionService] Error al registrar movimiento en cajero: " + e.getMessage());
         }
-    }
-
-    /**
-     * Genera el número de devolución con el formato: DEV-{numeroVenta}-{secuencial}
-     * Ejemplo: DEV-V-00001-1, DEV-V-00001-2
-     */
-    private String generarNumeroDevolucion(Venta venta) {
-        long secuencial = devolucionRepository.countByVenta_Id(venta.getId()) + 1;
-        return "DEV-" + venta.getNumeroVenta() + "-" + secuencial;
     }
 
     /**
@@ -748,9 +911,11 @@ public class DevolucionServiceImpl implements DevolucionService {
     private DevolucionDTO toDTO(Devolucion dev) {
         DevolucionDTO dto = new DevolucionDTO();
         dto.setId(dev.getId());
-        dto.setVentaId(dev.getVenta().getId());
-        dto.setNumeroVenta(dev.getVenta().getNumeroVenta());
-        dto.setNombreCliente(dev.getVenta().getCliente().getRazonSocial());
+        Venta v = dev.getVenta();
+        dto.setVentaId(v != null ? v.getId() : null);
+        dto.setNumeroVenta(v != null ? v.getNumeroVenta() : null);
+        // Null-safe: la venta puede no tener cliente (venta a consumidor final sin tercero).
+        dto.setNombreCliente(v != null && v.getCliente() != null ? v.getCliente().getRazonSocial() : null);
         dto.setNumeroDevolucion(dev.getNumeroDevolucion());
         dto.setMotivo(dev.getMotivo());
         dto.setObservaciones(dev.getObservaciones());

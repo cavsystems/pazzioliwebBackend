@@ -81,13 +81,20 @@ public class CierreAnualService {
             }
         }
 
-        // Idempotencia: si ya existe asiento de cierre del año, retornar el actual.
-        java.util.Optional<AsientoContable> existente =
+        // Idempotencia por PASO: el cierre y la apertura son asientos independientes (REQUIRES_NEW),
+        // así que si un intento previo dejó el CIERRE pero falló antes de la APERTURA, reintentar
+        // debe COMPLETAR la apertura (traslado 3605→3705), no abortar. Solo se considera "ya cerrado"
+        // cuando AMBOS asientos existen (antes se retornaba con solo el CIERRE y el traslado a 3705
+        // se perdía para siempre, dejando la utilidad fuera del patrimonio del año siguiente).
+        java.util.Optional<AsientoContable> cierreExistente =
                 asientoRepo.findByDocumentoOrigenTipoAndDocumentoOrigenId("CIERRE", (long) anio);
-        if (existente.isPresent()) {
+        java.util.Optional<AsientoContable> aperturaExistente =
+                asientoRepo.findByDocumentoOrigenTipoAndDocumentoOrigenId("APERTURA", (long) (anio + 1));
+        if (cierreExistente.isPresent() && aperturaExistente.isPresent()) {
             ResultadoCierre r = new ResultadoCierre();
             r.anio = anio;
-            r.asientoCierreId = existente.get().getId();
+            r.asientoCierreId = cierreExistente.get().getId();
+            r.asientoAperturaId = aperturaExistente.get().getId();
             r.mensaje = "El año " + anio + " ya estaba cerrado.";
             return r;
         }
@@ -143,22 +150,25 @@ public class CierreAnualService {
             String nombre = (String) row[2];
             BigDecimal deb = (BigDecimal) row[4];
             BigDecimal cred = (BigDecimal) row[5];
-            BigDecimal saldo = deb.subtract(cred); // positivo = naturaleza débito (gasto), negativo = crédito (ingreso)
+            // Se cierra por el SIGNO REAL del saldo, no por el prefijo de la clase. Así una cuenta
+            // de resultado con saldo contrario a su naturaleza (p. ej. 4175 devoluciones, débito;
+            // o una 5x con saldo crédito por reverso) también se cierra y no arrastra saldo. Antes
+            // se asumía la naturaleza por la clase (4=crédito, resto=débito) y se OMITÍA la cuenta si
+            // su saldo iba al contrario → 3605 quedaba sobrestimado y la cuenta sin cerrar.
+            BigDecimal saldo = deb.subtract(cred).setScale(2, RoundingMode.HALF_UP);
+            if (saldo.abs().compareTo(new BigDecimal("0.01")) <= 0) continue;
 
-            if (codigo.startsWith("4")) {
-                // INGRESO: saldo crédito (negativo en deb-cred). Cerramos: DR cuenta, CR 3605.
-                BigDecimal monto = saldo.negate().setScale(2, RoundingMode.HALF_UP);
-                if (monto.compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (saldo.signum() < 0) {
+                // Saldo neto CRÉDITO (ingreso típico): para cerrar → DÉBITO la cuenta por |saldo|.
+                BigDecimal monto = saldo.negate();
                 lineasCierre.add(AsientoContableService.LineaDTO.debito(cuentaId, monto,
                         "Cierre " + codigo + " - " + nombre));
                 totalIngresos = totalIngresos.add(monto);
             } else {
-                // GASTO/COSTO (5,6,7): saldo débito (positivo). Cerramos: DR 3605, CR cuenta.
-                BigDecimal monto = saldo.setScale(2, RoundingMode.HALF_UP);
-                if (monto.compareTo(BigDecimal.ZERO) <= 0) continue;
-                lineasCierre.add(AsientoContableService.LineaDTO.credito(cuentaId, monto,
+                // Saldo neto DÉBITO (gasto/costo típico, o contra-cuenta como 4175): CRÉDITO la cuenta.
+                lineasCierre.add(AsientoContableService.LineaDTO.credito(cuentaId, saldo,
                         "Cierre " + codigo + " - " + nombre));
-                totalGastos = totalGastos.add(monto);
+                totalGastos = totalGastos.add(saldo);
             }
         }
 
@@ -174,25 +184,25 @@ public class CierreAnualService {
                     "Pérdida del ejercicio " + anio));
         }
 
-        // Generar asiento de cierre. Bypaseamos la validación de periodo abierto
-        // forzando reapertura temporal de Diciembre (admin debe coordinarlo) —
-        // pero como nuestro service exige los 12 cerrados, hay que reabrir Dic primero.
-        // Solución: reabrir Dic, generar asiento, volver a cerrar.
-        periodoContableService.reabrir(anio, 12, usuario, "Reapertura técnica para asiento de cierre anual");
-        AsientoContable asientoCierre = asientoService.generarAsiento(
-                "CIERRE-" + anio,
-                fechaCierre,
-                "Cierre del ejercicio " + anio + " (saldo cuentas de resultado contra 3605)",
-                "CIERRE",
-                (long) anio,
-                null,
-                lineasCierre
-        );
-        periodoContableService.cerrar(anio, 12, usuario, "Cierre tras emitir asiento de cierre anual " + anio);
+        // Generar el asiento de CIERRE solo si no existe (idempotente). NO se reabre/cierra
+        // diciembre: generarAsiento ya exime a los asientos de CIERRE/APERTURA del bloqueo de
+        // periodo, y el reabrir/cerrar dejaba diciembre reabierto si algo fallaba en el medio.
+        AsientoContable asientoCierre = cierreExistente.orElseGet(() ->
+                asientoService.generarAsiento(
+                        "CIERRE-" + anio,
+                        fechaCierre,
+                        "Cierre del ejercicio " + anio + " (saldo cuentas de resultado contra 3605)",
+                        "CIERRE",
+                        (long) anio,
+                        null,
+                        lineasCierre
+                ));
 
         // ── 2. Asiento de apertura: trasladar 3605 → 3705 al 01-Ene del año siguiente ──
-        Long asientoAperturaId = null;
-        if (utilidadOPerdida.compareTo(BigDecimal.ZERO) != 0) {
+        // Solo se genera si aún no existe (idempotente); así un reintento tras un cierre a
+        // medias completa el traslado que faltaba.
+        Long asientoAperturaId = aperturaExistente.map(AsientoContable::getId).orElse(null);
+        if (aperturaExistente.isEmpty() && utilidadOPerdida.compareTo(BigDecimal.ZERO) != 0) {
             java.util.Optional<CuentaContable> optResAnt = configContable.buscarPorCodigo("3705")
                     .filter(c -> c.getEsMovimiento() == null || c.getEsMovimiento());
             if (optResAnt.isPresent()) {

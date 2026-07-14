@@ -47,6 +47,12 @@ public class DetalleVenta {
     @Column(nullable = false)
     private BigDecimal total;
 
+    /** Costo unitario (promedio del kardex) con que se descargó esta línea al vender. Se persiste
+     *  para que la devolución reverse el COGS con el costo REAL de la venta (no el costo vigente
+     *  del producto, que pudo cambiar) → 1435 y kardex consistentes. */
+    @Column(name = "costo_unitario")
+    private BigDecimal costoUnitario;
+
     /**
      * Número de guía/manifiesto/remisión asociado a esta línea de venta.
      * Equivalente al "manifiesto" en compras: documento de transporte que

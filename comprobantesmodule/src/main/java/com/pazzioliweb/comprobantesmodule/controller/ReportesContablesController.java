@@ -461,6 +461,41 @@ public class ReportesContablesController {
         return r != null ? new BigDecimal(r.toString()) : BigDecimal.ZERO;
     }
 
+    // Igual que saldoDMC pero EXCLUYE los asientos de CIERRE y APERTURA, para que el
+    // resultado del período en el flujo de efectivo no se colapse cuando el rango cruza
+    // el cierre anual (esos asientos netean las clases 4−7 contra el patrimonio).
+    @SuppressWarnings("unchecked")
+    private BigDecimal saldoDMCSinCierres(String prefijo, LocalDate hastaInclusive) {
+        Object r = em.createNativeQuery(
+                "SELECT COALESCE(SUM(l.debito - l.credito),0) " +
+                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "WHERE cc.codigo LIKE :p AND a.fecha <= :h AND a.estado = 'CONFIRMADO' " +
+                "AND (a.documento_origen_tipo IS NULL OR a.documento_origen_tipo NOT IN ('CIERRE','APERTURA','SALDOS_INI'))")
+                .setParameter("p", prefijo + "%")
+                .setParameter("h", hastaInclusive)
+                .getSingleResult();
+        return r != null ? new BigDecimal(r.toString()) : BigDecimal.ZERO;
+    }
+
+    // Igual que saldoDMC pero excluye SOLO CIERRE y APERTURA (NO SALDOS_INI). Se usa para la
+    // variación de patrimonio (clase 3) en el flujo de efectivo: hay que netear el traslado de la
+    // utilidad del cierre, pero SÍ contar la aportación de capital inicial (SALDOS_INI del primer
+    // año), que es una fuente de financiación real; si se excluyera, el flujo no conciliaría.
+    @SuppressWarnings("unchecked")
+    private BigDecimal saldoDMCSinCierreApertura(String prefijo, LocalDate hastaInclusive) {
+        Object r = em.createNativeQuery(
+                "SELECT COALESCE(SUM(l.debito - l.credito),0) " +
+                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
+                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
+                "WHERE cc.codigo LIKE :p AND a.fecha <= :h AND a.estado = 'CONFIRMADO' " +
+                "AND (a.documento_origen_tipo IS NULL OR a.documento_origen_tipo NOT IN ('CIERRE','APERTURA'))")
+                .setParameter("p", prefijo + "%")
+                .setParameter("h", hastaInclusive)
+                .getSingleResult();
+        return r != null ? new BigDecimal(r.toString()) : BigDecimal.ZERO;
+    }
+
     /**
      * Estado de cambios en el patrimonio: por cada cuenta de patrimonio (clase 3)
      * con movimiento, muestra saldo inicial, aumentos (créditos), disminuciones
@@ -475,44 +510,62 @@ public class ReportesContablesController {
 
         LocalDate d = desde != null ? LocalDate.parse(desde) : LocalDate.now().withDayOfYear(1);
         LocalDate h = hasta != null ? LocalDate.parse(hasta) : LocalDate.now();
+        LocalDate anteriorDesde = d.minusDays(1);
+        LocalDate inicioAnioH = LocalDate.of(h.getYear(), 1, 1);
 
-        // Movimientos del período por cuenta de patrimonio (clase 3)
-        List<Object[]> rows = em.createNativeQuery(
-                "SELECT cc.cuenta_id, cc.codigo, cc.nombre, " +
-                "       COALESCE(SUM(l.credito),0) AS aumentos, COALESCE(SUM(l.debito),0) AS disminuciones " +
-                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
-                "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
-                "WHERE cc.codigo LIKE '3%' AND a.fecha BETWEEN :d AND :h AND a.estado = 'CONFIRMADO' " +
-                "GROUP BY cc.cuenta_id, cc.codigo, cc.nombre ORDER BY cc.codigo")
-                .setParameter("d", d)
-                .setParameter("h", h)
-                .getResultList();
-
-        // Saldo inicial por cuenta (crédito − débito antes de :d)
-        List<Object[]> ini = em.createNativeQuery(
-                "SELECT l.cuenta_contable_id, COALESCE(SUM(l.credito - l.debito),0) " +
-                "FROM asientos_contables a JOIN asientos_contables_lineas l ON l.asiento_id = a.id " +
-                "WHERE a.fecha < :d AND a.estado = 'CONFIRMADO' GROUP BY l.cuenta_contable_id")
-                .setParameter("d", d)
-                .getResultList();
-        Map<Integer, BigDecimal> iniMap = new HashMap<>();
-        for (Object[] r : ini) iniMap.put(((Number) r[0]).intValue(), new BigDecimal(r[1].toString()));
+        // ESTADO DE CAMBIOS EN EL PATRIMONIO — MATRICIAL POR COMPONENTE.
+        // Filas = componentes del patrimonio (grupos PUC clase 3), EXCEPTO el grupo 36
+        // (resultado del ejercicio), que se presenta con la UTILIDAD del P&G (excluyendo
+        // asientos de cierre/apertura) para conciliar exactamente con el Balance General.
+        String[][] comps = {
+            {"31", "Capital social"},
+            {"32", "Superávit de capital"},
+            {"33", "Reservas"},
+            {"34", "Revalorización del patrimonio"},
+            {"35", "Dividendos o participaciones decretados"},
+            {"37", "Resultados de ejercicios anteriores"},
+            {"38", "Superávit por valorizaciones"},
+        };
 
         List<Map<String, Object>> cuentas = new ArrayList<>();
         BigDecimal totIni = BigDecimal.ZERO, totAum = BigDecimal.ZERO, totDis = BigDecimal.ZERO, totFin = BigDecimal.ZERO;
-        for (Object[] r : rows) {
-            Integer ccId = ((Number) r[0]).intValue();
-            BigDecimal saldoIni = iniMap.getOrDefault(ccId, BigDecimal.ZERO);
-            BigDecimal aum = new BigDecimal(r[3].toString());
-            BigDecimal dis = new BigDecimal(r[4].toString());
-            BigDecimal fin = saldoIni.add(aum).subtract(dis);
-            totIni = totIni.add(saldoIni); totAum = totAum.add(aum); totDis = totDis.add(dis); totFin = totFin.add(fin);
+
+        for (String[] c : comps) {
+            // Naturaleza crédito → saldo = crédito − débito = −saldoDMC (que es débito − crédito).
+            BigDecimal ini = saldoDMC(c[0], anteriorDesde).negate();
+            BigDecimal fin = saldoDMC(c[0], h).negate();
+            if (ini.signum() == 0 && fin.signum() == 0) continue; // omitir componentes sin saldo
+            BigDecimal neto = fin.subtract(ini);
+            BigDecimal aum = neto.signum() > 0 ? neto : BigDecimal.ZERO;
+            BigDecimal dis = neto.signum() < 0 ? neto.negate() : BigDecimal.ZERO;
             Map<String, Object> m = new HashMap<>();
-            m.put("codigo", r[1]); m.put("nombre", r[2]);
-            m.put("saldoInicial", saldoIni); m.put("aumentos", aum);
+            m.put("codigo", c[0]); m.put("nombre", c[1]);
+            m.put("saldoInicial", ini); m.put("aumentos", aum);
             m.put("disminuciones", dis); m.put("saldoFinal", fin);
             cuentas.add(m);
+            totIni = totIni.add(ini); totAum = totAum.add(aum); totDis = totDis.add(dis); totFin = totFin.add(fin);
         }
+
+        // Componente "Resultado del ejercicio" = utilidad del P&G del año (excluye cierres).
+        java.util.function.BiFunction<LocalDate, LocalDate, BigDecimal> utilidad = (du, hu) -> {
+            if (du.isAfter(hu)) return BigDecimal.ZERO;
+            Map<String, BigDecimal> s = saldosPorCodigoEnPeriodoExcluyendoCierres(du, hu);
+            return sumaPorPrefijo(s, "4", true)
+                    .subtract(sumaPorPrefijo(s, "5", false))
+                    .subtract(sumaPorPrefijo(s, "6", false))
+                    .subtract(sumaPorPrefijo(s, "7", false));
+        };
+        BigDecimal resIni = utilidad.apply(inicioAnioH, anteriorDesde);
+        BigDecimal resFin = utilidad.apply(inicioAnioH, h);
+        BigDecimal resNeto = resFin.subtract(resIni);
+        BigDecimal resAum = resNeto.signum() > 0 ? resNeto : BigDecimal.ZERO;
+        BigDecimal resDis = resNeto.signum() < 0 ? resNeto.negate() : BigDecimal.ZERO;
+        Map<String, Object> mr = new HashMap<>();
+        mr.put("codigo", "36"); mr.put("nombre", "Resultado del ejercicio");
+        mr.put("saldoInicial", resIni); mr.put("aumentos", resAum);
+        mr.put("disminuciones", resDis); mr.put("saldoFinal", resFin);
+        cuentas.add(mr);
+        totIni = totIni.add(resIni); totAum = totAum.add(resAum); totDis = totDis.add(resDis); totFin = totFin.add(resFin);
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("desde", d.toString()); resp.put("hasta", h.toString());
@@ -546,8 +599,17 @@ public class ReportesContablesController {
         java.util.function.Function<String, BigDecimal> efectoCaja = (pref) -> delta.apply(pref).negate();
 
         // ── Operación ──
-        BigDecimal resultado = efectoCaja.apply("4").add(efectoCaja.apply("5"))
-                .add(efectoCaja.apply("6")).add(efectoCaja.apply("7")); // = utilidad del período
+        // Resultado del período SIN asientos de cierre/apertura: si el rango cruza el cierre
+        // anual, esos asientos netean 4−7 y colapsarían la utilidad. Usamos el delta limpio.
+        java.util.function.Function<String, BigDecimal> deltaSinCierre =
+                (pref) -> saldoDMCSinCierres(pref, h).subtract(saldoDMCSinCierres(pref, ini));
+        // Efecto en caja EXCLUYENDO solo CIERRE/APERTURA (NO SALDOS_INI): para el patrimonio (clase 3).
+        // Netea el traslado de la utilidad del cierre pero conserva la aportación de capital inicial
+        // (SALDOS_INI), de modo que el flujo concilia tanto al cruzar el cierre como en el primer año.
+        java.util.function.Function<String, BigDecimal> efectoCajaSinCierre =
+                (pref) -> saldoDMCSinCierreApertura(pref, h).subtract(saldoDMCSinCierreApertura(pref, ini)).negate();
+        BigDecimal resultado = deltaSinCierre.apply("4").add(deltaSinCierre.apply("5"))
+                .add(deltaSinCierre.apply("6")).add(deltaSinCierre.apply("7")).negate(); // = utilidad del período
         BigDecimal varDeudores   = efectoCaja.apply("13");
         BigDecimal varInventarios= efectoCaja.apply("14");
         BigDecimal varDiferidosAct = efectoCaja.apply("17");
@@ -569,7 +631,7 @@ public class ReportesContablesController {
         // ── Financiación ──
         BigDecimal varObligaciones = efectoCaja.apply("21");
         BigDecimal varBonos        = efectoCaja.apply("29"); // bonos / papeles comerciales (pasivo no corriente)
-        BigDecimal varPatrimonio   = efectoCaja.apply("3");
+        BigDecimal varPatrimonio   = efectoCajaSinCierre.apply("3");
         BigDecimal totalFinanciacion = varObligaciones.add(varBonos).add(varPatrimonio);
 
         BigDecimal netoComputado = totalOperacion.add(totalInversion).add(totalFinanciacion);
@@ -637,14 +699,26 @@ public class ReportesContablesController {
                                                      .subtract(sumaPorPrefijo(saldosPorCodigo, "4175", true));
         // 4175 sale como negativo, pero el dato que el usuario quiere ver es el valor positivo.
         BigDecimal devoluciones             = sumaPorPrefijo(saldosPorCodigo, "4175", true).negate();
-        BigDecimal ingresosNoOperacionales  = sumaPorPrefijo(saldosPorCodigo, "42", true);
+        // Ingresos NO operacionales = TODO lo de clase 4 que no es operacional (41). Se toma como
+        // el resto de la clase (4 − 41) en vez de solo 42, para no dejar fuera grupos como 43/44/
+        // 47/48 y que la Utilidad Neta concilie con la utilidad del Balance/ECP (clase 4−5−6−7).
+        BigDecimal ingresosNoOperacionales  = sumaPorPrefijo(saldosPorCodigo, "4", true)
+                                                     .subtract(sumaPorPrefijo(saldosPorCodigo, "41", true));
 
         // Gastos / costos = débitos − créditos (naturaleza débito)
-        BigDecimal costoVentas              = sumaPorPrefijo(saldosPorCodigo, "6", false);
+        // Incluye clase 6 (costo de ventas) Y clase 7 (costos de producción) para que la
+        // Utilidad Neta del P&G concilie con la Utilidad del ejercicio del Balance (4−5−6−7).
+        BigDecimal costoVentas              = sumaPorPrefijo(saldosPorCodigo, "6", false)
+                                                     .add(sumaPorPrefijo(saldosPorCodigo, "7", false));
         BigDecimal gastosAdmin              = sumaPorPrefijo(saldosPorCodigo, "51", false);
         BigDecimal gastosVentas             = sumaPorPrefijo(saldosPorCodigo, "52", false);
-        BigDecimal gastosNoOperacionales    = sumaPorPrefijo(saldosPorCodigo, "53", false);
         BigDecimal impuestoRenta            = sumaPorPrefijo(saldosPorCodigo, "54", false);
+        // Gastos NO operacionales = resto de la clase 5 (5 − 51 − 52 − 54). Antes solo tomaba 53,
+        // dejando fuera grupos como 55/59 y descuadrando la Utilidad Neta frente al Balance/ECP.
+        BigDecimal gastosNoOperacionales    = sumaPorPrefijo(saldosPorCodigo, "5", false)
+                                                     .subtract(sumaPorPrefijo(saldosPorCodigo, "51", false))
+                                                     .subtract(sumaPorPrefijo(saldosPorCodigo, "52", false))
+                                                     .subtract(sumaPorPrefijo(saldosPorCodigo, "54", false));
 
         // Cálculos intermedios (Decreto 2649)
         BigDecimal ingresosOperacionales = ingresosOperacionalesBrutos;
@@ -654,11 +728,27 @@ public class ReportesContablesController {
         BigDecimal utilidadAntesImp   = utilidadOperacional.add(ingresosNoOperacionales).subtract(gastosNoOperacionales);
         BigDecimal utilidadNeta       = utilidadAntesImp.subtract(impuestoRenta);
 
-        // Detalle por cuenta (para mostrar líneas en el reporte)
-        List<Map<String, Object>> detalleIngresos    = detalleClase(saldosPorCodigo, "4", true);
-        List<Map<String, Object>> detalleCostos      = detalleClase(saldosPorCodigo, "6", false);
+        // Detalle por cuenta (líneas del reporte), alineado con los subtotales:
+        //  - Ingresos operacionales = grupo 41 (mismo que ingresosOperacionalesBrutos).
+        //  - Costo de ventas = clases 6 Y 7 (igual que el subtotal costoVentas).
+        //  - Gastos operacionales = 51 y 52.
+        //  - No operacionales = resto de clase 4 (ingresos, excepto 41) + resto de clase 5
+        //    (gastos, excepto 51/52/54), para que las líneas sumen los subtotales no operacionales.
+        // Excluir 4175 (devoluciones en ventas): ya se presenta como renglón aparte "(-) Devoluciones",
+        // y el subtotal de ingresos operacionales es el bruto; incluirla aquí la mostraría dos veces.
+        List<Map<String, Object>> detalleIngresos    = detalleClase(saldosPorCodigo, "41", true).stream()
+                .filter(m -> !String.valueOf(m.get("codigo")).startsWith("4175"))
+                .collect(java.util.stream.Collectors.toList());
+        List<Map<String, Object>> detalleCostos      = detalleClasePorPrefijos(saldosPorCodigo, java.util.Arrays.asList("6","7"), false);
         List<Map<String, Object>> detalleGastosOp    = detalleClasePorPrefijos(saldosPorCodigo, java.util.Arrays.asList("51","52"), false);
-        List<Map<String, Object>> detalleNoOp        = detalleClasePorPrefijos(saldosPorCodigo, java.util.Arrays.asList("42","53"), false);
+        List<Map<String, Object>> detalleNoOp        = new java.util.ArrayList<>();
+        detalleClase(saldosPorCodigo, "4", true).stream()
+                .filter(m -> !String.valueOf(m.get("codigo")).startsWith("41"))
+                .forEach(detalleNoOp::add);
+        detalleClase(saldosPorCodigo, "5", false).stream()
+                .filter(m -> { String c = String.valueOf(m.get("codigo"));
+                               return !c.startsWith("51") && !c.startsWith("52") && !c.startsWith("54"); })
+                .forEach(detalleNoOp::add);
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("desde", d);
@@ -709,8 +799,10 @@ public class ReportesContablesController {
 
         // ── Excepciones PUC: cuentas dentro de clase 2 que son naturaleza DÉBITO
         //    (IVA descontable, anticipos de impuestos) — tratar como ACTIVO en el reporte.
-        BigDecimal ivaDescontableActivo = getOrZero(saldosActivos, "240810");      // 240810 saldo DB
-        BigDecimal ivaDescontableEnPasivos = getOrZero(saldosPasivosPat, "240810"); // -DB en pasivos
+        // Suma por PREFIJO 240810 (no código exacto): el IVA descontable puede postearse a una
+        // subcuenta más profunda (p. ej. 24081005), y una igualdad exacta no la encontraría.
+        BigDecimal ivaDescontableActivo = sumaClaveConPrefijo(saldosActivos, "240810");      // saldo DB
+        BigDecimal ivaDescontableEnPasivos = sumaClaveConPrefijo(saldosPasivosPat, "240810"); // -DB en pasivos
 
         // Activos (clase 1) + IVA descontable y anticipos de impuestos (excepciones de clase 2)
         BigDecimal activosCorrientes = sumaPorPrefijo(saldosActivos, "11", true)
@@ -755,15 +847,18 @@ public class ReportesContablesController {
                 .add(sumaPorPrefijo(saldosAnioActual, "7", false));
         BigDecimal utilidadEjercicio = ingresosAnio.subtract(gastosCostosAnio);
 
-        // F6 fix: NO sumar el saldo de 3605 al patrimonio base si la utilidad ya se calcula
-        // arriba — sería contar dos veces. Excluir 360x del patrimonioBase.
-        BigDecimal saldo3605 = BigDecimal.ZERO;
+        // NO sumar el resultado del ejercicio al patrimonio base: la utilidad ya se calcula arriba
+        // desde el P&G y se suma como línea aparte; incluirlo aquí lo contaría dos veces. Se excluye
+        // TODO el grupo 36 (36 = resultado del ejercicio: 3605 utilidad y 3610 pérdida), el MISMO
+        // criterio que usa el Estado de Cambios en el Patrimonio (ECP), para que ambos reportes
+        // concilien incluso si existe una 36xx distinta de 3605 (p. ej. 3610).
+        BigDecimal saldoResultadoEjercicio = BigDecimal.ZERO;
         for (Map.Entry<String, BigDecimal> e : saldosPasivosPat.entrySet()) {
-            if (e.getKey() != null && e.getKey().startsWith("3605")) {
-                saldo3605 = saldo3605.add(e.getValue());
+            if (e.getKey() != null && e.getKey().startsWith("36")) {
+                saldoResultadoEjercicio = saldoResultadoEjercicio.add(e.getValue());
             }
         }
-        BigDecimal patrimonioBaseSinResEjercicio = patrimonioBase.subtract(saldo3605);
+        BigDecimal patrimonioBaseSinResEjercicio = patrimonioBase.subtract(saldoResultadoEjercicio);
 
         BigDecimal totalPatrimonio = patrimonioBaseSinResEjercicio.add(utilidadEjercicio);
         BigDecimal totalPasivoMasPatrimonio = totalPasivos.add(totalPatrimonio);
@@ -773,6 +868,15 @@ public class ReportesContablesController {
         List<Map<String, Object>> detalleActivos    = detalleClase(saldosActivos, "1", true);
         List<Map<String, Object>> detallePasivos    = detalleClase(saldosPasivosPat, "2", true);
         List<Map<String, Object>> detallePatrimonio = detalleClase(saldosPasivosPat, "3", true);
+        // Excluir el resultado del ejercicio (grupo 36) del detalle de patrimonio: el TOTAL ya lo
+        // reemplaza por la utilidad recomputada (utilidadEjercicio) y el front la muestra como
+        // línea aparte "Utilidad del ejercicio". Si se dejara aquí, tras el asiento de cierre el
+        // grupo 36 tendría saldo y el resultado se contaría DOS veces → el detalle no sumaría el
+        // TOTAL PATRIMONIO. Mismo criterio (grupo 36) que el total y que el ECP.
+        detallePatrimonio.removeIf(m -> {
+            Object cod = m.get("codigo");
+            return cod != null && cod.toString().startsWith("36");
+        });
 
         // Reubicar 240810 IVA descontable: sacar de pasivos, agregar a activos.
         detallePasivos.removeIf(m -> {
@@ -798,6 +902,9 @@ public class ReportesContablesController {
         resp.put("pasivosCorrientes", pasivosCorrientes);
         resp.put("pasivosNoCorrientes", pasivosNoCorrientes);
         resp.put("patrimonioBase", patrimonioBase);
+        // Patrimonio base SIN el resultado del ejercicio (grupo 36). La vista comparativa debe
+        // usar este valor + "Utilidad del ejercicio" para no doble-contar el resultado tras el cierre.
+        resp.put("patrimonioBaseSinResultado", patrimonioBaseSinResEjercicio);
         resp.put("utilidadEjercicio", utilidadEjercicio);
         resp.put("totalPatrimonio", totalPatrimonio);
         resp.put("totalPasivoMasPatrimonio", totalPasivoMasPatrimonio);
@@ -836,7 +943,7 @@ public class ReportesContablesController {
                 "JOIN asientos_contables a ON a.id = l.asiento_id " +
                 "JOIN cuentas_contables cc ON cc.cuenta_id = l.cuenta_contable_id " +
                 "WHERE a.fecha BETWEEN :d AND :h AND a.estado = 'CONFIRMADO' " +
-                "  AND (a.documento_origen_tipo IS NULL OR a.documento_origen_tipo NOT IN ('CIERRE','APERTURA')) " +
+                "  AND (a.documento_origen_tipo IS NULL OR a.documento_origen_tipo NOT IN ('CIERRE','APERTURA','SALDOS_INI')) " +
                 "GROUP BY cc.codigo")
                 .setParameter("d", d).setParameter("h", h).getResultList();
         return mapearSaldos(rows);
@@ -882,6 +989,18 @@ public class ReportesContablesController {
     private BigDecimal getOrZero(Map<String, BigDecimal> saldos, String codigo) {
         BigDecimal v = saldos.get(codigo);
         return v != null ? v : BigDecimal.ZERO;
+    }
+
+    /** Suma el saldo de todas las cuentas cuyo código EMPIEZA por el prefijo (para reubicar IVA
+     *  descontable/anticipos aunque se posteen a subcuentas más profundas). */
+    private BigDecimal sumaClaveConPrefijo(Map<String, BigDecimal> saldos, String prefijo) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (Map.Entry<String, BigDecimal> e : saldos.entrySet()) {
+            if (e.getKey() != null && e.getKey().startsWith(prefijo) && e.getValue() != null) {
+                total = total.add(e.getValue());
+            }
+        }
+        return total;
     }
 
     /** Suma valores de cuentas cuyo código empieza con un prefijo. */

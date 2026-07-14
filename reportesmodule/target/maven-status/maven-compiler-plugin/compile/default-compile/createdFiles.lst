@@ -20,6 +20,7 @@ com\pazzioliweb\reportesmodule\dtos\VentasPorClienteDTO.class
 com\pazzioliweb\reportesmodule\dtos\CarteraDetalleDTO.class
 com\pazzioliweb\reportesmodule\dtos\ProductoSinMovimientoDTO.class
 com\pazzioliweb\reportesmodule\repository\ReportesRepository.class
+com\pazzioliweb\reportesmodule\dtos\CertificadoRetencionDTO.class
 com\pazzioliweb\reportesmodule\dtos\AnulacionDTO.class
 com\pazzioliweb\reportesmodule\dtos\VentasPorMetodoPagoDTO.class
 com\pazzioliweb\reportesmodule\dtos\AbcProductoDTO.class
@@ -39,6 +40,7 @@ com\pazzioliweb\reportesmodule\controller\ReportesController.class
 com\pazzioliweb\reportesmodule\dtos\FacturacionVsRecaudoDTO.class
 com\pazzioliweb\reportesmodule\dtos\MiReciboDTO.class
 com\pazzioliweb\reportesmodule\dtos\CuentaPorPagarDetalleDTO.class
+com\pazzioliweb\reportesmodule\dtos\CertificadoRetencionDocDTO.class
 com\pazzioliweb\reportesmodule\dtos\DashboardResumenDTO.class
 com\pazzioliweb\reportesmodule\dtos\CuentasPorPagarResumenDTO.class
 com\pazzioliweb\reportesmodule\dtos\VentasPorCajeroDTO.class

@@ -139,6 +139,24 @@ public class AsientoContableService {
                 + " (diferencia " + diff + ") para documento " + documentoOrigenTipo + " #" + documentoOrigenId);
         }
 
+        // Cuadre EXACTO: si hay una diferencia de redondeo (≤ 0.02), ajústala en la última
+        // línea del lado deficitario para NO persistir un asiento descuadrado (evita que el
+        // balance de comprobación derive por acumulación de centavos).
+        BigDecimal ajuste = totalDebito.subtract(totalCredito);
+        if (ajuste.signum() != 0) {
+            if (ajuste.signum() > 0) {
+                for (int i = validas.size() - 1; i >= 0; i--) {
+                    if (validas.get(i).credito.signum() > 0) { validas.get(i).credito = validas.get(i).credito.add(ajuste); break; }
+                }
+            } else {
+                for (int i = validas.size() - 1; i >= 0; i--) {
+                    if (validas.get(i).debito.signum() > 0) { validas.get(i).debito = validas.get(i).debito.subtract(ajuste); break; }
+                }
+            }
+            totalDebito = validas.stream().map(l -> l.debito).reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalCredito = validas.stream().map(l -> l.credito).reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
         LocalDate fechaAsiento = fecha != null ? fecha : LocalDate.now();
 
         // Validar periodo contable. Si el mes/año del asiento está CERRADO,
@@ -147,7 +165,8 @@ public class AsientoContableService {
         // EXCEPCIÓN: los asientos de CIERRE/APERTURA son el mecanismo mismo del
         // cierre anual y deben poder emitirse sobre un periodo cerrado (si no, el
         // cierre anual —que exige los 12 meses cerrados— nunca podría generarlos).
-        boolean esCierreOApertura = "CIERRE".equals(documentoOrigenTipo) || "APERTURA".equals(documentoOrigenTipo);
+        boolean esCierreOApertura = "CIERRE".equals(documentoOrigenTipo) || "APERTURA".equals(documentoOrigenTipo)
+                || "SALDOS_INI".equals(documentoOrigenTipo);
         if (!esCierreOApertura && periodoService.estaCerrado(fechaAsiento)) {
             throw new PeriodoCerradoException(
                 "Periodo contable " + fechaAsiento.getMonthValue() + "/" + fechaAsiento.getYear() +
@@ -179,6 +198,14 @@ public class AsientoContableService {
                 throw new IllegalStateException(
                     "La cuenta '" + cc.getCodigo() + " - " + cc.getNombre() + "' es una cuenta PADRE " +
                     "y no admite movimientos. Use una subcuenta hoja del árbol contable."
+                );
+            }
+
+            // Validación 1b: la cuenta debe estar ACTIVA. Una cuenta inactivada no puede
+            // seguir recibiendo movimientos (ni manuales ni automáticos).
+            if (cc.getEstado() != null && !"ACTIVO".equalsIgnoreCase(cc.getEstado())) {
+                throw new IllegalStateException(
+                    "La cuenta '" + cc.getCodigo() + " - " + cc.getNombre() + "' está INACTIVA y no admite movimientos."
                 );
             }
 
@@ -215,6 +242,14 @@ public class AsientoContableService {
                 }
             }
 
+            // Validación 4: centro de costo obligatorio si la cuenta lo exige.
+            if (Boolean.TRUE.equals(cc.getRequiereCentroCosto())
+                    && (ldto.centroCostoId == null || ldto.centroCostoId == 0)) {
+                throw new IllegalStateException(
+                    "La cuenta '" + cc.getCodigo() + " - " + cc.getNombre() + "' exige centro de costo, " +
+                    "pero la línea no lo trae. Doc: " + documentoOrigenTipo + " #" + documentoOrigenId);
+            }
+
             AsientoContableLinea linea = new AsientoContableLinea();
             linea.setAsiento(asiento);
             linea.setCuentaContable(cc);
@@ -230,6 +265,39 @@ public class AsientoContableService {
         }
 
         return asientoRepo.save(asiento);
+    }
+
+    /**
+     * Anula un asiento MANUAL (o contable interno) por id: lo marca ANULADO sin borrar.
+     * No permite anular asientos ligados a un documento operativo (FC/VC/CC/CR/RC/CE/DV):
+     * esos se anulan desde su propio documento para mantener la trazabilidad.
+     * Rechaza si el periodo del asiento está cerrado.
+     */
+    @Transactional
+    public void anularPorId(Long id) {
+        AsientoContable a = asientoRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Asiento no encontrado: " + id));
+        if ("ANULADO".equals(a.getEstado())) {
+            throw new IllegalStateException("El asiento ya está anulado.");
+        }
+        String t = a.getDocumentoOrigenTipo();
+        // Solo se permite anular manualmente asientos MANUAL. Los tipos DEP (depreciación), BAJA
+        // (baja de activo) y SALDOS_INI llevan estado asociado (ficha del activo, saldos iniciales):
+        // anular solo el asiento los dejaría desincronizados. Deben revertirse por su propio flujo
+        // (regenerar depreciación / reversar baja / editar saldos iniciales).
+        boolean esManual = t == null || "MANUAL".equalsIgnoreCase(t);
+        if (!esManual) {
+            String guia = ("DEP".equalsIgnoreCase(t) || "BAJA".equalsIgnoreCase(t))
+                    ? " Use el módulo de Activos Fijos (regenerar depreciación / reversar baja)."
+                    : ("SALDOS_INI".equalsIgnoreCase(t) ? " Edítelo desde Saldos Iniciales." : " Anúlelo desde su documento origen.");
+            throw new IllegalStateException("Este asiento (" + t + ") no se puede anular directamente." + guia);
+        }
+        if (periodoService.estaCerrado(a.getFecha())) {
+            throw new PeriodoCerradoException("El periodo " + a.getFecha().getMonthValue() + "/" + a.getFecha().getYear()
+                    + " está CERRADO. Reábralo para poder anular este asiento.");
+        }
+        a.setEstado("ANULADO");
+        asientoRepo.save(a);
     }
 
     /** Anula el asiento de un documento (lo marca como ANULADO sin borrar). */

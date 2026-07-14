@@ -36,8 +36,12 @@ public class CuentaPorCobrarServiceImpl implements CuentaPorCobrarService {
         cxc.setVenta(venta);
         cxc.setValorNeto(montoCredito);
         cxc.setSaldo(montoCredito);
-        cxc.setFechaEmision(LocalDate.now());
-        cxc.setFechaVencimiento(LocalDate.now().plusDays(plazoDias));
+        // Emisión y vencimiento se anclan a la FECHA DE EMISIÓN de la venta (no a "hoy"), para
+        // que la cartera y la mora queden fechadas de forma coherente con el asiento y con la
+        // factura, incluso si la venta se completa en un día distinto o con fecha retroactiva.
+        LocalDate fechaBase = venta.getFechaEmision() != null ? venta.getFechaEmision() : LocalDate.now();
+        cxc.setFechaEmision(fechaBase);
+        cxc.setFechaVencimiento(fechaBase.plusDays(plazoDias));
         cxc.setPlazoDias(plazoDias);
         cxc.setEstado("PENDIENTE");
 
@@ -53,7 +57,7 @@ public class CuentaPorCobrarServiceImpl implements CuentaPorCobrarService {
     @Override
     @Transactional(readOnly = true)
     public List<CuentaPorCobrarDTO> listarPendientes() {
-        return cxcRepository.findByEstadoIn(List.of("PENDIENTE", "PARCIAL"))
+        return cxcRepository.findByEstadoIn(List.of("PENDIENTE", "PARCIAL", "VENCIDA"))
                 .stream().map(this::toDTO).collect(Collectors.toList());
     }
 

@@ -60,6 +60,16 @@ public class Devolucion {
     @Column(name = "usuario_creacion", nullable = false)
     private String usuarioCreacion;
 
+    /** ── Datos de anulación (cuando estado = ANULADA) ─── */
+    @Column(name = "motivo_anulacion", length = 300)
+    private String motivoAnulacion;
+
+    @Column(name = "fecha_anulacion")
+    private LocalDate fechaAnulacion;
+
+    @Column(name = "usuario_anulacion", length = 100)
+    private String usuarioAnulacion;
+
     /** Cajero que registró la devolución (puede ser null si no hay sesión activa) */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cajero_id")

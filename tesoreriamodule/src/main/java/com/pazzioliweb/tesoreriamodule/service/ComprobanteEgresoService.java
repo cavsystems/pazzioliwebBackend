@@ -156,7 +156,18 @@ public class ComprobanteEgresoService {
         egreso.setRetefuente(dto.getRetefuente() != null ? dto.getRetefuente() : BigDecimal.ZERO);
         egreso.setReteica(dto.getReteica() != null ? dto.getReteica() : BigDecimal.ZERO);
         egreso.setReteiva(dto.getReteiva() != null ? dto.getReteiva() : BigDecimal.ZERO);
+        // Blindaje contable: la retención practicada al proveedor se causó AL FACTURAR la compra
+        // (la CxP quedó por el neto y 2365xx se acreditó en la compra). En un pago a CxP NO se
+        // vuelve a practicar; hacerlo duplicaría la retención por pagar y pagaría de menos al
+        // proveedor. Solo el concepto abierto (pago que no proviene de una compra) puede llevar
+        // retención practicada.
+        if (!esConceptoAbierto) {
+            egreso.setRetefuente(BigDecimal.ZERO);
+            egreso.setReteica(BigDecimal.ZERO);
+            egreso.setReteiva(BigDecimal.ZERO);
+        }
         egreso.setDescuento(dto.getDescuento() != null ? dto.getDescuento() : BigDecimal.ZERO);
+        egreso.setSaldoFavorUsado(dto.getSaldoFavorUsado() != null ? dto.getSaldoFavorUsado() : BigDecimal.ZERO);
         egreso.setConcepto(dto.getConcepto());
         egreso.setCentroCosto(dto.getCentroCosto());
         egreso.setCajeroId(dto.getCajeroId());
@@ -188,6 +199,14 @@ public class ComprobanteEgresoService {
             }
         } else if (esConceptoAbierto) {
             // No concept category selected — just use the provided concepto text
+        }
+
+        // Un egreso de CONCEPTO ABIERTO exige cuenta contable: es la contrapartida (gasto/pasivo)
+        // del asiento. Sin ella el asiento se omitía en silencio, dejando un egreso con salida de
+        // caja pero sin efecto contable. Se valida antes de guardar para rechazarlo con claridad.
+        if (esConceptoAbierto && egreso.getCuentaContable() == null) {
+            throw new RuntimeException("El comprobante de egreso de concepto abierto requiere una "
+                    + "cuenta contable (la contrapartida del pago). Seleccione la cuenta o el concepto configurado.");
         }
 
         // Tercero (solo si NO es concepto abierto)
@@ -229,6 +248,17 @@ public class ComprobanteEgresoService {
                 CuentaPorPagar cxp = cxpRepository.findById(detDto.getCuentaPorPagarId())
                         .orElseThrow(() -> new RuntimeException("CxP no encontrada: " + detDto.getCuentaPorPagarId()));
 
+                // Integridad del pago: la CxP debe estar pendiente, ser del mismo proveedor del
+                // egreso, y el pago no puede exceder el saldo.
+                if ("ANULADA".equalsIgnoreCase(cxp.getEstado()) || "PAGADA".equalsIgnoreCase(cxp.getEstado()))
+                    throw new RuntimeException("La cuenta por pagar " + cxp.getId() + " no está pendiente (estado " + cxp.getEstado() + ").");
+                if (egreso.getTercero() != null && cxp.getProveedor() != null && cxp.getProveedor().getTerceroId() != null
+                        && !cxp.getProveedor().getTerceroId().equals(egreso.getTercero().getTerceroId()))
+                    throw new RuntimeException("La cuenta por pagar " + cxp.getId() + " no pertenece al proveedor del egreso.");
+                BigDecimal saldoCxp = cxp.getSaldo() != null ? cxp.getSaldo() : (cxp.getValorNeto() != null ? cxp.getValorNeto() : BigDecimal.ZERO);
+                if (detDto.getMontoAbonado() != null && detDto.getMontoAbonado().subtract(saldoCxp).compareTo(new BigDecimal("0.01")) > 0)
+                    throw new RuntimeException("El pago (" + detDto.getMontoAbonado() + ") excede el saldo de la cuenta por pagar (" + saldoCxp + ").");
+
                 DetalleComprobanteEgreso detalle = new DetalleComprobanteEgreso();
                 detalle.setComprobanteEgreso(egreso);
                 detalle.setCuentaPorPagar(cxp);
@@ -258,6 +288,17 @@ public class ComprobanteEgresoService {
                 .add(egreso.getDescuento());
         egreso.setTotal(subtotal.subtract(totalRetenciones));
 
+        // Cobertura backend: Σ(medios) + saldo a favor usado debe igualar el total a pagar (invariante
+        // que hace cuadrar el asiento). Antes solo lo validaba el front → llamada directa dejaba fallido.
+        BigDecimal sumaMediosCE = egreso.getMediosPago().stream()
+                .map(m -> m.getMonto() != null ? m.getMonto() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cubiertoCE = sumaMediosCE.add(egreso.getSaldoFavorUsado());
+        if (cubiertoCE.subtract(egreso.getTotal()).abs().compareTo(BigDecimal.ONE) > 0) {
+            throw new RuntimeException("Los medios de pago ($" + sumaMediosCE + ") más el saldo a favor ($"
+                    + egreso.getSaldoFavorUsado() + ") no cuadran con el total a pagar ($" + egreso.getTotal() + ").");
+        }
+
         egreso = egresoRepository.save(egreso);
 
         // Procesar saldo a favor de la empresa usado
@@ -265,6 +306,10 @@ public class ComprobanteEgresoService {
             if (egreso.getTercero() != null) {
                 Terceros tercero = egreso.getTercero();
                 Double saldoActual = tercero.getSaldofavorEmpresa() != null ? tercero.getSaldofavorEmpresa() : 0.0;
+                // No permitir consumir más saldo a favor del disponible (quedaría negativo).
+                if (dto.getSaldoFavorUsado().doubleValue() > saldoActual + 0.01)
+                    throw new RuntimeException("El saldo a favor usado (" + dto.getSaldoFavorUsado()
+                            + ") excede el disponible del proveedor (" + saldoActual + ").");
                 Double nuevoSaldo = saldoActual - dto.getSaldoFavorUsado().doubleValue();
                 tercero.setSaldofavorEmpresa(nuevoSaldo);
                 tercerosRepository.save(tercero);
@@ -335,12 +380,38 @@ public class ComprobanteEgresoService {
             java.math.BigDecimal rf = egreso.getRetefuente() != null ? egreso.getRetefuente() : java.math.BigDecimal.ZERO;
             java.math.BigDecimal rv = egreso.getReteiva()    != null ? egreso.getReteiva()    : java.math.BigDecimal.ZERO;
             java.math.BigDecimal rc = egreso.getReteica()    != null ? egreso.getReteica()    : java.math.BigDecimal.ZERO;
-            boolean hayRet = !esCA && (rf.compareTo(java.math.BigDecimal.ZERO) > 0
-                                    || rv.compareTo(java.math.BigDecimal.ZERO) > 0
-                                    || rc.compareTo(java.math.BigDecimal.ZERO) > 0);
+            // La retención se acredita a 2365xx tanto en pago de CxP (aunque para CxP ya se anuló
+            // arriba porque se causó en la compra) como en CONCEPTO ABIERTO (pago de honorarios,
+            // arriendos, servicios sin compra previa: la retención se practica y contabiliza aquí).
+            // Sin esto, en concepto abierto la retención se restaba del pago pero no se acreditaba
+            // → el asiento descuadraba y el egreso quedaba sin asiento.
+            // Cuentas de retención por pagar: solo se ACREDITA (y por tanto solo se incluye en el
+            // débito a la contrapartida) la retención cuya cuenta 2365xx exista en el PUC. Así el
+            // asiento cuadra aunque falte alguna cuenta (antes el débito sumaba la retención completa
+            // pero el crédito se omitía si faltaba la cuenta → descuadre → asiento fallido).
+            final java.util.Optional<CuentaContable> ctaRf = rf.compareTo(java.math.BigDecimal.ZERO) > 0
+                    ? configContable.retefuentePagar() : java.util.Optional.empty();
+            final java.util.Optional<CuentaContable> ctaRv = rv.compareTo(java.math.BigDecimal.ZERO) > 0
+                    ? configContable.reteivaPagar() : java.util.Optional.empty();
+            final java.util.Optional<CuentaContable> ctaRc = rc.compareTo(java.math.BigDecimal.ZERO) > 0
+                    ? configContable.reteicaPagar() : java.util.Optional.empty();
+            final java.math.BigDecimal rfPost = ctaRf.isPresent() ? rf : java.math.BigDecimal.ZERO;
+            final java.math.BigDecimal rvPost = ctaRv.isPresent() ? rv : java.math.BigDecimal.ZERO;
+            final java.math.BigDecimal rcPost = ctaRc.isPresent() ? rc : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal retPosted = rfPost.add(rvPost).add(rcPost);
 
-            // DÉBITO CxP: si hay retenciones usamos BRUTO (subtotal), si no usamos NETO (total)
-            java.math.BigDecimal montoDebitoContrapartida = hayRet ? egreso.getSubtotal() : egreso.getTotal();
+            // Descuento por pronto pago que nos concede el proveedor = INGRESO (421040).
+            final java.math.BigDecimal descE = egreso.getDescuento() != null ? egreso.getDescuento() : java.math.BigDecimal.ZERO;
+            final java.util.Optional<CuentaContable> ctaDescE = (descE.compareTo(java.math.BigDecimal.ZERO) > 0)
+                    ? configContable.descuentoCondicionado() : java.util.Optional.empty();
+            boolean postDescE = ctaDescE.isPresent();
+
+            // DÉBITO a la contrapartida (CxP/concepto): si contabilizamos el descuento como ingreso,
+            // se salda por el BRUTO (subtotal) y el descuento se acredita aparte; si no, se usa el
+            // neto más la retención EFECTIVAMENTE acreditable (retPosted) para que igual cuadre.
+            java.math.BigDecimal montoDebitoContrapartida = postDescE
+                    ? egreso.getSubtotal()
+                    : egreso.getTotal().add(retPosted);
             AsientoContableService.LineaDTO debitoLinea = AsientoContableService.LineaDTO
                     .debito(contrapartida.getId(), montoDebitoContrapartida, desc);
             if (egreso.getTercero() != null) {
@@ -348,33 +419,47 @@ public class ComprobanteEgresoService {
             }
             lineas.add(debitoLinea);
 
-            // CRÉDITO retenciones a pagar (236505, 236540, 236570) cuando practicamos retención al proveedor
-            if (hayRet) {
-                Integer tercId = egreso.getTercero() != null ? egreso.getTercero().getTerceroId() : null;
-                String tercNom = egreso.getTerceroNombre();
-                if (rf.compareTo(java.math.BigDecimal.ZERO) > 0) {
-                    configContable.retefuentePagar().ifPresent(cta -> {
-                        AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
-                                .credito(cta.getId(), rf, "ReteFuente retenida a proveedor");
-                        if (tercId != null) l.conTercero(tercId, tercNom);
-                        lineas.add(l);
-                    });
-                }
-                if (rv.compareTo(java.math.BigDecimal.ZERO) > 0) {
-                    configContable.reteivaPagar().ifPresent(cta -> {
-                        AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
-                                .credito(cta.getId(), rv, "ReteIVA retenida a proveedor");
-                        if (tercId != null) l.conTercero(tercId, tercNom);
-                        lineas.add(l);
-                    });
-                }
-                if (rc.compareTo(java.math.BigDecimal.ZERO) > 0) {
-                    configContable.reteicaPagar().ifPresent(cta -> {
-                        AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
-                                .credito(cta.getId(), rc, "ReteICA retenida a proveedor");
-                        if (tercId != null) l.conTercero(tercId, tercNom);
-                        lineas.add(l);
-                    });
+            // CRÉDITO retenciones a pagar (236505, 236540, 236570) — solo las que tienen cuenta.
+            Integer tercId = egreso.getTercero() != null ? egreso.getTercero().getTerceroId() : null;
+            String tercNom = egreso.getTerceroNombre();
+            ctaRf.ifPresent(cta -> {
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .credito(cta.getId(), rf, "ReteFuente retenida a proveedor");
+                if (tercId != null) l.conTercero(tercId, tercNom);
+                lineas.add(l);
+            });
+            ctaRv.ifPresent(cta -> {
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .credito(cta.getId(), rv, "ReteIVA retenida a proveedor");
+                if (tercId != null) l.conTercero(tercId, tercNom);
+                lineas.add(l);
+            });
+            ctaRc.ifPresent(cta -> {
+                AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                        .credito(cta.getId(), rc, "ReteICA retenida a proveedor");
+                if (tercId != null) l.conTercero(tercId, tercNom);
+                lineas.add(l);
+            });
+
+            // CRÉDITO descuento pronto pago recibido (ingreso). Solo si hay cuenta y se saldó al bruto.
+            if (postDescE) {
+                ctaDescE.ifPresent(cta -> lineas.add(AsientoContableService.LineaDTO
+                        .credito(cta.getId(), descE, "Descuento pronto pago del proveedor")));
+            }
+
+            // Saldo a favor de la empresa (anticipo al proveedor) consumido: se ACREDITA a Anticipos
+            // y avances (1330), bajando ese activo. Junto con los medios (que suman total − saldoFavor)
+            // cuadra el débito a la contrapartida. Sin esto el asiento descuadraba y quedaba fallido.
+            java.math.BigDecimal saldoFavorCE = egreso.getSaldoFavorUsado() != null ? egreso.getSaldoFavorUsado() : java.math.BigDecimal.ZERO;
+            if (saldoFavorCE.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                CuentaContable ctaAntProv = configContable.anticipoProveedores().orElse(null);
+                if (ctaAntProv != null) {
+                    AsientoContableService.LineaDTO l = AsientoContableService.LineaDTO
+                            .credito(ctaAntProv.getId(), saldoFavorCE, "Anticipo al proveedor aplicado");
+                    if (tercId != null) l.conTercero(tercId, tercNom);
+                    lineas.add(l);
+                } else {
+                    System.out.println("[AsientoCE] Cuenta 1330 (anticipos a proveedores) no configurada; el saldo a favor no se contabiliza.");
                 }
             }
 
@@ -523,6 +608,27 @@ public class ComprobanteEgresoService {
         egreso.setAnuladoPorUsuarioId(usuarioId);
         egreso = egresoRepository.save(egreso);
 
+        // Reversar el asiento contable del egreso (marca el asiento como ANULADO).
+        // Sin esto, la CxP y la caja se corregían pero el mayor seguía mostrando el pago
+        // → balance descuadrado contra cartera y arqueo. Idempotente si el asiento no existe.
+        asientoService.anularAsientoDeDocumento("CE", egreso.getId());
+
+        // Reponer el saldo a favor de la empresa (anticipo al proveedor) que este egreso consumió.
+        if (egreso.getSaldoFavorUsado() != null
+                && egreso.getSaldoFavorUsado().compareTo(BigDecimal.ZERO) > 0
+                && egreso.getTercero() != null) {
+            try {
+                Terceros t = egreso.getTercero();
+                double actual = t.getSaldofavorEmpresa() != null ? t.getSaldofavorEmpresa() : 0.0;
+                double repuesto = actual + egreso.getSaldoFavorUsado().doubleValue();
+                t.setSaldofavorEmpresa(repuesto);
+                tercerosRepository.save(t);
+                saldoWebSocketBroadcastService.notificarSaldoActualizado(t.getTerceroId(), repuesto);
+            } catch (Exception ex) {
+                System.out.println("[AnularCE] Error reponiendo saldo a favor empresa: " + ex.getMessage());
+            }
+        }
+
         registrarAnulacionCajero(egreso);
         return toResponse(egreso);
     }
@@ -541,16 +647,19 @@ public class ComprobanteEgresoService {
                     else montoElectronico = montoElectronico.add(mp.getMonto());
                 }
             }
-            // Anular un EGRESO = ingreso de vuelta a caja → signo positivo
+            // El CE restó de la caja con tipo EGRESO (signo −1) y montos POSITIVOS → neto −total.
+            // Para reversar (devolver a caja) se usa ANULACION (signo −1) con montos NEGADOS → el
+            // enum aplica el signo y el neto queda +total. Antes se pasaban positivos y, con el
+            // signo −1 del enum, el resultado era −total → duplicaba la salida de caja.
             detalleCajeroService.registrarMovimiento(
                     detalleCajeroId,
                     MovimientoCajero.TipoMovimiento.ANULACION,
                     (egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : "CE-" + egreso.getConsecutivo()) + "-A",
                     egreso.getId(),
-                    egreso.getTotal(),
+                    egreso.getTotal().negate(),
                     BigDecimal.ZERO,
-                    montoEfectivo,
-                    montoElectronico,
+                    montoEfectivo.negate(),
+                    montoElectronico.negate(),
                     "Anulación Comprobante Egreso " + (egreso.getNumeroDocumento() != null ? egreso.getNumeroDocumento() : egreso.getConsecutivo()),
                     egreso.getComprobante()
             );
