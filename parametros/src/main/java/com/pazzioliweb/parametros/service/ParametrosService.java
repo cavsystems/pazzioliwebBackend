@@ -1,7 +1,10 @@
 package com.pazzioliweb.parametros.service;
 
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
+import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
+import com.pazzioliweb.parametros.dtos.ComprobanteContableSimpleDTO;
+import com.pazzioliweb.parametros.dtos.ParametroComprobanteResponseDTO;
 import com.pazzioliweb.parametros.dtos.ParametroCreateDTO;
 import com.pazzioliweb.parametros.dtos.ParametroGlobalResponseDTO;
 import com.pazzioliweb.parametros.entity.Parametros;
@@ -15,10 +18,29 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class ParametrosService {
+
+    private static final Map<CategoriaComprobante, List<TipoMovimientoComprobante>> CATEGORIA_TIPOS;
+    static {
+        Map<CategoriaComprobante, List<TipoMovimientoComprobante>> m = new EnumMap<>(CategoriaComprobante.class);
+        m.put(CategoriaComprobante.VENTA,      Arrays.asList(TipoMovimientoComprobante.FC, TipoMovimientoComprobante.VC));
+        m.put(CategoriaComprobante.COMPRA,     Arrays.asList(TipoMovimientoComprobante.CC, TipoMovimientoComprobante.CR));
+        m.put(CategoriaComprobante.DEVOLUCION, Arrays.asList(TipoMovimientoComprobante.DV));
+        m.put(CategoriaComprobante.INGRESO,    Arrays.asList(TipoMovimientoComprobante.RC));
+        m.put(CategoriaComprobante.EGRESO,     Arrays.asList(TipoMovimientoComprobante.CE));
+        m.put(CategoriaComprobante.AJUSTE,     Arrays.asList(TipoMovimientoComprobante.EI, TipoMovimientoComprobante.SI));
+        m.put(CategoriaComprobante.CAJA,       Arrays.asList(TipoMovimientoComprobante.RC, TipoMovimientoComprobante.CE));
+        m.put(CategoriaComprobante.TRASLADO,   Arrays.asList(TipoMovimientoComprobante.TI));
+        CATEGORIA_TIPOS = Collections.unmodifiableMap(m);
+    }
 
     private final ParametrosRepository parametrosRepository;
     private final ParametroscomprobantesRepository parametroscomprobantesRepository;
@@ -66,11 +88,31 @@ public class ParametrosService {
     }
 
     public List<Parametros> buscarPorCategorias(String categoriacomprobante, String categoriaparametro) {
-        return parametrosRepository.findByCategoriacomprobanteAndCategoriaparametro(categoriacomprobante, categoriaparametro);
+        return parametrosRepository.findByCategorias(categoriacomprobante, categoriaparametro);
     }
 
     public List<ParametroGlobalResponseDTO> obtenerParametrosGlobalesConJoin(String categoriaparametro, String categoriacomprobante) {
         return parametrosglobalesRepository.findJoinByCategorias(categoriaparametro, categoriacomprobante);
+    }
+
+    public List<ParametroComprobanteResponseDTO> obtenerParametrosPorComprobante(String categoriacomprobante, Long comprobante, String categoriaparametro) {
+        return parametroscomprobantesRepository.findJoinByCategorias(categoriacomprobante, comprobante, categoriaparametro);
+    }
+
+    public List<ComprobanteContableSimpleDTO> obtenerComprobantesPorCategoria(String categoriaStr) {
+        CategoriaComprobante categoria = CategoriaComprobante.valueOf(categoriaStr.toUpperCase());
+        List<TipoMovimientoComprobante> tipos = CATEGORIA_TIPOS.getOrDefault(categoria, Collections.emptyList());
+        if (tipos.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return comprobanteContableRepository.findByTiposAndActivoTrue(tipos).stream()
+                .map(c -> new ComprobanteContableSimpleDTO(
+                        c.getId(),
+                        c.getTipoMovimiento().name(),
+                        c.getTipoMovimiento().getDescripcion(),
+                        c.getPrefijo(),
+                        c.getDescripcion()))
+                .collect(Collectors.toList());
     }
 
     private void crearParametroGlobal(Parametros parametro, String valor) {

@@ -1,5 +1,7 @@
 package com.pazzioliweb.parametros.parametroscontroller;
 
+import com.pazzioliweb.parametros.dtos.ComprobanteContableSimpleDTO;
+import com.pazzioliweb.parametros.dtos.ParametroComprobanteResponseDTO;
 import com.pazzioliweb.parametros.dtos.ParametroCreateDTO;
 import com.pazzioliweb.parametros.dtos.ParametroGlobalResponseDTO;
 import com.pazzioliweb.parametros.entity.Parametros;
@@ -27,10 +29,26 @@ public class ParametrosController {
 
     @GetMapping
     public ResponseEntity<List<Parametros>> buscarPorCategorias(
-            @RequestParam String categoriacomprobante,
-            @RequestParam String categoriaparametro) {
+            @RequestParam(required = false) String categoriacomprobante,
+            @RequestParam(required = false) String categoriaparametro) {
         List<Parametros> parametros = parametrosService.buscarPorCategorias(categoriacomprobante, categoriaparametro);
         return ResponseEntity.ok(parametros);
+    }
+
+    @GetMapping("/por-comprobante")
+    public ResponseEntity<List<ParametroComprobanteResponseDTO>> obtenerParametrosPorComprobante(
+            @RequestParam(required = false) String categoriacomprobante,
+            @RequestParam(required = false) Long comprobante,
+            @RequestParam(required = false) String categoriaparametro) {
+        List<ParametroComprobanteResponseDTO> resultado = parametrosService.obtenerParametrosPorComprobante(categoriacomprobante, comprobante, categoriaparametro);
+        return ResponseEntity.ok(resultado);
+    }
+
+    @GetMapping("/comprobantes-por-categoria")
+    public ResponseEntity<List<ComprobanteContableSimpleDTO>> obtenerComprobantesPorCategoria(
+            @RequestParam String categoriaComprobante) {
+        List<ComprobanteContableSimpleDTO> resultado = parametrosService.obtenerComprobantesPorCategoria(categoriaComprobante);
+        return ResponseEntity.ok(resultado);
     }
 
     @GetMapping("/globales")

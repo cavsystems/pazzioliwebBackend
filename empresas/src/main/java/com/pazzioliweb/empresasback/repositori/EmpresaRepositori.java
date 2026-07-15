@@ -16,7 +16,7 @@ public interface EmpresaRepositori extends JpaRepository<Empresa, Long> {
  Optional<Empresa> findByCodigo(int id);
  Optional<Empresa> findByRazonsocial(String razonsocial);
 
- @Query("SELECT new com.pazzioliweb.empresaback.dtos.EmpresaContactoDTO(e.celularempresa, e.correoempresa, e.telfonofijo) FROM com.pazzioliweb.empresasback.entity.Empresa e")
+ @Query("SELECT new com.pazzioliweb.empresaback.dtos.EmpresaContactoDTO(e.celularempresa, e.correoempresa, e.telfonofijo, e.direccion) FROM com.pazzioliweb.empresasback.entity.Empresa e")
  List<EmpresaContactoDTO> findAllContactoInfo();
 
  @EntityGraph(attributePaths = {"codigoregimen"})

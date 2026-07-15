@@ -52,6 +52,9 @@ public interface ComprobanteContableRepository extends JpaRepository<Comprobante
     @Query("SELECT c FROM ComprobanteContable c WHERE c.tipoMovimiento = :tipo")
     List<ComprobanteContable> findByTipo(@Param("tipo") TipoMovimientoComprobante tipo);
 
+    @Query("SELECT c FROM ComprobanteContable c WHERE c.tipoMovimiento IN :tipos AND c.activo = true ORDER BY c.tipoMovimiento ASC")
+    List<ComprobanteContable> findByTiposAndActivoTrue(@Param("tipos") List<TipoMovimientoComprobante> tipos);
+
     /** Todos los comprobantes que tienen al menos a este cajero asignado. */
     @Query("SELECT c FROM ComprobanteContable c WHERE :cajeroId MEMBER OF c.cajeroIds")
     List<ComprobanteContable> findByCajeroId(@Param("cajeroId") Integer cajeroId);

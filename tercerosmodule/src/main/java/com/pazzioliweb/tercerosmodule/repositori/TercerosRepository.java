@@ -172,15 +172,14 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
     	        t.razonSocial,
     	        ti.tipoIdentificacion,
     	        c.nombre,
-    	        r.descripcion,
-    	        t.correo
+    	        r.descripcion
     	    )
     	    FROM Terceros t
     	    LEFT JOIN t.tipoIdentificacion ti
     	    LEFT JOIN t.clasificacionTercero c
     	    LEFT JOIN t.regimen r
-    		WHERE LOWER(t.identificacion) LIKE LOWER(:busqueda)
-    		OR LOWER(t.razonSocial) LIKE LOWER(:busqueda) and c.clasificacionTerceroId=:tipousuario
+    		WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
+    		OR LOWER(t.razonSocial) LIKE LOWER(:busqueda)) and c.clasificacionTerceroId=:tipousuario
     		""")
 	Page<TerceroResumenDTO> buscarPorIdentificacionORazonSocialTipo(@Param("busqueda") String busqueda,@Param("tipousuario") int tipousuario, Pageable pageable);
 
