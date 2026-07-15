@@ -39,7 +39,7 @@ public class TipoProductoServiceImpl implements TipoProductoService{
 	
 	@Override
 	public void eliminar(Integer id) {
-		if(repo.existsById(id))
+		if(!repo.existsById(id))
 			throw new EntityNotFoundException("TipoProducto no encontrado");
 		repo.deleteById(id);
 	}

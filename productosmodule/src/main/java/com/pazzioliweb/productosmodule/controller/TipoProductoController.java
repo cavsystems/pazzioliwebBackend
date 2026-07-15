@@ -33,7 +33,7 @@ public class TipoProductoController {
 		return ResponseEntity.ok(service.crear(tipoProducto));
 	}
 	
-	@PutMapping("/actualizar/{id}")
+	@PutMapping("/{id}")
 	public ResponseEntity<TipoProducto> actualizar(
 			@PathVariable Integer id,
 			@RequestBody TipoProducto tipoProducto
@@ -41,7 +41,7 @@ public class TipoProductoController {
 		return ResponseEntity.ok(service.actualizar(id, tipoProducto));
 	}
 	
-	@DeleteMapping("/eliminar/{id}")
+	@DeleteMapping("/{id}")
 	public ResponseEntity<Void> eliminar(@PathVariable Integer id){
 		service.eliminar(id);
 		return ResponseEntity.noContent().build();
