@@ -339,7 +339,11 @@ public class DevolucionServiceImpl implements DevolucionService {
         DatosSesiones sesion = obtenerSesionActiva();
         if (sesion == null || sesion.getDetalleCajeroId() == null || venta == null) return;
         try {
-            BigDecimal totalDevuelto = dev.getTotalNeto() != null ? dev.getTotalNeto() : BigDecimal.ZERO;
+            // Debe reponer EXACTAMENTE lo que se reembolsó por caja al registrar: el NETO de retención
+            // (dev.getTotalNeto() guarda el BRUTO con IVA; hay que restarle las retenciones reversadas,
+            // igual que en el registro). Antes reponía el bruto → dejaba en el arqueo un sobrante = retención.
+            BigDecimal brutoDevuelto = dev.getTotalNeto() != null ? dev.getTotalNeto() : BigDecimal.ZERO;
+            BigDecimal totalDevuelto = brutoDevuelto.subtract(calcularRetencionesReversadas(venta, brutoDevuelto));
             BigDecimal montoEfectivo = BigDecimal.ZERO;
             BigDecimal montoElectronico = BigDecimal.ZERO;
             if (venta.getMetodosPago() != null && !venta.getMetodosPago().isEmpty()) {

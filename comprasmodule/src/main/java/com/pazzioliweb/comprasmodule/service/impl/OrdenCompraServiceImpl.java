@@ -434,24 +434,24 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         try {
             java.util.List<AsientoContableService.LineaDTO> lineas = new java.util.ArrayList<>();
 
-            // ── Bases del asiento ──
-            // IMPORTANTE: orden.getTotalOrdenCompra() es el total NETO (el frontend ya le restó
-            // las retenciones = lo que el proveedor realmente recibe). Para el asiento necesitamos
-            // el total BRUTO (base + IVA) porque el inventario y el IVA descontable NO se reducen
-            // por las retenciones — solo se reduce lo que se le paga/debe al proveedor.
-            BigDecimal totalNeto = orden.getTotalOrdenCompra() != null ? orden.getTotalOrdenCompra() : BigDecimal.ZERO;
-            BigDecimal iva = orden.getIva() != null ? orden.getIva() : BigDecimal.ZERO;
+            // ── Bases del asiento (calculadas desde campos INAMBIGUOS del request) ──
+            // NO se usa orden.getTotalOrdenCompra(): su significado (neto vs bruto) varía entre flujos
+            // (compra directa/legalización envían BRUTO; el ingreso guarda NETO). El inventario y el IVA
+            // descontable NO se reducen por retenciones; solo se reduce el pago/CxP al proveedor.
+            BigDecimal iva = (request.getOrden_compra() != null && request.getOrden_compra().getIva() != null)
+                    ? request.getOrden_compra().getIva()
+                    : (orden.getIva() != null ? orden.getIva() : BigDecimal.ZERO);
+            // Base del inventario = gravada + exento + excluido (bienes, SIN IVA ni retenciones).
+            BigDecimal baseInventario = baseInventarioDeRequest(request);
 
             // Retenciones practicadas al proveedor (pasivo de la empresa con el fisco)
             BigDecimal retefuente = orden.getRetefuente() != null ? orden.getRetefuente() : BigDecimal.ZERO;
             BigDecimal reteivaProv = orden.getReteiva() != null ? orden.getReteiva() : BigDecimal.ZERO;
             BigDecimal reteicaProv = orden.getReteica() != null ? orden.getReteica() : BigDecimal.ZERO;
-            BigDecimal totalRetenciones = retefuente.add(reteivaProv).add(reteicaProv);
 
-            // Total bruto = neto + retenciones (revierte la resta hecha en el frontend).
-            BigDecimal totalBruto = totalNeto.add(totalRetenciones);
-            // Base del inventario = bruto - IVA (incluye gravada + exento, completa, SIN restar retenciones).
-            BigDecimal baseInventario = totalBruto.subtract(iva).max(BigDecimal.ZERO);
+            // Total bruto = base(bienes) + IVA. Neto a pagar al proveedor = bruto − retenciones.
+            BigDecimal totalBruto = baseInventario.add(iva);
+            BigDecimal netoProveedor = netoProveedorDeRequest(orden, request);
 
             // DÉBITO Inventarios (por la base completa, no reducida por retenciones)
             CuentaContable inv = configContable.inventarios().orElse(null);
@@ -541,9 +541,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 }
             }
 
-            // CRÉDITO CxP solo por el saldo pendiente.
-            // totalNeto YA tiene las retenciones restadas → NO restarlas de nuevo (eso era doble resta).
-            BigDecimal saldoCxP = totalNeto.subtract(totalPagado);
+            // CRÉDITO CxP solo por el saldo pendiente. netoProveedor = bruto − retenciones (lo que
+            // realmente se le debe al proveedor); NO se le vuelve a restar retención (evita CxP fantasma).
+            BigDecimal saldoCxP = netoProveedor.subtract(totalPagado);
             if (saldoCxP.compareTo(new BigDecimal("0.01")) > 0) {
                 CuentaContable cxp = configContable.cxpProveedores().orElse(null);
                 if (cxp == null) {
@@ -870,7 +870,11 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
      */
     private void crearCuentaPorPagarDesdeRequest(OrdenCompra orden, RealizarOrdenRequestDTO request,
                                                   BigDecimal totalPagado) {
-        BigDecimal saldoPendiente = orden.getTotalOrdenCompra()
+        // Neto a pagar INAMBIGUO (base + IVA − retenciones). Antes se usaba orden.getTotalOrdenCompra(),
+        // que en compra directa/legalización llega como BRUTO → saldoPendiente = bruto − pagado dejaba
+        // una CxP fantasma igual a la retención en compras de contado. Ahora se compara contra el neto real.
+        BigDecimal netoAPagar = netoProveedorDeRequest(orden, request);
+        BigDecimal saldoPendiente = netoAPagar
                 .subtract(totalPagado != null ? totalPagado : BigDecimal.ZERO);
         if (saldoPendiente.compareTo(new BigDecimal("0.01")) <= 0) {
             // Pagado completo de contado, no se crea CxP
@@ -899,7 +903,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         cuenta.setProveedorId(request.getProvedor().getTerceroId());
 
         // Retenciones proporcionales al saldo pendiente vs total NETO de la orden
-        BigDecimal totalNeto = orden.getTotalOrdenCompra();
+        BigDecimal totalNeto = netoAPagar;
         if (totalNeto != null && totalNeto.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal prop = saldoPendiente.divide(totalNeto, 10, java.math.RoundingMode.HALF_UP);
             BigDecimal rf = orden.getRetefuente() != null ? orden.getRetefuente() : BigDecimal.ZERO;
@@ -929,6 +933,30 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         BigDecimal ri = orden.getReteiva() != null ? orden.getReteiva() : BigDecimal.ZERO;
         BigDecimal ric = orden.getReteica() != null ? orden.getReteica() : BigDecimal.ZERO;
         return rf.add(ri).add(ric);
+    }
+
+    /**
+     * Base de inventario (bienes) desde el request: gravada + exento + excluido, SIN IVA ni retenciones.
+     * Es INAMBIGUA, a diferencia de orden.getTotalOrdenCompra(), cuyo significado (neto vs bruto) varía
+     * entre flujos (la compra directa/legalización envían BRUTO; el ingreso guarda NETO). Las retenciones
+     * NO reducen el inventario ni el IVA descontable: solo reducen lo que se paga/debe al proveedor.
+     */
+    private BigDecimal baseInventarioDeRequest(RealizarOrdenRequestDTO request) {
+        if (request == null || request.getOrden_compra() == null) return BigDecimal.ZERO;
+        RealizarOrdenRequestDTO.OrdenCompraDataDTO oc = request.getOrden_compra();
+        BigDecimal g = oc.getGravada() != null ? oc.getGravada() : BigDecimal.ZERO;
+        BigDecimal ex = oc.getExento() != null ? oc.getExento() : BigDecimal.ZERO;
+        BigDecimal exc = oc.getExcluido() != null ? oc.getExcluido() : BigDecimal.ZERO;
+        return g.add(ex).add(exc);
+    }
+
+    /** Neto a pagar al proveedor = base(bienes) + IVA − retenciones practicadas. Inambiguo. */
+    private BigDecimal netoProveedorDeRequest(OrdenCompra orden, RealizarOrdenRequestDTO request) {
+        BigDecimal iva = (request != null && request.getOrden_compra() != null && request.getOrden_compra().getIva() != null)
+                ? request.getOrden_compra().getIva()
+                : (orden.getIva() != null ? orden.getIva() : BigDecimal.ZERO);
+        BigDecimal bruto = baseInventarioDeRequest(request).add(iva);
+        return bruto.subtract(totalRetenciones(orden)).max(BigDecimal.ZERO);
     }
 
 
