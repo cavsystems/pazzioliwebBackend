@@ -18,9 +18,12 @@ public class CuentaContableService {
                    "COSTO", "COSTO_PRODUCCION", "ORDEN_DEUDORAS", "ORDEN_ACREEDORAS");
 
     private final CuentaContableRepository repo;
+    private final com.pazzioliweb.comprobantesmodule.repositori.AsientoContableLineaRepository lineaRepo;
 
-    public CuentaContableService(CuentaContableRepository repo) {
+    public CuentaContableService(CuentaContableRepository repo,
+                                 com.pazzioliweb.comprobantesmodule.repositori.AsientoContableLineaRepository lineaRepo) {
         this.repo = repo;
+        this.lineaRepo = lineaRepo;
     }
 
     @Transactional(readOnly = true)
@@ -58,12 +61,26 @@ public class CuentaContableService {
     }
 
     /**
-     * "Eliminar" ahora es inactivación suave: nunca borra la fila (para no
-     * perder historial ni romper referencias de asientos). Solo cambia estado.
+     * Elimina una cuenta contable de forma REAL, pero SOLO si es seguro:
+     *  - no puede tener subcuentas (cuenta mayor),
+     *  - no puede tener movimientos (líneas de asiento).
+     * Si tiene movimientos, NO se borra (se perdería historial / se romperían asientos):
+     * en ese caso el usuario debe INACTIVARLA. Antes este método hacía inactivación suave y
+     * nunca borraba; ahora borra cuando no hay movimientos, como se pidió.
      */
     @Transactional
     public void eliminar(Integer id) {
-        inactivar(id);
+        CuentaContable cc = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada: " + id));
+        if (repo.existsByCodigoStartingWithAndCodigoNot(cc.getCodigo(), cc.getCodigo())) {
+            throw new RuntimeException("No se puede eliminar la cuenta " + cc.getCodigo()
+                    + " porque es una cuenta mayor con subcuentas. Elimine primero las subcuentas.");
+        }
+        if (lineaRepo.existsByCuentaContable_Id(id)) {
+            throw new RuntimeException("No se puede eliminar la cuenta " + cc.getCodigo()
+                    + " porque tiene movimientos contables registrados. Puede INACTIVARLA en su lugar.");
+        }
+        repo.delete(cc);
     }
 
     /** Marca la cuenta como INACTIVA. No se permite inactivar cuentas mayores

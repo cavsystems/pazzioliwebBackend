@@ -46,8 +46,14 @@ public class TipoComprobanteManualService {
         t.setCodigo(dto.getCodigo().trim().toUpperCase());
         t.setNombre(dto.getNombre().trim());
         if (dto.getPrefijo() != null) t.setPrefijo(dto.getPrefijo().trim().toUpperCase());
-        if (dto.getSiguienteConsecutivo() != null && dto.getSiguienteConsecutivo() > 0)
+        if (dto.getSiguienteConsecutivo() != null && dto.getSiguienteConsecutivo() > 0) {
+            // No permitir RETROCEDER el consecutivo: numerar por debajo del actual repetiría números
+            // de asientos ya emitidos. Solo se acepta mantener o avanzar.
+            if (t.getSiguienteConsecutivo() != null && dto.getSiguienteConsecutivo() < t.getSiguienteConsecutivo())
+                throw new RuntimeException("El siguiente consecutivo (" + dto.getSiguienteConsecutivo()
+                        + ") no puede ser menor al actual (" + t.getSiguienteConsecutivo() + "): duplicaría números ya usados.");
             t.setSiguienteConsecutivo(dto.getSiguienteConsecutivo());
+        }
         if (dto.getEstado() != null && !dto.getEstado().isBlank()) t.setEstado(dto.getEstado());
         return toDto(repo.save(t));
     }

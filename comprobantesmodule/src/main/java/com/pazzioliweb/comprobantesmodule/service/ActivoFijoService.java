@@ -151,6 +151,16 @@ public class ActivoFijoService {
 
         BigDecimal valorEnLibros = valorAdq.subtract(depAcum);
 
+        // Si hay valor de adquisición o depreciación acumulada posteada, la baja DEBE contabilizarse.
+        // Sin cuenta del activo no se genera asiento y quedarían saldos colgados (activo + depreciación
+        // acumulada) en el balance para siempre. Se exige la cuenta antes de marcar BAJA.
+        if (a.getCuentaActivoId() == null
+                && (valorAdq.compareTo(BigDecimal.ZERO) > 0 || depAcum.compareTo(BigDecimal.ZERO) > 0)) {
+            throw new IllegalStateException("El activo no tiene 'cuenta del activo' configurada; no se puede "
+                    + "dar de baja contablemente (quedarían saldos colgados en activo y depreciación acumulada). "
+                    + "Configure la cuenta del activo y reintente.");
+        }
+
         if (a.getCuentaActivoId() != null) {
             List<AsientoContableService.LineaDTO> lineas = new ArrayList<>();
             String desc = "Baja de activo fijo " + a.getNombre();

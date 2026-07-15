@@ -650,8 +650,11 @@ public class ReciboCajaService {
                 && recibo.getSaldoFavorUsado().compareTo(BigDecimal.ZERO) > 0
                 && recibo.getTercero() != null) {
             try {
+                // Reponer = SUMAR el saldo a favor consumido. Va como 2º parámetro (monto, que suma);
+                // el 3º (saldoAFavorUsado) RESTA y es el que se usa al CREAR para consumirlo. Antes se
+                // pasaba como 3º → al anular volvía a restar y el cliente quedaba en negativo.
                 tercerosService.aumentarSaldofavorCliente(
-                        recibo.getTercero().getTerceroId(), null, recibo.getSaldoFavorUsado().doubleValue());
+                        recibo.getTercero().getTerceroId(), recibo.getSaldoFavorUsado().doubleValue(), null);
             } catch (Exception ex) {
                 System.out.println("[AnularRC] Error reponiendo saldo a favor: " + ex.getMessage());
             }

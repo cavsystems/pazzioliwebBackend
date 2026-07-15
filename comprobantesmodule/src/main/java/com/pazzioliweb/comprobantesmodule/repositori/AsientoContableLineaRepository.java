@@ -11,6 +11,10 @@ import java.util.List;
 
 public interface AsientoContableLineaRepository extends JpaRepository<AsientoContableLinea, Long> {
 
+    /** ¿La cuenta tiene al menos un movimiento (línea de asiento)? Se usa para permitir el borrado
+     *  real de una cuenta solo si NO tiene movimientos. */
+    boolean existsByCuentaContable_Id(Integer cuentaId);
+
     /** Líneas que afectan una cuenta contable específica (para libro mayor). */
     @Query("SELECT l FROM AsientoContableLinea l " +
            "JOIN FETCH l.asiento a " +

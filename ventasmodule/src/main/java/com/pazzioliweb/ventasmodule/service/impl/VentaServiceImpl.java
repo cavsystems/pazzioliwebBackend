@@ -705,6 +705,18 @@ public class VentaServiceImpl implements VentaService {
             throw new VentaException("No se puede completar la venta: la cuenta '4135 Ingresos por " +
                     "ventas' no está configurada en el PUC.");
         }
+        // Cuentas de COSTO DE VENTAS (6135) e INVENTARIO (1435): si faltan, el asiento de ingreso
+        // (REQUIRES_NEW) alcanzaba a confirmarse y el de COGS fallaba después → venta facturada con
+        // ingreso pero SIN costo (utilidad inflada). Validarlas aquí hace fallar ANTES de contabilizar,
+        // dejando la operación atómica (rollback total).
+        if (configContable.costoVentas().isEmpty()) {
+            throw new VentaException("No se puede completar la venta: la cuenta '6135 Costo de ventas' " +
+                    "no está configurada en el PUC.");
+        }
+        if (configContable.inventarios().isEmpty()) {
+            throw new VentaException("No se puede completar la venta: la cuenta '1435 Inventarios' " +
+                    "no está configurada en el PUC.");
+        }
         // Si la venta tiene parte a CRÉDITO, la cuenta 1305 (CxC clientes) es indispensable; sin
         // ella el asiento se omitía en silencio (venta COMPLETADA y facturada, pero sin asiento).
         boolean tieneCredito = venta.getMetodosPago() != null && venta.getMetodosPago().stream()
@@ -1084,6 +1096,20 @@ public class VentaServiceImpl implements VentaService {
             throw new VentaException("La venta ya está anulada");
         }
 
+        // No permitir anular una venta a CRÉDITO que ya recibió ABONOS: el asiento y la CxC se
+        // reversarían, pero el efectivo del abono (recaudado vía Recibo de Caja) quedaría en caja sin
+        // respaldo → descuadre. El usuario debe anular primero los recibos de caja del abono.
+        if (venta.getNumeroVenta() != null) {
+            boolean tieneAbonos = cuentaPorCobrarRepository.findByNumeroVenta(venta.getNumeroVenta()).stream()
+                    .anyMatch(cxc -> !"ANULADA".equals(cxc.getEstado())
+                            && cxc.getValorNeto() != null && cxc.getSaldo() != null
+                            && cxc.getSaldo().compareTo(cxc.getValorNeto()) < 0);
+            if (tieneAbonos) {
+                throw new VentaException("No se puede anular: la venta a crédito ya tiene abonos recibidos. "
+                        + "Anule primero los recibos de caja asociados y vuelva a intentarlo.");
+            }
+        }
+
         // Estado previo determina si hubo asiento/Kardex/CxC generados (COMPLETADA sí, PENDIENTE no).
         boolean teniaAsientos = "COMPLETADA".equals(venta.getEstado())
                 || "DEVOLUCION_PARCIAL".equals(venta.getEstado());
@@ -1116,8 +1142,15 @@ public class VentaServiceImpl implements VentaService {
                             MovimientoInventarioAutoService.nuevaLista();
                     for (DetalleVenta det : venta.getItems()) {
                         if (det.getCantidad() == null || det.getCantidad() <= 0) continue;
-                        java.math.BigDecimal costoUnit = obtenerCostoVarianteParaVenta(
-                                det.getCodigoProducto(), det.getReferenciaVariantes(), venta.getBodega());
+                        // Reingresar al MISMO costo con que salió la venta (persistido en el detalle),
+                        // para que el kardex/existencias vuelvan al valor exacto que revierte el asiento
+                        // (anularAsientoDeDocumento restaura 1435 al costo original). Antes se recalculaba
+                        // con el costo promedio ACTUAL → si el costo cambió entre venta y anulación, el
+                        // kardex divergía del mayor 1435.
+                        java.math.BigDecimal costoUnit = (det.getCostoUnitario() != null
+                                    && det.getCostoUnitario().compareTo(java.math.BigDecimal.ZERO) > 0)
+                                ? det.getCostoUnitario()
+                                : obtenerCostoVarianteParaVenta(det.getCodigoProducto(), det.getReferenciaVariantes(), venta.getBodega());
                         double costo = costoUnit != null ? costoUnit.doubleValue() : 0.0;
                         items.add(new MovimientoInventarioAutoService.ItemMovimiento(
                                 det.getCodigoProducto(), det.getReferenciaVariantes(),

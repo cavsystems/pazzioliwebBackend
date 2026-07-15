@@ -167,6 +167,12 @@ public class ComprobanteEgresoService {
             egreso.setReteiva(BigDecimal.ZERO);
         }
         egreso.setDescuento(dto.getDescuento() != null ? dto.getDescuento() : BigDecimal.ZERO);
+        // Descuento pronto pago recibido = INGRESO financiero (421040). Si se aplica descuento pero la
+        // cuenta no está configurada, el asiento saldaría 2205 de menos mientras la CxP se marca PAGADA
+        // por el bruto → mayor ≠ auxiliar en silencio. Se exige la cuenta antes de tocar la CxP.
+        if (egreso.getDescuento().compareTo(BigDecimal.ZERO) > 0 && configContable.descuentoCondicionado().isEmpty()) {
+            throw new RuntimeException("Se aplicó un descuento por pronto pago pero la cuenta de descuentos condicionados (421040) no está configurada en el PUC. Configúrela para registrar el egreso.");
+        }
         egreso.setSaldoFavorUsado(dto.getSaldoFavorUsado() != null ? dto.getSaldoFavorUsado() : BigDecimal.ZERO);
         egreso.setConcepto(dto.getConcepto());
         egreso.setCentroCosto(dto.getCentroCosto());
