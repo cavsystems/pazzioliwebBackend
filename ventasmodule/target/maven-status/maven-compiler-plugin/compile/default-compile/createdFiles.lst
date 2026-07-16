@@ -20,6 +20,7 @@ com\pazzioliweb\ventasmodule\dtos\VentaDTO.class
 com\pazzioliweb\ventasmodule\exception\PedidoException.class
 com\pazzioliweb\ventasmodule\repository\DevolucionRepository.class
 com\pazzioliweb\ventasmodule\service\VentaService.class
+com\pazzioliweb\ventasmodule\service\AsientoManualCxCListener.class
 com\pazzioliweb\ventasmodule\service\CuentaPorCobrarService.class
 com\pazzioliweb\ventasmodule\dtos\DevolucionDTO.class
 com\pazzioliweb\ventasmodule\repository\VentaSpecification.class

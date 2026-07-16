@@ -16,8 +16,28 @@ public class ComprobanteEgresoController {
 
     private final ComprobanteEgresoService service;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.tesoreriamodule.service.EmailTesoreriaService emailService;
+
     public ComprobanteEgresoController(ComprobanteEgresoService service) {
         this.service = service;
+    }
+
+    /** Envía el comprobante de egreso por correo (con PDF adjunto). */
+    @PostMapping("/{id}/enviar-email")
+    public ResponseEntity<Map<String, Object>> enviarEmail(@PathVariable Long id, @RequestParam String correo) {
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        try {
+            boolean enviado = emailService.enviarEgreso(service.buscarPorId(id), correo);
+            resp.put("enviado", enviado);
+            resp.put("mensaje", enviado ? "Comprobante enviado a " + correo
+                    : "Servicio de email no configurado. Configure spring.mail.* en application.properties.");
+            return ResponseEntity.ok(resp);
+        } catch (RuntimeException e) {
+            resp.put("enviado", false);
+            resp.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(resp);
+        }
     }
 
     /** Obtiene el siguiente consecutivo (último ID + 1) */

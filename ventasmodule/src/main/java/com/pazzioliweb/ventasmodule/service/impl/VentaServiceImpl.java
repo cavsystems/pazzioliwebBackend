@@ -594,36 +594,18 @@ public class VentaServiceImpl implements VentaService {
                         ? d.getTotal().doubleValue()
                         : (precio * cant + ivaMonto);
                 
-                // Obtener costo del producto desde ProductoVariante -> Producto
-                // Usar codigo_producto (SKU) en lugar de referencia_variantes
-                double costoUnitario = 0.0;
-                try {
-                    System.out.println("[CostoProducto] Buscando variante con SKU: " + d.getCodigoProducto());
-                    java.util.Optional<com.pazzioliweb.productosmodule.entity.ProductoVariante> varianteOpt =
-                            productoVarianteRepository.findBySku(d.getCodigoProducto());
-                    if (varianteOpt.isPresent()) {
-                        System.out.println("[CostoProducto] Variante encontrada: " + varianteOpt.get().getProductoVarianteId());
-                        if (varianteOpt.get().getProducto() != null) {
-                            Double costoProducto = varianteOpt.get().getProducto().getCosto();
-                            System.out.println("[CostoProducto] Costo del producto: " + costoProducto);
-                            if (costoProducto != null && costoProducto > 0) {
-                                costoUnitario = costoProducto;
-                            } else {
-                                System.out.println("[CostoProducto] Costo del producto es null o 0");
-                            }
-                        } else {
-                            System.out.println("[CostoProducto] Producto es null");
-                        }
-                    } else {
-                        System.out.println("[CostoProducto] Variante no encontrada con SKU: " + d.getCodigoProducto());
-                    }
-                } catch (Exception ex) {
-                    System.out.println("[CostoProducto] Error obteniendo costo del producto: " + ex.getMessage());
-                    ex.printStackTrace();
-                }
-                
-                // Persistir el costo real de la venta en la línea (para reversar el COGS exacto en
-                // una devolución posterior, aunque el costo del producto cambie luego).
+                // Costo unitario = PROMEDIO PONDERADO del kardex (el MISMO que usa el asiento de COGS,
+                // vía obtenerCostoVarianteParaVenta con la bodega de la venta), con fallback al costo del
+                // producto. Se resuelve ANTES de escribir la SALIDA, por lo que lee el promedio anterior
+                // = exactamente el costo con que se valúa la salida y se postea el COGS.
+                // Antes se guardaba producto.getCosto() directo, que podía diferir del COGS realmente
+                // contabilizado → devolución/anulación reversaban un costo distinto al posteado. Ahora coinciden.
+                java.math.BigDecimal costoBD = obtenerCostoVarianteParaVenta(
+                        d.getCodigoProducto(), d.getReferenciaVariantes(), venta.getBodega());
+                double costoUnitario = costoBD != null ? costoBD.doubleValue() : 0.0;
+
+                // Persistir el costo real de la venta en la línea (para reversar el COGS exacto en una
+                // devolución/anulación posterior, aunque el costo del producto cambie luego).
                 if (costoUnitario > 0) d.setCostoUnitario(java.math.BigDecimal.valueOf(costoUnitario));
                 items.add(new MovimientoInventarioAutoService.ItemMovimiento(
                         d.getCodigoProducto(),
