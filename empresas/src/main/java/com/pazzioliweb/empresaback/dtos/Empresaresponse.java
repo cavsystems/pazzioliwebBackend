@@ -120,7 +120,12 @@ public class Empresaresponse {
 	}
 
 	private List<usuario> usuarios;
-	
+
+	private List<RolPermiso> rolespermisos;
+
+	public List<RolPermiso> getRolespermisos() { return rolespermisos; }
+	public void setRolespermisos(List<RolPermiso> rolespermisos) { this.rolespermisos = rolespermisos; }
+
   	public List<Impuestos> getImpuestos() {
 		return impuestos;
 	}
@@ -394,6 +399,19 @@ public class Empresaresponse {
 		int tarifa;
 	
 		
+	}
+
+	public static class RolPermiso {
+		private String rol;
+		private List<Integer> permisos;
+		private Integer idrol;
+
+		public String getRol() { return rol; }
+		public void setRol(String rol) { this.rol = rol; }
+		public List<Integer> getPermisos() { return permisos; }
+		public void setPermisos(List<Integer> permisos) { this.permisos = permisos; }
+		public Integer getIdrol() { return idrol; }
+		public void setIdrol(Integer idrol) { this.idrol = idrol; }
 	}
 
 	public static class usuario{

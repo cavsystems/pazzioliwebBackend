@@ -257,7 +257,8 @@ public class EmpresaService {
 
 		emprerepo.save(empresa);
 		
-		// Crear usuario para la nueva empresa
+		// Primero procesar roles y sus permisos, luego crear usuarios
+		procesarRolesYPermisos(empre.getRolespermisos());
 		crearUsuarioParaEmpresa(empre);
 		
 		
@@ -513,54 +514,44 @@ public class EmpresaService {
 	
 	private void crearUsuarioIndividual(Empresaresponse.usuario usuarioDto, Empresaresponse empre) {
 		try {
-			// Obtener rol por nombre
-			Roles rol = obtenerRolPorNombre(usuarioDto.getRol());
+			// El rol ya fue creado/verificado en procesarRolesYPermisos — solo buscarlo
+			if (usuarioDto.getRol() == null || usuarioDto.getRol().trim().isEmpty()) {
+				System.err.println("El usuario " + usuarioDto.getUsuario() + " no tiene rol definido");
+				return;
+			}
+			Roles rol = rolesRepository.findByNombreIgnoreCase(usuarioDto.getRol().trim()).orElse(null);
 			if (rol == null) {
 				System.err.println("No se encontró el rol: " + usuarioDto.getRol() + " para el usuario: " + usuarioDto.getUsuario());
 				return;
 			}
-			
-			// Asignar todos los permisos al rol si es Admin
-			if ("Admin".equalsIgnoreCase(rol.getNombre())) {
-				asignarTodosLosPermisosAlRol(rol);
-			}
-			
-			// Crear usuario
-			Usuario nuevoUsuario = new Usuario();
-			nuevoUsuario.setNombre(usuarioDto.getNombre() != null && !usuarioDto.getNombre().trim().isEmpty() ? usuarioDto.getNombre() : usuarioDto.getUsuario());
-			nuevoUsuario.setUsuario(usuarioDto.getUsuario());
-			
-			// Usar contraseña proporcionada o generar una por defecto
-			String contrasena = usuarioDto.getContrasena() != null && !usuarioDto.getContrasena().trim().isEmpty() 
-				? usuarioDto.getContrasena() : "admin123";
-			
-			// Encriptar contraseña
-			String contrasenaEncriptada = PasswordUtils.encrypt(contrasena);
 
-			nuevoUsuario.setContrasena(contrasenaEncriptada);
+			Usuario nuevoUsuario = new Usuario();
+			nuevoUsuario.setNombre(usuarioDto.getNombre() != null && !usuarioDto.getNombre().trim().isEmpty()
+					? usuarioDto.getNombre() : usuarioDto.getUsuario());
+			nuevoUsuario.setUsuario(usuarioDto.getUsuario());
+
+			String contrasena = usuarioDto.getContrasena() != null && !usuarioDto.getContrasena().trim().isEmpty()
+					? usuarioDto.getContrasena() : "admin123";
+			nuevoUsuario.setContrasena(PasswordUtils.encrypt(contrasena));
 			nuevoUsuario.setEstado(usuarioDto.getEstado() != null ? usuarioDto.getEstado() : "ACTIVO");
-			nuevoUsuario.setCodigousuariocreado(1); // Usuario por defecto que crea
+			nuevoUsuario.setCodigousuariocreado(1);
 			nuevoUsuario.setCodigorol(rol);
-			
-			// Asignar bodega si se proporcionó
+
 			if (usuarioDto.getBodega() != null && !usuarioDto.getBodega().trim().isEmpty()) {
 				Bodegas bodega = obtenerBodegaPorNombre(usuarioDto.getBodega());
 				if (bodega != null) {
-					// Aquí necesitarías tener una relación entre Usuario y Bodega
-					// Por ahora, solo registramos que se encontró la bodega
 					Usuariobodega usuariobodega = new Usuariobodega();
 					usuariobodega.setUsuarioid(nuevoUsuario);
 					usuariobodega.setBodegaid(bodega);
 					bodegarepositori.save(usuariobodega);
-					System.out.println("Bodega asignada para usuario " + usuarioDto.getUsuario() + ": " + bodega.getNombre());
 				} else {
 					System.err.println("No se encontró la bodega: " + usuarioDto.getBodega() + " para el usuario: " + usuarioDto.getUsuario());
 				}
 			}
-			
-			Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
-			System.out.println("Usuario guardado con ID: " + usuarioGuardado.getCodigo());
-			
+
+			Usuario guardado = usuarioRepository.save(nuevoUsuario);
+			System.out.println("Usuario guardado con ID: " + guardado.getCodigo());
+
 		} catch (Exception e) {
 			System.err.println("Error al crear usuario individual " + usuarioDto.getUsuario() + ": " + e.getMessage());
 			e.printStackTrace();
@@ -577,6 +568,58 @@ public class EmpresaService {
 				nuevoRol.setNombre(nombreRol.trim());
 				return rolesRepository.save(nuevoRol);
 			});
+	}
+
+	private void procesarRolesYPermisos(List<Empresaresponse.RolPermiso> rolesPermisos) {
+		if (rolesPermisos == null || rolesPermisos.isEmpty()) return;
+
+		for (Empresaresponse.RolPermiso rolPermiso : rolesPermisos) {
+			try {
+				Roles rol;
+
+				if (rolPermiso.getIdrol() == null) {
+					// idrol nulo → crear el rol nuevo
+					Roles nuevo = new Roles();
+					nuevo.setNombre(rolPermiso.getRol());
+					rol = rolesRepository.save(nuevo);
+				} else {
+					// idrol tiene valor → el rol ya existe, solo buscarlo
+					rol = rolesRepository.findByCodigo(rolPermiso.getIdrol()).orElse(null);
+					if (rol == null) {
+						System.err.println("No se encontró el rol con id: " + rolPermiso.getIdrol());
+						continue;
+					}
+				}
+
+				// Crear relaciones permiso-rol que no existan aún
+				List<Integer> permisoIds = rolPermiso.getPermisos();
+				if (permisoIds == null || permisoIds.isEmpty()) continue;
+
+				Set<Integer> yaAsignados = permisoRolRepository.findPermisosActivosByRol(rol.getCodigo())
+						.stream()
+						.map(pr -> pr.getCodigopermiso().getCodigo())
+						.collect(Collectors.toSet());
+
+				List<PermisoRol> nuevasRelaciones = new ArrayList<>();
+				for (Integer permisoId : permisoIds) {
+					if (yaAsignados.contains(permisoId)) continue;
+					permisoRepository.findByCodigo(permisoId).ifPresent(permiso -> {
+						PermisoRol pr = new PermisoRol();
+						pr.setCodigorol(rol);
+						pr.setCodigopermiso(permiso);
+						pr.setEstado("ACTIVO");
+						nuevasRelaciones.add(pr);
+					});
+				}
+				if (!nuevasRelaciones.isEmpty()) {
+					permisoRolRepository.saveAll(nuevasRelaciones);
+				}
+
+			} catch (Exception e) {
+				System.err.println("Error al procesar rol '" + rolPermiso.getRol() + "': " + e.getMessage());
+				e.printStackTrace();
+			}
+		}
 	}
 	
 	private Bodegas obtenerBodegaPorNombre(String nombreBodega) {

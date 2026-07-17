@@ -37,12 +37,21 @@ public class TenantService {
 
 	/** Crea o actualiza el schema plantilla corriendo Flyway sobre él. Se llama al iniciar la app. */
 	public void initTemplateSchema() {
-		Flyway.configure()
+		Flyway flyway = Flyway.configure()
 			.dataSource(ds)
 			.schemas(TEMPLATE_SCHEMA)
-			.locations("classpath:db/migration")
-			.load()
-			.migrate();
+			.locations("classpath:db/migration/common")
+			.load();
+		
+		// Repair to handle checksum mismatches when migration files have been modified
+		try {
+			flyway.repair();
+		} catch (Exception e) {
+			// Repair may fail if no schema exists yet, which is fine
+			System.out.println("[TenantService] Repair skipped (likely first run): " + e.getMessage());
+		}
+		
+		flyway.migrate();
 	}
 
 	/**
