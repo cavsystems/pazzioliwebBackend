@@ -29,5 +29,12 @@
   <artifactId>spring-security-crypto</artifactId>
 </dependency>
 
+        <!-- Generación de PDF desde HTML (recibos/facturas adjuntos al correo). -->
+        <dependency>
+            <groupId>com.openhtmltopdf</groupId>
+            <artifactId>openhtmltopdf-pdfbox</artifactId>
+            <version>1.0.10</version>
+        </dependency>
+
     </dependencies>
 </project>

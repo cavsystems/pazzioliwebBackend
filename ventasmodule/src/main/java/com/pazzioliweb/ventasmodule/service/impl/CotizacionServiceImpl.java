@@ -171,7 +171,10 @@ public class CotizacionServiceImpl implements CotizacionService {
         DatosSesiones sesion = obtenerSesionActiva();
         if (sesion != null && sesion.getDetalleCajeroId() != null) {
             try {
-                detalleCajeroService.registrarMovimiento(
+                // REQUIRES_NEW: si la sesión de cajero está cerrada/ausente, este registro informativo
+                // falla en su propia transacción y NO marca rollback-only la tx de la cotización
+                // (antes provocaba "Transaction silently rolled back ..." al finalizar la cotización).
+                detalleCajeroService.registrarMovimientoInformativo(
                         sesion.getDetalleCajeroId(),
                         MovimientoCajero.TipoMovimiento.COTIZACION,
                         guardada.getNumeroCotizacion(),

@@ -5,6 +5,7 @@ com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO$AtributoDTO.class
 com\pazzioliweb\comprasmodule\service\impl\DevolucionCompraServiceImpl.class
 com\pazzioliweb\comprasmodule\dtos\FinalizarCompraDTO.class
 com\pazzioliweb\comprasmodule\service\impl\HistorialCompraServiceImpl.class
+com\pazzioliweb\comprasmodule\service\AsientoManualCxPListener.class
 com\pazzioliweb\comprasmodule\mapper\ProveedorMapper.class
 com\pazzioliweb\comprasmodule\dtos\ItemRecibidoDTO.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$MetodoPagoCompraDTO.class

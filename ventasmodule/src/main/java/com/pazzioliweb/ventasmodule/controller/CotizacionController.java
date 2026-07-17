@@ -21,8 +21,28 @@ public class CotizacionController {
     private final CotizacionService cotizacionService;
 
     @Autowired
+    private com.pazzioliweb.ventasmodule.service.EmailVentaService emailVentaService;
+
+    @Autowired
     public CotizacionController(CotizacionService cotizacionService) {
         this.cotizacionService = cotizacionService;
+    }
+
+    /** Envía una cotización por correo (con PDF adjunto). Se identifica por su número. */
+    @PostMapping("/enviar-email")
+    public ResponseEntity<Map<String, Object>> enviarEmail(@RequestParam String numero, @RequestParam String correo) {
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        try {
+            boolean enviado = emailVentaService.enviarCotizacion(cotizacionService.getCotizacionByNumero(numero), correo);
+            resp.put("enviado", enviado);
+            resp.put("mensaje", enviado ? "Cotización enviada a " + correo
+                    : "Servicio de email no configurado. Configure spring.mail.* en application.properties.");
+            return ResponseEntity.ok(resp);
+        } catch (RuntimeException e) {
+            resp.put("enviado", false);
+            resp.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(resp);
+        }
     }
 
     @PostMapping("/crear")

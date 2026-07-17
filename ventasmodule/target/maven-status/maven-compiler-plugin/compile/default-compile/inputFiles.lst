@@ -7,6 +7,7 @@ D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ve
 D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\dtos\DetallePedidoDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\controller\CuentaPorCobrarController.java
 D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\CotizacionServiceImpl.java
+D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\AsientoManualCxCListener.java
 D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\DevolucionService.java
 D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\service\impl\CuentaPorCobrarServiceImpl.java
 D:\Pazzioli WEB\pazzioliwebBackend\ventasmodule\src\main\java\com\pazzioliweb\ventasmodule\entity\DetalleCotizacion.java

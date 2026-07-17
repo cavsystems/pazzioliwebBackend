@@ -123,6 +123,14 @@
     <artifactId>spring-security-crypto</artifactId>
 </dependency>
 
+<!-- PDF (HTML->PDF) para adjuntar factura/recibo al correo. Explícita aquí para garantizar que
+     quede en el jar ejecutable (evita NoClassDefFoundError de com.openhtmltopdf en runtime). -->
+<dependency>
+    <groupId>com.openhtmltopdf</groupId>
+    <artifactId>openhtmltopdf-pdfbox</artifactId>
+    <version>1.0.10</version>
+</dependency>
+
  </dependencies>
 
 

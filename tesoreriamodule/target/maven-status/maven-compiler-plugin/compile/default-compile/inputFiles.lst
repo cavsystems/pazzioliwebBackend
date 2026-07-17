@@ -13,6 +13,7 @@ D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb
 D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\service\ReciboCajaService.java
 D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\entity\ComprobanteEgresoMedioPago.java
 D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\service\ComprobanteEgresoService.java
+D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\service\EmailTesoreriaService.java
 D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\dtos\CrearReciboCajaDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\controller\ReciboCajaController.java
 D:\Pazzioli WEB\pazzioliwebBackend\tesoreriamodule\src\main\java\com\pazzioliweb\tesoreriamodule\repository\ReciboCajaRepository.java

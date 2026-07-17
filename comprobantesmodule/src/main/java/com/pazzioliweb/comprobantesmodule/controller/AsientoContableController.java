@@ -1,5 +1,6 @@
 package com.pazzioliweb.comprobantesmodule.controller;
 
+import com.pazzioliweb.commonbacken.events.AsientoManualRegistradoEvent;
 import com.pazzioliweb.comprobantesmodule.entity.AsientoContable;
 import com.pazzioliweb.comprobantesmodule.entity.AsientoContableLinea;
 import com.pazzioliweb.comprobantesmodule.repositori.AsientoContableRepository;
@@ -28,6 +29,10 @@ public class AsientoContableController {
 
     @PersistenceContext
     private EntityManager em;
+
+    // Publica AsientoManualRegistradoEvent para que ventas/compras sincronicen el subledger de cartera.
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public AsientoContableController(AsientoContableRepository repo,
                                       TercerosRepository tercerosRepo,
@@ -223,6 +228,27 @@ public class AsientoContableController {
             if (tipoId != null) {
                 tipoComprobanteManualService.siguienteNumero(tipoId);
             }
+
+            // Sincronizar SUBLEDGER de cartera: si alguna línea toca CxC (1305) o CxP (2205) con
+            // tercero, se publica un evento para que ventas/compras creen/abonen el auxiliar (el
+            // dashboard lee el subledger, no el mayor). El listener corre AFTER_COMMIT en tx propia.
+            List<AsientoManualRegistradoEvent.LineaCartera> lineasCartera = new ArrayList<>();
+            if (asiento.getLineas() != null) {
+                for (AsientoContableLinea l : asiento.getLineas()) {
+                    String cod = l.getCuentaContable() != null ? l.getCuentaContable().getCodigo() : null;
+                    if (cod == null) continue;
+                    boolean esCartera = cod.startsWith("1305") || cod.startsWith("2205");
+                    if (!esCartera || l.getTerceroId() == null) continue;
+                    lineasCartera.add(new AsientoManualRegistradoEvent.LineaCartera(
+                            cod, l.getTerceroId(), l.getTerceroNombre(),
+                            l.getDebito(), l.getCredito(), l.getDocumentoCruce()));
+                }
+            }
+            if (!lineasCartera.isEmpty()) {
+                eventPublisher.publishEvent(new AsientoManualRegistradoEvent(
+                        this, asiento.getId(), asiento.getNumeroAsiento(), fecha, lineasCartera));
+            }
+
             return ResponseEntity.ok(Map.of(
                     "id", asiento.getId(),
                     "numeroAsiento", asiento.getNumeroAsiento(),
