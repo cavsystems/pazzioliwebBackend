@@ -242,8 +242,19 @@ public class TercerosService {
             tercero.setRegimen(entityManager.getReference(Regimen.class, dto.getRegimen().getCodigo()));
         }
 
-        if (dto.getPrecio() != null && dto.getPrecio().getPrecio_id() != null) {
-            tercero.setPrecio(entityManager.getReference(Precios.class, dto.getPrecio().getPrecio_id()));
+        // Lista de precios: la columna precio_id es NOT NULL con FK a `precios`, así que 0/null NO son
+        // válidos (el front manda 0 cuando no se selecciona → antes reventaba con error de FK silencioso).
+        // Si no viene un precio válido (>0), se usa el PRIMER precio disponible como default.
+        Integer precioIdSel = (dto.getPrecio() != null && dto.getPrecio().getPrecio_id() != null
+                && dto.getPrecio().getPrecio_id() > 0) ? dto.getPrecio().getPrecio_id() : null;
+        if (precioIdSel == null) {
+            java.util.List<Integer> ids = entityManager.createQuery(
+                    "SELECT p.precioId FROM Precios p ORDER BY p.precioId", Integer.class)
+                    .setMaxResults(1).getResultList();
+            if (!ids.isEmpty()) precioIdSel = ids.get(0);
+        }
+        if (precioIdSel != null) {
+            tercero.setPrecio(entityManager.getReference(Precios.class, precioIdSel));
         }
 
         if (dto.getRetenciones() != null && !dto.getRetenciones().isEmpty()) {
@@ -425,7 +436,9 @@ public class TercerosService {
             tercero.setRegimen(entityManager.getReference(Regimen.class, dto.getRegimen().getCodigo()));
         }
 
-        if (dto.getPrecio() != null && dto.getPrecio().getPrecio_id() != null) {
+        // Solo cambiar la lista de precios si viene una VÁLIDA (>0). Si el front manda 0 (no seleccionó),
+        // se conserva la que ya tenía el tercero (evita el error de FK con precio_id=0).
+        if (dto.getPrecio() != null && dto.getPrecio().getPrecio_id() != null && dto.getPrecio().getPrecio_id() > 0) {
             tercero.setPrecio(entityManager.getReference(Precios.class, dto.getPrecio().getPrecio_id()));
         }
 

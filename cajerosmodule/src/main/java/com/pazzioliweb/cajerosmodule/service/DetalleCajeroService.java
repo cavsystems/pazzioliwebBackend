@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pazzioliweb.cajerosmodule.dtos.CuadreCajaDTO;
@@ -348,6 +349,28 @@ public class DetalleCajeroService {
     /** Versión legacy sin comprobante contable — usada por movimientos manuales o callers antiguos. */
     @Transactional
     public MovimientoCajero registrarMovimiento(Long detalleCajeroId,
+                                                MovimientoCajero.TipoMovimiento tipoMovimiento,
+                                                String numeroComprobante,
+                                                Long referenciaDocumentoId,
+                                                BigDecimal montoTotal,
+                                                BigDecimal montoCosto,
+                                                BigDecimal montoEfectivo,
+                                                BigDecimal montoElectronico,
+                                                String descripcion) {
+        return registrarMovimiento(detalleCajeroId, tipoMovimiento, numeroComprobante,
+                referenciaDocumentoId, montoTotal, montoCosto, montoEfectivo,
+                montoElectronico, descripcion, null);
+    }
+
+    /**
+     * Registro INFORMATIVO en tx independiente (REQUIRES_NEW). Se usa cuando el movimiento de caja
+     * es un efecto secundario best-effort (p.ej. cotización): si la sesión de cajero está cerrada o
+     * no existe, registrarMovimiento lanza y — al correr en su PROPIA transacción — solo se revierte
+     * ese registro, sin marcar como rollback-only la transacción del documento origen (que antes hacía
+     * fallar el commit con "Transaction silently rolled back because it has been marked as rollback-only").
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public MovimientoCajero registrarMovimientoInformativo(Long detalleCajeroId,
                                                 MovimientoCajero.TipoMovimiento tipoMovimiento,
                                                 String numeroComprobante,
                                                 Long referenciaDocumentoId,

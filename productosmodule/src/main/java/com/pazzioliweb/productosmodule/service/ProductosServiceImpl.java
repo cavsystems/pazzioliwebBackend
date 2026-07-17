@@ -369,13 +369,35 @@ public class ProductosServiceImpl implements ProductosService{
                 System.out.println("Producto actulizado VARIANTES" +varianteDto.getCodigoBarraVariante());
                 ProductoVariante variante = productoVarianteRepository.findByCodigoBarras(varianteDto.getCodigoBarraVariante())
                         .orElse(new ProductoVariante());
+                // ¿Es una variante nueva o una ya existente que encontramos por código de barras?
+                boolean esNueva = variante.getProductoVarianteId() == null;
 
                 variante.setProducto(producto);
-                variante.setSku(varianteDto.getSku() != null ? varianteDto.getSku() : varianteDto.getCodigoBarraVariante());
+                // SKU: NO degradar el SKU de una variante existente usando el código de barras como fallback.
+                // La variante por defecto (producto sin variantes) guarda sku = código contable; la compra
+                // resuelve el kardex por ese SKU. Pisarlo con un código de barras rompía la actualización de
+                // existencias (bug #9) y dejaba variantes descuadradas.
+                if (varianteDto.getSku() != null) {
+                    variante.setSku(varianteDto.getSku());
+                } else if (esNueva) {
+                    variante.setSku(varianteDto.getCodigoBarraVariante());
+                }
                 variante.setCodigoBarras(varianteDto.getCodigoBarraVariante());
-                variante.setReferenciaVariantes(varianteDto.getReferenciaVariantes() != null ? varianteDto.getReferenciaVariantes() : varianteDto.getCodigoBarraVariante());
+                // Referencia: idem, no pisar la referencia existente con el código de barras.
+                if (varianteDto.getReferenciaVariantes() != null) {
+                    variante.setReferenciaVariantes(varianteDto.getReferenciaVariantes());
+                } else if (esNueva) {
+                    variante.setReferenciaVariantes(varianteDto.getCodigoBarraVariante());
+                }
                 variante.setActivo(true);
-                variante.setPredeterminada(false); // Set based on logic, for now false
+                // Predeterminada: honrar el flag del DTO; si no viene, conservar el valor actual.
+                // Antes se forzaba SIEMPRE a false, degradando la variante por defecto (predeterminada=true)
+                // en el flujo de compras → la vista concatenaba "descripcion-descripcion" (bug #8).
+                if (varianteDto.getPredeterminada() != null) {
+                    variante.setPredeterminada(varianteDto.getPredeterminada());
+                } else if (esNueva) {
+                    variante.setPredeterminada(false);
+                }
 
                 variante = productoVarianteRepository.save(variante);
 
