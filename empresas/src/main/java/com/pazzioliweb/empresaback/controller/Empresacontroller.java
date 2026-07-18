@@ -158,6 +158,8 @@ public class Empresacontroller {
 			   }
 		   }
 		   serv.crearempresa(dto,schema,archivo);
+		   // modoPOS: aplicar la configuración de contabilidad (suite/POS puro) al schema recién creado.
+		   aplicarModoContabilidad(schema, dto);
 		   response.put("respuesta", new mensajesuccesempres("Empresa creada",true) );
 		   return ResponseEntity.status(HttpStatus.CREATED).body(response);
 		 	 }
@@ -208,6 +210,8 @@ public class Empresacontroller {
 				  }
 
 				  serv.updateEmpresa(dto, schema, archivo, id);
+				  // modoPOS: aplicar la configuración de contabilidad (suite/POS puro) al schema de la empresa.
+				  aplicarModoContabilidad(schema, dto);
 				  response.put("respuesta", new mensajesuccesempres("Empresa actualizada exitosamente", true));
 				  return ResponseEntity.ok().body(response);
 			  } catch (Exception e) {
@@ -217,6 +221,28 @@ public class Empresacontroller {
 			  }
 		 
 
+	 }
+
+	 /**
+	  * modoPOS: escribe la configuración de contabilidad (activa/desde) en la tabla
+	  * configuracion_contabilidad del SCHEMA de la empresa. Best-effort: si falla (p.ej. la tabla aún
+	  * no existe en ese schema), NO rompe la creación/actualización de la empresa.
+	  */
+	 private void aplicarModoContabilidad(String schema, Empresaresponse dto) {
+		 if (schema == null || schema.isBlank() || dto == null || dto.getContabilidadActiva() == null) return;
+		 boolean activa = Boolean.TRUE.equals(dto.getContabilidadActiva());
+		 java.sql.Date desde = (activa && dto.getContabilidadDesde() != null)
+				 ? java.sql.Date.valueOf(dto.getContabilidadDesde()) : null;
+		 try {
+			 jdbc.update(
+				 "INSERT INTO `" + schema + "`.configuracion_contabilidad " +
+				 "(id, contabilidad_activa, contabilidad_desde, fecha_actualizacion) VALUES (1, ?, ?, NOW()) " +
+				 "ON DUPLICATE KEY UPDATE contabilidad_activa=VALUES(contabilidad_activa), " +
+				 "contabilidad_desde=VALUES(contabilidad_desde), fecha_actualizacion=NOW()",
+				 activa ? 1 : 0, desde);
+		 } catch (Exception e) {
+			 System.out.println("[modoPOS] No se pudo aplicar contabilidad al schema " + schema + ": " + e.getMessage());
+		 }
 	 }
 
 	 @PatchMapping("/licencia/{id}")

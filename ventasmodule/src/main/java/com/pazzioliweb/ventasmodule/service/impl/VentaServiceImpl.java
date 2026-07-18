@@ -88,6 +88,9 @@ public class VentaServiceImpl implements VentaService {
     private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
     @Autowired
     private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
+    // modoPOS: para gatear los chequeos contables duros cuando la empresa no lleva contabilidad.
+    @Autowired
+    private com.pazzioliweb.comprobantesmodule.service.ModoContabilidadService modoContabilidad;
 
     @Autowired
     public VentaServiceImpl(VentaRepository ventaRepository, VentaMapper ventaMapper,
@@ -465,7 +468,11 @@ public class VentaServiceImpl implements VentaService {
         // fallido": la venta quedaba COMPLETADA y facturada pero sin asiento ni IVA registrado.
         // Validar aquí —antes de COMPLETAR y de emitir el evento de facturación— hace que la
         // operación se revierta de forma limpia con un mensaje claro para configurar el PUC.
-        validarCuentasFiscalesVenta(venta);
+        // modoPOS: si la empresa NO lleva contabilidad (o la venta es anterior a la fecha de corte),
+        // se OMITE este blindaje: la venta se completa sin exigir cuentas PUC (no se genera asiento).
+        if (modoContabilidad.esContable(venta.getFechaEmision())) {
+            validarCuentasFiscalesVenta(venta);
+        }
 
         venta.setEstado("COMPLETADA");
         Venta ventaGuardada = ventaRepository.save(venta);
@@ -568,7 +575,11 @@ public class VentaServiceImpl implements VentaService {
 
         // ✅ Generar asiento contable (partida doble) — soporta venta contado, crédito y mixta.
         // El inventario ya se descargó arriba (antes del asiento) de forma atómica.
-        generarAsientoVenta(ventaGuardada);
+        // modoPOS: si la empresa no lleva contabilidad para esta fecha, se omite del todo (evita además
+        // registrar un "asiento fallido" espurio por falta de PUC en cada venta con IVA).
+        if (modoContabilidad.esContable(ventaGuardada.getFechaEmision())) {
+            generarAsientoVenta(ventaGuardada);
+        }
     }
 
     /**

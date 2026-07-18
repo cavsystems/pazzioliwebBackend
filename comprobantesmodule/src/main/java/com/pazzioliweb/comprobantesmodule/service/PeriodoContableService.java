@@ -24,10 +24,13 @@ public class PeriodoContableService {
 
     private final PeriodoContableRepository repo;
     private final UsuarioRepository usuarioRepository;
+    private final ModoContabilidadService modoContabilidad;
 
-    public PeriodoContableService(PeriodoContableRepository repo, UsuarioRepository usuarioRepository) {
+    public PeriodoContableService(PeriodoContableRepository repo, UsuarioRepository usuarioRepository,
+                                  ModoContabilidadService modoContabilidad) {
         this.repo = repo;
         this.usuarioRepository = usuarioRepository;
+        this.modoContabilidad = modoContabilidad;
     }
 
     /**
@@ -37,6 +40,10 @@ public class PeriodoContableService {
     @Transactional(readOnly = true)
     public boolean estaCerrado(LocalDate fecha) {
         if (fecha == null) return false;
+        // modoPOS: si la empresa NO lleva contabilidad, no hay gestión de periodos → nunca "cerrado".
+        // Esto neutraliza de un solo punto todas las validaciones validarPeriodoAbierto de los módulos
+        // operativos (ventas/compras/tesorería/inventario) sin tener que tocar cada call-site.
+        if (!modoContabilidad.contabilidadActiva()) return false;
         Optional<PeriodoContable> p = repo.findByAnioAndMes(fecha.getYear(), fecha.getMonthValue());
         return p.isPresent() && "CERRADO".equals(p.get().getEstado());
     }

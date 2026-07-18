@@ -49,30 +49,30 @@ public class VendedoresService {
     	Page<Object[]> results = vendedorRepository.listarVendedoresDTO(pageable);
     	
     	List<VendedorDTO> dtoList = results.getContent().stream().map(row -> {
-    		java.sql.Date sqlDate = (java.sql.Date) row[11];
+    		java.sql.Date sqlDate = row[11] != null ? (java.sql.Date) row[11] : null;
     		java.time.LocalDate localDate = sqlDate != null ? sqlDate.toLocalDate() : null;
-    		
-    		// Convert BigDecimal to Double for comision and meta_ventas
-    		java.math.BigDecimal comisionBigDecimal = (java.math.BigDecimal) row[6];
-    		java.math.BigDecimal metaVentasBigDecimal = (java.math.BigDecimal) row[7];
-    		
+
+    		// Robusto ante el tipo real de cada columna numérica (comision=decimal, meta_ventas=double,
+    		// ids=int): se lee como Number. Antes se casteaba meta_ventas a BigDecimal y, al traer un
+    		// valor (double), lanzaba ClassCastException → la lista se caía (quedaba vacía) apenas un
+    		// vendedor tenía meta de ventas.
     		return new VendedorDTO(
-    			(Integer) row[0],           // vendedor_id
+    			row[0]  != null ? ((Number) row[0]).intValue()    : null,  // vendedor_id
     			(String) row[1],            // nombre
     			(String) row[2],            // direccion
     			(String) row[3],            // telefono
     			(String) row[4],            // identificacion
     			(String) row[5],            // correo
-    			comisionBigDecimal != null ? comisionBigDecimal.doubleValue() : null,  // comision
-    			metaVentasBigDecimal != null ? metaVentasBigDecimal.doubleValue() : null,  // meta_ventas
+    			row[6]  != null ? ((Number) row[6]).doubleValue() : null,  // comision
+    			row[7]  != null ? ((Number) row[7]).doubleValue() : null,  // meta_ventas
     			(String) row[8],            // tipo_vendedor
     			(String) row[9],            // estado
-    			(Integer) row[10],           // codigo_usuario_creo
+    			row[10] != null ? ((Number) row[10]).intValue()   : null,  // codigo_usuario_creo
     			localDate,                  // fechacreado
-    			(Integer) row[12],          // usuarioCodigo (can be null)
+    			row[12] != null ? ((Number) row[12]).intValue()   : null,  // usuarioCodigo (can be null)
     			(String) row[13],           // usuarioNombre (can be null)
     			(String) row[14],           // rolNombre (can be null)
-    			(Integer) row[15],          // bodegaId (can be null)
+    			row[15] != null ? ((Number) row[15]).intValue()   : null,  // bodegaId (can be null)
     			(String) row[16]            // bodegaNombre (can be null)
     		);
     	}).collect(Collectors.toList());

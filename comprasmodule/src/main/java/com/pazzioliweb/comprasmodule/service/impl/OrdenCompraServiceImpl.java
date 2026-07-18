@@ -52,6 +52,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private AsientoFallidoService asientoFallidoService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
+    // modoPOS: para gatear los chequeos contables duros cuando la empresa no lleva contabilidad.
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.comprobantesmodule.service.ModoContabilidadService modoContabilidad;
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
     private final ConfiguracionComprasService configCompras;
@@ -429,6 +432,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     }
 
     private void generarAsientoCompra(OrdenCompra orden, RealizarOrdenRequestDTO request) {
+        // modoPOS: si la empresa NO lleva contabilidad para esta fecha, no se genera asiento ni se
+        // exigen cuentas de retención (la compra no debe romperse por falta de PUC).
+        if (!modoContabilidad.esContable(orden.getFechaEmision())) return;
         // Fuera del try: si falta la cuenta de una retención practicada, aborta y revierte.
         validarCuentasRetencionCompra(orden.getRetefuente(), orden.getReteiva(), orden.getReteica());
         try {
@@ -1281,7 +1287,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // 7. Generar asiento contable — igual que generarAsientoCompra pero con datos del DTO.
         // Blindaje anti-descuadre FUERA del try: si falta la cuenta de una retención practicada,
         // abortar (se revierte la finalización) en vez de dejar un asiento fallido silencioso.
-        validarCuentasRetencionCompra(rf, rv, ric);
+        // modoPOS: solo se exige si la empresa lleva contabilidad para esta fecha.
+        if (modoContabilidad.esContable(orden.getFechaEmision())) {
+            validarCuentasRetencionCompra(rf, rv, ric);
+        }
         try {
             generarAsientoCompraFinalizar(orden, dto, totalPagado, totalNeto, totalBruto, gravadaFinal, ivaFinal, rf, rv, ric);
         } catch (Exception ex) {

@@ -31,8 +31,8 @@ public class PedidoController {
     @GetMapping("/ultimo-pedido-id")
     public ResponseEntity<Long> getUltimaVentaId() {
         Long id = pedidoService.getUltimopedido();
-
-        return ResponseEntity.ok(id+1);
+        // getUltimopedido() = MAX(id), que es null en un tenant sin pedidos → evitar NPE al sumar.
+        return ResponseEntity.ok((id != null ? id : 0L) + 1);
     }
     @GetMapping("/cliente/{clienteId}")
     public ResponseEntity<List<PedidoDTO>> getPedidosByCliente(@PathVariable Long clienteId) {
