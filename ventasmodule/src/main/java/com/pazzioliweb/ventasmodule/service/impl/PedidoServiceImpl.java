@@ -130,6 +130,13 @@ public class PedidoServiceImpl implements PedidoService {
         if (pedido.getItems() != null) {
         for (DetallePedido detalle : pedido.getItems()) {
             detalle.setPedido(pedido);
+            // Estas columnas son NOT NULL: si la variante no trae código de barras / referencia /
+            // descripción / observación, se defaultea a "" para no romper el insert con un 500 genérico.
+            if (detalle.getCodigoProducto() == null)     detalle.setCodigoProducto("");
+            if (detalle.getCodigoBarras() == null)       detalle.setCodigoBarras("");
+            if (detalle.getDescripcionProducto() == null) detalle.setDescripcionProducto("");
+            if (detalle.getObservacionProducto() == null) detalle.setObservacionProducto("");
+            if (detalle.getReferenciaVariantes() == null) detalle.setReferenciaVariantes("");
             subtotal = subtotal.add(detalle.getTotal());
             ivaTotal = ivaTotal.add(detalle.getIva());
             descuentosTotal = descuentosTotal.add(detalle.getDescuento());
@@ -165,7 +172,10 @@ public class PedidoServiceImpl implements PedidoService {
         DatosSesiones sesion = obtenerSesionActiva();
         if (sesion != null && sesion.getDetalleCajeroId() != null) {
             try {
-                detalleCajeroService.registrarMovimiento(
+                // REQUIRES_NEW: si la sesión de cajero está cerrada/ausente, este registro informativo
+                // falla en su propia transacción y NO marca rollback-only la tx del pedido (antes provocaba
+                // "Transaction silently rolled back …" y el pedido no se guardaba).
+                detalleCajeroService.registrarMovimientoInformativo(
                         sesion.getDetalleCajeroId(),
                         MovimientoCajero.TipoMovimiento.PEDIDO,
                         guardado.getNumeroPedido(),

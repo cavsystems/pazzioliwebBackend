@@ -107,6 +107,14 @@ public class Empresaresponse {
 	public String getTipoLicencia() { return tipoLicencia; }
 	public void setTipoLicencia(String tipoLicencia) { this.tipoLicencia = tipoLicencia; }
 
+	// ── modoPOS: contabilidad (suite completa) vs POS puro. Se aplica al schema de la empresa. ──
+	private Boolean contabilidadActiva;
+	private LocalDate contabilidadDesde;
+	public Boolean getContabilidadActiva() { return contabilidadActiva; }
+	public void setContabilidadActiva(Boolean contabilidadActiva) { this.contabilidadActiva = contabilidadActiva; }
+	public LocalDate getContabilidadDesde() { return contabilidadDesde; }
+	public void setContabilidadDesde(LocalDate contabilidadDesde) { this.contabilidadDesde = contabilidadDesde; }
+
 	public void setDepartamento(int departamento) {
 		this.departamento = departamento;
 	}

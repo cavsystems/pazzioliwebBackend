@@ -36,16 +36,28 @@ public class AsientoContableService {
     private final AsientoContableLineaRepository lineaRepo;
     private final CuentaContableRepository cuentaRepo;
     private final PeriodoContableService periodoService;
+    private final ModoContabilidadService modoContabilidad;
 
     public AsientoContableService(AsientoContableRepository asientoRepo,
                                    AsientoContableLineaRepository lineaRepo,
                                    CuentaContableRepository cuentaRepo,
-                                   PeriodoContableService periodoService) {
+                                   PeriodoContableService periodoService,
+                                   ModoContabilidadService modoContabilidad) {
         this.asientoRepo = asientoRepo;
         this.lineaRepo = lineaRepo;
         this.cuentaRepo = cuentaRepo;
         this.periodoService = periodoService;
+        this.modoContabilidad = modoContabilidad;
     }
+
+    /**
+     * modoPOS: tipos de documento NATIVOS de la capa contable. NO se gatean por el flag aquí porque
+     * sus callers (activos fijos, cierre anual, asientos manuales) dereferencian el retorno de
+     * generarAsiento y un null los rompería. Estos flujos se bloquean/ocultan a nivel de módulo/UI
+     * cuando la contabilidad está inactiva. El resto (FC/VC/CC/CR/RC/CE/DV/ND/TPOS/DS/INV/...) SÍ se gatea.
+     */
+    private static final java.util.Set<String> TIPOS_NATIVOS_CONTABLES = java.util.Set.of(
+            "MANUAL", "CIERRE", "APERTURA", "DEP", "BAJA", "SALDOS_INI");
 
     /** Excepción específica para cuando se intenta registrar en periodo cerrado. */
     public static class PeriodoCerradoException extends RuntimeException {
@@ -97,6 +109,18 @@ public class AsientoContableService {
                                            String documentoOrigenTipo, Long documentoOrigenId,
                                            ComprobanteContable comprobante,
                                            List<LineaDTO> lineas) {
+        // ── modoPOS: si la empresa NO lleva contabilidad (o el documento es anterior a la fecha de
+        // corte), NO se genera asiento para los documentos OPERATIVOS. Se retorna null: todos los
+        // callers operativos ignoran el retorno o lo null-checkean, así la operación (venta/compra/
+        // recibo/egreso/movimiento) se completa igual, sin asiento. Los tipos nativos de contabilidad
+        // no entran aquí (ver TIPOS_NATIVOS_CONTABLES). Fail-safe: si no hay config, esContable=true. ──
+        if ((documentoOrigenTipo == null || !TIPOS_NATIVOS_CONTABLES.contains(documentoOrigenTipo))
+                && !modoContabilidad.esContable(fecha)) {
+            log.info("[AsientoContable] Contabilidad inactiva/anterior a corte para {} #{} (fecha {}) — asiento omitido (modo POS).",
+                    documentoOrigenTipo, documentoOrigenId, fecha);
+            return null;
+        }
+
         // Idempotencia: si ya existe asiento CONFIRMADO para este documento, regresarlo.
         // Los asientos ANULADOS no bloquean la creación — si se reactiva un documento
         // (ej. orden reabierta tras anulación) debe generarse uno nuevo CONFIRMADO.

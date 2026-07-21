@@ -50,6 +50,9 @@ public class ComprobanteEgresoService {
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
     private final PeriodoContableService periodoContableService;
+    // modoPOS: para gatear los chequeos contables duros cuando la empresa no lleva contabilidad.
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.comprobantesmodule.service.ModoContabilidadService modoContabilidad;
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
     @org.springframework.beans.factory.annotation.Autowired
@@ -170,7 +173,9 @@ public class ComprobanteEgresoService {
         // Descuento pronto pago recibido = INGRESO financiero (421040). Si se aplica descuento pero la
         // cuenta no está configurada, el asiento saldaría 2205 de menos mientras la CxP se marca PAGADA
         // por el bruto → mayor ≠ auxiliar en silencio. Se exige la cuenta antes de tocar la CxP.
-        if (egreso.getDescuento().compareTo(BigDecimal.ZERO) > 0 && configContable.descuentoCondicionado().isEmpty()) {
+        // modoPOS: solo se exige la cuenta 421040 si la empresa lleva contabilidad para esta fecha.
+        if (modoContabilidad.esContable(egreso.getFechaEgreso())
+                && egreso.getDescuento().compareTo(BigDecimal.ZERO) > 0 && configContable.descuentoCondicionado().isEmpty()) {
             throw new RuntimeException("Se aplicó un descuento por pronto pago pero la cuenta de descuentos condicionados (421040) no está configurada en el PUC. Configúrela para registrar el egreso.");
         }
         egreso.setSaldoFavorUsado(dto.getSaldoFavorUsado() != null ? dto.getSaldoFavorUsado() : BigDecimal.ZERO);
@@ -210,7 +215,9 @@ public class ComprobanteEgresoService {
         // Un egreso de CONCEPTO ABIERTO exige cuenta contable: es la contrapartida (gasto/pasivo)
         // del asiento. Sin ella el asiento se omitía en silencio, dejando un egreso con salida de
         // caja pero sin efecto contable. Se valida antes de guardar para rechazarlo con claridad.
-        if (esConceptoAbierto && egreso.getCuentaContable() == null) {
+        // modoPOS: la cuenta contable solo se exige si la empresa lleva contabilidad para esta fecha.
+        if (modoContabilidad.esContable(egreso.getFechaEgreso())
+                && esConceptoAbierto && egreso.getCuentaContable() == null) {
             throw new RuntimeException("El comprobante de egreso de concepto abierto requiere una "
                     + "cuenta contable (la contrapartida del pago). Seleccione la cuenta o el concepto configurado.");
         }

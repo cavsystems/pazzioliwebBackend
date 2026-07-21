@@ -51,6 +51,9 @@ public class ReciboCajaService {
     private final AsientoContableService asientoService;
     private final ConfiguracionContableService configContable;
     private final PeriodoContableService periodoContableService;
+    // modoPOS: para gatear el chequeo contable duro cuando la empresa no lleva contabilidad.
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.comprobantesmodule.service.ModoContabilidadService modoContabilidad;
     private final TercerosService tercerosService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.comprobantesmodule.service.AsientoFallidoService asientoFallidoService;
@@ -207,7 +210,9 @@ public class ReciboCajaService {
         // Un recibo de CONCEPTO ABIERTO exige cuenta contable: es la contrapartida (ingreso) del
         // asiento. Sin ella, el asiento se omitía en silencio y quedaba un recibo con movimiento de
         // caja pero sin efecto contable. Se valida antes de guardar para rechazarlo con claridad.
-        if (esConceptoAbierto && recibo.getCuentaContable() == null) {
+        // modoPOS: la cuenta contable solo se exige si la empresa lleva contabilidad para esta fecha.
+        if (modoContabilidad.esContable(fechaReciboParsed)
+                && esConceptoAbierto && recibo.getCuentaContable() == null) {
             throw new RuntimeException("El recibo de concepto abierto requiere una cuenta contable "
                     + "(la contrapartida de ingreso). Seleccione la cuenta o el concepto configurado.");
         }

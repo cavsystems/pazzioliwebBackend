@@ -34,6 +34,8 @@ public class DevolucionCompraServiceImpl implements DevolucionCompraService {
     @Autowired private ConfiguracionContableService configContable;
     @Autowired private PeriodoContableService periodoContableService;
     @Autowired private MovimientoInventarioAutoService movimientoInventarioAutoService;
+    // modoPOS: para calcular el débito a CxP sin depender del asiento cuando no hay contabilidad.
+    @Autowired private com.pazzioliweb.comprobantesmodule.service.ModoContabilidadService modoContabilidad;
 
     public DevolucionCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
                                        DevolucionCompraRepository devolucionCompraRepository,
@@ -176,7 +178,18 @@ public class DevolucionCompraServiceImpl implements DevolucionCompraService {
 
         // Asiento contable de la nota débito. Devuelve el monto realmente debitado a CxP (0 si contado
         // o si no se pudo postear), para reducir el auxiliar de CxP exactamente por ese valor.
-        BigDecimal montoCxPDebitado = generarAsientoNotaDebito(guardada, orden, baseTotal, ivaTotal, rfDev, rvDev, rcDev, esCredito);
+        // modoPOS: si la empresa NO lleva contabilidad, generarAsientoNotaDebito retornaría 0 (por falta
+        // de PUC) y la CxP no se reduciría. En ese caso se calcula el débito a CxP directamente desde los
+        // valores del negocio (neto devuelto), independiente del asiento, para mantener la cartera correcta.
+        BigDecimal montoCxPDebitado;
+        if (modoContabilidad.esContable(guardada.getFechaCreacion())) {
+            montoCxPDebitado = generarAsientoNotaDebito(guardada, orden, baseTotal, ivaTotal, rfDev, rvDev, rcDev, esCredito);
+        } else {
+            montoCxPDebitado = esCredito
+                    ? baseTotal.add(ivaTotal).subtract(rfDev).subtract(rvDev).subtract(rcDev)
+                        .max(BigDecimal.ZERO).min(saldoPendienteCxP(orden))
+                    : BigDecimal.ZERO;
+        }
 
         // Solo se reduce la CxP si la compra era a crédito y se debitó a CxP (misma cifra del asiento).
         if (esCredito && montoCxPDebitado.compareTo(BigDecimal.ZERO) > 0) {
