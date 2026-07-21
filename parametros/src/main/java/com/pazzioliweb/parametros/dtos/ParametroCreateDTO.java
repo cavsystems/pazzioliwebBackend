@@ -4,6 +4,7 @@ import com.pazzioliweb.parametros.enums.CategoriaComprobante;
 
 public class ParametroCreateDTO {
     private Long parametroId;
+    private String clave;
     private String categoriaParametro;
     private CategoriaComprobante categoriaComprobante;
     private String valor;
@@ -16,6 +17,14 @@ public class ParametroCreateDTO {
 
     public void setParametroId(Long parametroId) {
         this.parametroId = parametroId;
+    }
+
+    public String getClave() {
+        return clave;
+    }
+
+    public void setClave(String clave) {
+        this.clave = clave;
     }
 
     public String getCategoriaParametro() {

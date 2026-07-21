@@ -112,8 +112,9 @@ public class ParametrosService {
                             (String) row[2],
                             (String) row[3],
                             (String) row[4],
-                            ((Number) row[5]).longValue(),
-                            (String) row[6]
+                            (String) row[5],
+                            ((Number) row[6]).longValue(),
+                            (String) row[7]
                     ))
                     .collect(Collectors.toList());
         }

@@ -14,7 +14,7 @@ public interface ParametroscomprobantesRepository extends JpaRepository<Parametr
     Optional<Parametroscomprobantes> findByParametrosIdAndComprobanteContableId(Long parametroId, Integer comprobanteContableId);
 
     @Query("SELECT new com.pazzioliweb.parametros.dtos.ParametroComprobanteResponseDTO(" +
-           "pc.id, p.nombre, p.categoriaparametro, p.categoriacomprobante, pc.valor, " +
+           "pc.id, p.clave, p.nombre, p.categoriaparametro, p.categoriacomprobante, pc.valor, " +
            "cc.id, cc.prefijo) " +
            "FROM Parametroscomprobantes pc JOIN pc.parametros p JOIN pc.comprobanteContable cc " +
            "WHERE (:categoriacomprobante IS NULL OR p.categoriacomprobante = :categoriacomprobante) " +
@@ -25,14 +25,14 @@ public interface ParametroscomprobantesRepository extends JpaRepository<Parametr
             @Param("comprobanteId") Long comprobanteId,
             @Param("categoriaparametro") String categoriaparametro);
 
-    @Query(value = "SELECT pra.id, pr.nombre, pr.categoriaparametro, pr.categoriacomprobante, pra.valor, " +
+    @Query(value = "SELECT pra.id, pr.clave, pr.nombre, pr.categoriaparametro, pr.categoriacomprobante, pra.valor, " +
            "com.id as idcomprobante, com.prefijo FROM parametros pr " +
            "JOIN parametroscomprobantes pra ON pra.parametroid = pr.id " +
            "JOIN comprobantes_contables com ON com.id = pra.comprobanteContableid " +
            "WHERE (:categoriacomprobante IS NULL OR pr.categoriacomprobante = :categoriacomprobante) " +
            "AND (:categoriaparametro IS NULL OR pr.categoriaparametro = :categoriaparametro) " +
            "UNION ALL " +
-           "SELECT pa.id, pr.nombre, pr.categoriaparametro, pr.categoriacomprobante, pa.valor, " +
+           "SELECT pa.id, pr.clave, pr.nombre, pr.categoriaparametro, pr.categoriacomprobante, pa.valor, " +
            "0 AS idcomprobante, pr.categoriacomprobante AS prefijo " +
            "FROM parametrosglobales pa JOIN parametros pr ON pa.parametroid = pr.id " +
            "WHERE (:categoriacomprobante IS NULL OR pr.categoriacomprobante = :categoriacomprobante) " +

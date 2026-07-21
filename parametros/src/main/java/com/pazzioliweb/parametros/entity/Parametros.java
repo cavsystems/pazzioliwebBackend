@@ -8,6 +8,8 @@ public class Parametros {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(name = "clave")
+    private String clave;
    @Column(name = "nombre",nullable = false)
     private String nombre;
    @Column(name="categoriaParametro")
@@ -25,6 +27,14 @@ public class Parametros {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getClave() {
+        return clave;
+    }
+
+    public void setClave(String clave) {
+        this.clave = clave;
     }
 
     public String getNombre() {

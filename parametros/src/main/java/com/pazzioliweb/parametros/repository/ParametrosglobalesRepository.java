@@ -13,7 +13,7 @@ public interface ParametrosglobalesRepository extends JpaRepository<Parametrosgl
     Optional<Parametrosglobales> findByParametrosId(Long parametroId);
 
     @Query("SELECT new com.pazzioliweb.parametros.dtos.ParametroGlobalResponseDTO(" +
-           "pg.id, p.nombre, p.categoriaparametro, p.categoriacomprobante, pg.valor) " +
+           "pg.id, p.clave, p.nombre, p.categoriaparametro, p.categoriacomprobante, pg.valor) " +
            "FROM Parametrosglobales pg JOIN pg.parametros p " +
            "WHERE (:categoriaparametro IS NULL OR p.categoriaparametro = :categoriaparametro) " +
            "AND (:categoriacomprobante IS NULL OR p.categoriacomprobante = :categoriacomprobante)")

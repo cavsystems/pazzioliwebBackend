@@ -2,6 +2,7 @@ package com.pazzioliweb.parametros.dtos;
 
 public class ParametroComprobanteResponseDTO {
     private Integer id;
+    private String clave;
     private String nombre;
     private String categoriaparametro;
     private String categoriacomprobante;
@@ -9,10 +10,11 @@ public class ParametroComprobanteResponseDTO {
     private Long comprobanteContableId;
     private String prefijo;
 
-    public ParametroComprobanteResponseDTO(Integer id, String nombre, String categoriaparametro,
+    public ParametroComprobanteResponseDTO(Integer id, String clave, String nombre, String categoriaparametro,
                                            String categoriacomprobante, String valor,
                                            Long comprobanteContableId, String prefijo) {
         this.id = id;
+        this.clave = clave;
         this.nombre = nombre;
         this.categoriaparametro = categoriaparametro;
         this.categoriacomprobante = categoriacomprobante;
@@ -23,6 +25,9 @@ public class ParametroComprobanteResponseDTO {
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
+
+    public String getClave() { return clave; }
+    public void setClave(String clave) { this.clave = clave; }
 
     public String getNombre() { return nombre; }
     public void setNombre(String nombre) { this.nombre = nombre; }
