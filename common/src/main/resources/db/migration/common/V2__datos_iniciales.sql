@@ -1755,7 +1755,27 @@ CREATE TABLE `parametros` (
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
-INSERT INTO `parametros` VALUES (2,'Pie pagina','FORMATO','GLOBAL','ACTIVO','TEXTO');
+INSERT INTO parametros (id, nombre, categoriaParametro, categoriaComprobante, estado, tipoDato) VALUES
+(2,  'Pie pagina',                                    'FORMATO', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(3,  'Caja general (entrada/salida de efectivo)',      'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(4,  'Cuentas por cobrar - Clientes',                 'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(5,  'Inventarios (mercancías)',                       'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(6,  'IVA descontable (compras)',                      'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(7,  'Parametrocualquiera',                            'GENERAL', 'VENTA',  'ACTIVO', 'TEXTO'),
+(8,  'Cuentas por pagar - Proveedores',               'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(9,  'IVA generado (ventas)',                          'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(10, 'Ingresos por ventas',                            'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(11, 'Gastos generales',                               'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(12, 'Devoluciones en ventas',                         'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(13, 'Costo de ventas (COGS)',                         'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(14, 'Ajuste entrada inventario (sobrantes)',          'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(15, 'Retención en la fuente por pagar',              'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(16, 'Retención de IVA por pagar',                    'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(17, 'Resultado del ejercicio (cierre anual)',         'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(18, 'Anticipo retefuente sufrida (activo)',           'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(19, 'Anticipo reteIVA sufrida (activo)',              'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO'),
+(20, 'Anticipo reteICA sufrida (activo)',              'GENERAL', 'GLOBAL', 'ACTIVO', 'TEXTO');
+ALTER TABLE parametros AUTO_INCREMENT = 21;
 
 --
 -- Table structure for table `parametroscomprobantes`

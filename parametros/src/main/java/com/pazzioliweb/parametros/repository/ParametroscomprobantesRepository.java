@@ -24,4 +24,21 @@ public interface ParametroscomprobantesRepository extends JpaRepository<Parametr
             @Param("categoriacomprobante") String categoriacomprobante,
             @Param("comprobanteId") Long comprobanteId,
             @Param("categoriaparametro") String categoriaparametro);
+
+    @Query(value = "SELECT pra.id, pr.nombre, pr.categoriaparametro, pr.categoriacomprobante, pra.valor, " +
+           "com.id as idcomprobante, com.prefijo FROM parametros pr " +
+           "JOIN parametroscomprobantes pra ON pra.parametroid = pr.id " +
+           "JOIN comprobantes_contables com ON com.id = pra.comprobanteContableid " +
+           "WHERE (:categoriacomprobante IS NULL OR pr.categoriacomprobante = :categoriacomprobante) " +
+           "AND (:categoriaparametro IS NULL OR pr.categoriaparametro = :categoriaparametro) " +
+           "UNION ALL " +
+           "SELECT pa.id, pr.nombre, pr.categoriaparametro, pr.categoriacomprobante, pa.valor, " +
+           "0 AS idcomprobante, pr.categoriacomprobante AS prefijo " +
+           "FROM parametrosglobales pa JOIN parametros pr ON pa.parametroid = pr.id " +
+           "WHERE (:categoriacomprobante IS NULL OR pr.categoriacomprobante = :categoriacomprobante) " +
+           "AND (:categoriaparametro IS NULL OR pr.categoriaparametro = :categoriaparametro)",
+           nativeQuery = true)
+    List<Object[]> findJoinByCategoriasSinComprobante(
+            @Param("categoriacomprobante") String categoriacomprobante,
+            @Param("categoriaparametro") String categoriaparametro);
 }

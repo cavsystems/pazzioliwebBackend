@@ -73,4 +73,6 @@ public interface ComprobanteContableRepository extends JpaRepository<Comprobante
     boolean existsByPrefijoAndTipoAndIdNot(@Param("prefijo") String prefijo,
                                             @Param("tipo") TipoMovimientoComprobante tipo,
                                             @Param("id") Long id);
+
+    Optional<ComprobanteContable> findByPrefijo(String prefijo);
 }

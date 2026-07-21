@@ -77,11 +77,18 @@ public class ParametrosService {
             crearParametroGlobal(parametro, dto.getValor());
         } else {
             if (dto.getComprobanteContableId() == null) {
-                throw new IllegalArgumentException(
-                    "Para categorías diferentes a GLOBAL, el comprobanteContableId es obligatorio"
-                );
+                // Verificar si ya existe un registro global para este parámetro
+                parametrosglobalesRepository.findByParametrosId(parametro.getId())
+                        .ifPresent(p -> {
+                            throw new IllegalArgumentException(
+                                "El parámetro '" + parametro.getNombre() + "' ya se aplica de manera global"
+                            );
+                        });
+                // Crear registro en parametrosglobales
+                crearParametroGlobal(parametro, dto.getValor());
+            } else {
+                crearParametroComprobante(parametro, dto.getComprobanteContableId(), dto.getValor());
             }
-            crearParametroComprobante(parametro, dto.getComprobanteContableId(), dto.getValor());
         }
 
         return parametro;
@@ -96,6 +103,20 @@ public class ParametrosService {
     }
 
     public List<ParametroComprobanteResponseDTO> obtenerParametrosPorComprobante(String categoriacomprobante, Long comprobante, String categoriaparametro) {
+        if (comprobante == null) {
+            List<Object[]> results = parametroscomprobantesRepository.findJoinByCategoriasSinComprobante(categoriacomprobante, categoriaparametro);
+            return results.stream()
+                    .map(row -> new ParametroComprobanteResponseDTO(
+                            ((Number) row[0]).intValue(),
+                            (String) row[1],
+                            (String) row[2],
+                            (String) row[3],
+                            (String) row[4],
+                            ((Number) row[5]).longValue(),
+                            (String) row[6]
+                    ))
+                    .collect(Collectors.toList());
+        }
         return parametroscomprobantesRepository.findJoinByCategorias(categoriacomprobante, comprobante, categoriaparametro);
     }
 
@@ -133,5 +154,85 @@ public class ParametrosService {
         parametroComprobante.setComprobanteContable(comprobante);
         parametroComprobante.setValor(valor);
         parametroscomprobantesRepository.save(parametroComprobante);
+    }
+
+    @Transactional
+    public Parametrosglobales actualizarParametroGlobal(Integer id, String valor) {
+        if (valor == null || valor.isBlank()) {
+            throw new IllegalArgumentException("El valor del parámetro es obligatorio");
+        }
+
+        Parametrosglobales parametroGlobal = parametrosglobalesRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Parámetro global no encontrado: " + id));
+
+        parametroGlobal.setValor(valor);
+        return parametrosglobalesRepository.save(parametroGlobal);
+    }
+
+    @Transactional
+    public Object actualizarParametroComprobante(Integer id, String valor, String prefijo) {
+        if (valor == null || valor.isBlank()) {
+            throw new IllegalArgumentException("El valor del parámetro es obligatorio");
+        }
+
+        // Si se proporciona prefijo, buscar comprobante por prefijo
+        if (prefijo != null && !prefijo.isBlank()) {
+            var comprobante = comprobanteContableRepository.findByPrefijo(prefijo);
+            if (comprobante.isPresent()) {
+                // Buscar parámetro comprobante por ID del parámetro y ID del comprobante
+                Parametros parametro = parametrosRepository.findById(Long.valueOf(id))
+                        .orElseThrow(() -> new EntityNotFoundException("Parámetro no encontrado: " + id));
+
+                Parametroscomprobantes parametroComprobante = parametroscomprobantesRepository
+                        .findByParametrosIdAndComprobanteContableId(parametro.getId(), comprobante.get().getId().intValue())
+                        .orElseThrow(() -> new EntityNotFoundException(
+                            "Parámetro comprobante no encontrado para parámetro " + id + " y comprobante " + comprobante.get().getId()
+                        ));
+
+                parametroComprobante.setValor(valor);
+                return parametroscomprobantesRepository.save(parametroComprobante);
+            }
+        }
+
+        // Si no se encuentra comprobante por prefijo o no se proporciona prefijo, actualizar parámetro global
+        Parametrosglobales parametroGlobal = parametrosglobalesRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Parámetro global no encontrado: " + id));
+
+        parametroGlobal.setValor(valor);
+        return parametrosglobalesRepository.save(parametroGlobal);
+    }
+
+    @Transactional
+    public void eliminarParametroGlobal(Integer id) {
+        Parametrosglobales parametroGlobal = parametrosglobalesRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Parámetro global no encontrado: " + id));
+        parametrosglobalesRepository.delete(parametroGlobal);
+    }
+
+    @Transactional
+    public void eliminarParametroComprobante(Integer id, String prefijo) {
+        // Si se proporciona prefijo, buscar comprobante por prefijo
+        if (prefijo != null && !prefijo.isBlank()) {
+            var comprobante = comprobanteContableRepository.findByPrefijo(prefijo);
+            if (comprobante.isPresent()) {
+                // Buscar parámetro comprobante por ID del parámetro y ID del comprobante
+                Parametros parametro = parametrosRepository.findById(Long.valueOf(id))
+                        .orElseThrow(() -> new EntityNotFoundException("Parámetro no encontrado: " + id));
+
+                Parametroscomprobantes parametroComprobante = parametroscomprobantesRepository
+                        .findByParametrosIdAndComprobanteContableId(parametro.getId(), comprobante.get().getId().intValue())
+                        .orElseThrow(() -> new EntityNotFoundException(
+                            "Parámetro comprobante no encontrado para parámetro " + id + " y comprobante " + comprobante.get().getId()
+                        ));
+
+                parametroscomprobantesRepository.delete(parametroComprobante);
+                return;
+            }
+        }
+
+        // Si no se encuentra comprobante por prefijo o no se proporciona prefijo, eliminar parámetro global
+        Parametrosglobales parametroGlobal = parametrosglobalesRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Parámetro global no encontrado: " + id));
+        parametrosglobalesRepository.delete(parametroGlobal);
     }
 }

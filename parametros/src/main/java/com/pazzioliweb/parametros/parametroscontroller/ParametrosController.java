@@ -2,9 +2,13 @@ package com.pazzioliweb.parametros.parametroscontroller;
 
 import com.pazzioliweb.parametros.dtos.ComprobanteContableSimpleDTO;
 import com.pazzioliweb.parametros.dtos.ParametroComprobanteResponseDTO;
+import com.pazzioliweb.parametros.dtos.ParametroComprobanteUpdateDTO;
 import com.pazzioliweb.parametros.dtos.ParametroCreateDTO;
 import com.pazzioliweb.parametros.dtos.ParametroGlobalResponseDTO;
+import com.pazzioliweb.parametros.dtos.ParametroGlobalUpdateDTO;
 import com.pazzioliweb.parametros.entity.Parametros;
+import com.pazzioliweb.parametros.entity.Parametroscomprobantes;
+import com.pazzioliweb.parametros.entity.Parametrosglobales;
 import com.pazzioliweb.parametros.service.ParametrosService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -57,5 +61,35 @@ public class ParametrosController {
             @RequestParam(required = false) String categoriacomprobante) {
         List<ParametroGlobalResponseDTO> resultado = parametrosService.obtenerParametrosGlobalesConJoin(categoriaparametro, categoriacomprobante);
         return ResponseEntity.ok(resultado);
+    }
+
+    @PutMapping("/globales/{id}")
+    public ResponseEntity<Parametrosglobales> actualizarParametroGlobal(
+            @PathVariable Integer id,
+            @RequestBody ParametroGlobalUpdateDTO dto) {
+        Parametrosglobales actualizado = parametrosService.actualizarParametroGlobal(id, dto.getValor());
+        return ResponseEntity.ok(actualizado);
+    }
+
+    @PutMapping("/comprobantes/{id}")
+    public ResponseEntity<Object> actualizarParametroComprobante(
+            @PathVariable Integer id,
+            @RequestBody ParametroComprobanteUpdateDTO dto) {
+        Object actualizado = parametrosService.actualizarParametroComprobante(id, dto.getValor(), dto.getPrefijo());
+        return ResponseEntity.ok(actualizado);
+    }
+
+    @DeleteMapping("/globales/{id}")
+    public ResponseEntity<Void> eliminarParametroGlobal(@PathVariable Integer id) {
+        parametrosService.eliminarParametroGlobal(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/comprobantes/{id}")
+    public ResponseEntity<Void> eliminarParametroComprobante(
+            @PathVariable Integer id,
+            @RequestParam(required = false) String prefijo) {
+        parametrosService.eliminarParametroComprobante(id, prefijo);
+        return ResponseEntity.noContent().build();
     }
 }
