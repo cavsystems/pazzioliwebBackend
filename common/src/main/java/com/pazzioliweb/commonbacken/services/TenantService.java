@@ -37,20 +37,29 @@ public class TenantService {
 
 	/** Crea o actualiza el schema plantilla corriendo Flyway sobre él. Se llama al iniciar la app. */
 	public void initTemplateSchema() {
+		// El schema plantilla se mantiene de forma manual (seed SQL: estructura completa + maestras
+		// + PUC + config). Ya está completo y actualizado. Si YA existe con tablas, NO corremos Flyway
+		// sobre él: evita re-aplicar migraciones desactualizadas (p.ej. V3 hace un ALTER sin
+		// IF NOT EXISTS que fallaría con "columna duplicada") y no arriesga el template que ya funciona.
+		if (templateSchemaExiste() && templateTieneTablasCreadas()) {
+			System.out.println("[TenantService] Template ya existe con tablas; se omite Flyway (mantenimiento manual).");
+			return;
+		}
+
+		// Sólo para un arranque desde cero (template inexistente): construir con Flyway.
 		Flyway flyway = Flyway.configure()
 			.dataSource(ds)
 			.schemas(TEMPLATE_SCHEMA)
 			.locations("classpath:db/migration/common")
 			.load();
-		
-		// Repair to handle checksum mismatches when migration files have been modified
+
+		// Repair para alinear checksums si algún archivo de migración se editó.
 		try {
 			flyway.repair();
 		} catch (Exception e) {
-			// Repair may fail if no schema exists yet, which is fine
 			System.out.println("[TenantService] Repair skipped (likely first run): " + e.getMessage());
 		}
-		
+
 		flyway.migrate();
 	}
 
