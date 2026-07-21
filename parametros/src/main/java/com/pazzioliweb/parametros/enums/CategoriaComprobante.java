@@ -8,6 +8,8 @@ public enum CategoriaComprobante {
     AJUSTE,
     CAJA,
     TRASLADO,
-    GLOBAL
+    GLOBAL,
+    ENTRADA,
+    SALIDA
 }
 

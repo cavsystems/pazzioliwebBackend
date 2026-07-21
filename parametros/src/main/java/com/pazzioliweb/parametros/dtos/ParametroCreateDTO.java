@@ -5,6 +5,10 @@ import com.pazzioliweb.parametros.enums.CategoriaComprobante;
 public class ParametroCreateDTO {
     private Long parametroId;
     private String clave;
+    // String (no CategoriaParametro): este valor lo manda el frontend tal cual viene del
+    // catálogo (param.categoriaParametro), que en datos reales incluye formas antiguas en
+    // singular (GENERAL, IMPUESTO, GASTO, RETENCION) no cubiertas por CategoriaParametro.
+    // Tipar esto como enum rechazaría la creación de asignaciones para esos parámetros.
     private String categoriaParametro;
     private CategoriaComprobante categoriaComprobante;
     private String valor;

@@ -671,4 +671,12 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         }
         return null;
     }
+
+    @Override
+    public boolean bodegaTieneRegistrosKardex(Integer bodegaId) {
+        Bodegas bodega = bodegasRepository.findById(bodegaId)
+                .orElseThrow(() -> new EntityNotFoundException("Bodega no encontrada: " + bodegaId));
+        List<Kardex> kardexRecords = kardexRepository.findByBodega(bodega);
+        return !kardexRecords.isEmpty();
+    }
 }

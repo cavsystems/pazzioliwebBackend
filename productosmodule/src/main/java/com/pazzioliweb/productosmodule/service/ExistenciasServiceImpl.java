@@ -91,6 +91,12 @@ public class ExistenciasServiceImpl implements ExistenciasService{
             entidad.setUbicacion(dto.getUbicacion());
         }
 
+        if (dto.getBodegaId() != null) {
+            var bodega = bodegasRepo.findById(dto.getBodegaId())
+                    .orElseThrow(() -> new EntityNotFoundException("Bodega no existe"));
+            entidad.setBodega(bodega);
+        }
+
         // Guardar cambios
         Existencias actualizado = repo.save(entidad);
 

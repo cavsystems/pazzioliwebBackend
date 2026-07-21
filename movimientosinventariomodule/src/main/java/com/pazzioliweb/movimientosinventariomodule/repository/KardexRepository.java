@@ -18,6 +18,8 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
 
         Optional<Kardex> findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(ProductoVariante variante, Bodegas bodega);
 
+        List<Kardex> findByBodega(Bodegas bodega);
+
         @Query(value = "SELECT fecha_creacion, numerofactura, tipo_movimiento AS movimiento, tipoentrada AS tipo_movimiento, tipo, " +
                        "descripcion AS Producto, entrada, salida, costo_unitario, costo_promedio, total_costo, saldo, nombrebodega, cliente " +
                        "FROM (" +
