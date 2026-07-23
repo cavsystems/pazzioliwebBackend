@@ -1921,10 +1921,17 @@ CREATE TABLE `permisos` (
   `codigo` int NOT NULL AUTO_INCREMENT,
   `nombre` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`codigo`)
-) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
-INSERT INTO `permisos` VALUES (4,'creacion de recibo de ingresos'),(5,'creacionusuario'),(8,'creacionempresa'),(9,'VENTA'),(10,'Anular comprobantes'),(11,'Reportes generales'),(12,'Configuracion contable'),(13,'superadmin'),(14,'Administradorroles'),(15,'Parametros'),(16,'Crear devolucion'),(17,'Anular devolucion'),(18,'Cionsultar devolucion'),(19,'Crear recibo'),(20,'Anular recibo'),(21,'Modificar recibo'),(22,'Crear usuario'),(23,'Modificar usuario'),(24,'Eliminar usuario'),(25,'Crear egreso'),(26,'Eliminar egreso'),(27,'Modificar egreso'),(28,'Crear comprobantes'),(29,'Modificar comprobantes');
+--
+-- Dumping data for table `permisos`
+--
+
+
+
+INSERT INTO `permisos` VALUES (5,'Empresas'),(8,'Mi Panel'),(9,'Usuarios'),(10,'Terceros'),(11,'Inventarios'),(12,'Compras'),(14,'Ventas'),(15,'Caja'),(16,'Nomina'),(17,'Contabilidad'),(18,'Reportes'),(19,'Parametros');
+
 
 --
 -- Table structure for table `permisos_roles`
@@ -2248,7 +2255,13 @@ CREATE TABLE `roles` (
 ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
-INSERT INTO `roles` VALUES (6,'Administrador'),(7,'Inventario'),(8,'Caja'),(9,'Facturacion');
+--
+-- Dumping data for table `roles`
+--
+
+
+INSERT INTO `roles` VALUES (6,'Administrador'),(7,'Bodegas'),(8,'Ventas');
+
 
 --
 -- Table structure for table `sedes_tercero`
@@ -2748,7 +2761,10 @@ CREATE TABLE `ventas` (
 /*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
-DELIMITER ;;
+DROP FUNCTION IF EXISTS `fn_cajero_tiene_z_pendiente`;
+
+DELIMITER $$
+
 CREATE DEFINER=`root`@`localhost` FUNCTION `fn_cajero_tiene_z_pendiente`(p_cajero_id INT) RETURNS tinyint(1)
     READS SQL DATA
     DETERMINISTIC
@@ -2757,29 +2773,30 @@ BEGIN
     DECLARE v_apertura_hoy INT DEFAULT 0;
     DECLARE v_resultado BOOLEAN DEFAULT FALSE;
 
-    -- CondiciÃ³n A: Â¿tuvo movimientos ayer?
+    -- Condición A: ¿tuvo movimientos ayer?
     SELECT COUNT(*) INTO v_transacciones
     FROM movimiento_cajero
     WHERE DATE(fecha_movimiento) = CURDATE() - INTERVAL 1 DAY
       AND cajero_id = p_cajero_id;
 
-    -- CondiciÃ³n B: Â¿tiene apertura registrada hoy?
+    -- Condición B: ¿tiene apertura registrada hoy?
     SELECT COUNT(*) INTO v_apertura_hoy
     FROM detalle_cajero
     WHERE DATE(fecha_apertura) = CURDATE()
       AND cajero_id = p_cajero_id;
 
-    -- Si NO tiene apertura hoy (v_apertura_hoy = 0) => condiciÃ³n B = TRUE
-    -- Si tuvo transacciones ayer (v_transacciones > 0) => condiciÃ³n A = TRUE
-    -- Ambas TRUE => tiene Z pendiente
-    IF v_transacciones <= 0 or v_apertura_hoy > 0 THEN
+    -- Tiene Z pendiente SOLO SI:
+    --   tuvo transacciones ayer (v_transacciones > 0)
+    --   Y NO ha hecho apertura hoy (v_apertura_hoy = 0)
+    IF v_transacciones > 0 AND v_apertura_hoy = 0 THEN
         SET v_resultado = TRUE;
     ELSE
         SET v_resultado = FALSE;
     END IF;
 
     RETURN v_resultado;
-END ;;
+END$$
+
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
@@ -2794,29 +2811,28 @@ DELIMITER ;
 /*!50003 SET collation_connection  = cp850_general_ci */ ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
-DELIMITER ;;
+DROP PROCEDURE IF EXISTS `sp_listar_empresas_todos_tenants`;
+
+DELIMITER $$
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_listar_empresas_todos_tenants`()
 BEGIN
     DECLARE done INT DEFAULT FALSE;
     DECLARE db_name VARCHAR(255);
     DECLARE sql_query LONGTEXT DEFAULT '';
-
     DECLARE cur CURSOR FOR
         SELECT t.TABLE_SCHEMA
         FROM information_schema.TABLES t
         WHERE t.TABLE_NAME = 'empresa'
           AND t.TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys','administrador');
-
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
 
     OPEN cur;
-
     read_loop: LOOP
         FETCH cur INTO db_name;
         IF done THEN
             LEAVE read_loop;
         END IF;
-
         SET sql_query = CONCAT(sql_query,
         'SELECT
             "', db_name, '" AS tenant,
@@ -2861,7 +2877,6 @@ BEGIN
         FROM ', db_name, '.empresa
         UNION ALL ');
     END LOOP;
-
     CLOSE cur;
 
     IF sql_query IS NULL OR sql_query = '' THEN
@@ -2888,7 +2903,8 @@ BEGIN
         EXECUTE stmt;
         DEALLOCATE PREPARE stmt;
     END IF;
-END ;;
+END$$
+
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
@@ -2903,7 +2919,7 @@ DELIMITER ;
 /*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
-DELIMITER ;;
+DELIMITER $$
 CREATE DEFINER=`root`@`localhost` PROCEDURE `verificar_relaciones_bodega`(
     IN p_codigo_bodega INT
 )
@@ -2969,7 +2985,7 @@ BEGIN
     SELECT
         total_relaciones > 0 AS tieneRelaciones;
 
-END ;;
+END$$
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;

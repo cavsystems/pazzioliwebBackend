@@ -590,6 +590,15 @@ public class ProductosServiceImpl implements ProductosService{
                 .collect(Collectors.toList());
         dto.setVariantes(variantesDTO);
 
+        // Fetch unit of measurement for the product (take first position)
+        List<UnidadesMedidaProducto> unidadesMedidaProductos = unidadesMedidaProductoRepository.findByProducto_ProductoId(producto.getProductoId());
+        String unidadMedidaSigla = unidadesMedidaProductos.stream()
+                .map(ump -> ump.getUnidadMedida() != null ? ump.getUnidadMedida().getSigla() : null)
+                .filter(sigla -> sigla != null)
+                .findFirst()
+                .orElse(null);
+        dto.setUnidadMedida(unidadMedidaSigla);
+
         return dto;
     }
 

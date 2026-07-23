@@ -668,6 +668,8 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             return (Double) value;
         } else if (value instanceof Number) {
             return ((Number) value).doubleValue();
+        } else if (value instanceof Boolean) {
+            return ((Boolean) value) ? 1.0 : 0.0;
         }
         return null;
     }

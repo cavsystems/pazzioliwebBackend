@@ -24,4 +24,5 @@ public class ProductoConVariantesDTO {
     private String impuesto;
     private String tipoProducto;
     private List<VarianteDTO> variantes;
+    private String unidadMedida;
 }

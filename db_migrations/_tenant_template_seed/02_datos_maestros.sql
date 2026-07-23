@@ -126,19 +126,19 @@ UNLOCK TABLES;
 
 LOCK TABLES `roles` WRITE;
 /*!40000 ALTER TABLE `roles` DISABLE KEYS */;
-INSERT  IGNORE INTO `roles` (`codigo`, `nombre`) VALUES (1,'usuariocaja'),(2,'administradornivel1'),(3,'hgtjh'),(4,'Admin'),(5,'Adminsede');
+INSERT  IGNORE INTO `roles` (`codigo`, `nombre`) VALUES (6,'Administrador'),(7,'Bodegas'),(8,'Ventas');
 /*!40000 ALTER TABLE `roles` ENABLE KEYS */;
 UNLOCK TABLES;
 
 LOCK TABLES `permisos` WRITE;
 /*!40000 ALTER TABLE `permisos` DISABLE KEYS */;
-INSERT  IGNORE INTO `permisos` (`codigo`, `nombre`) VALUES (1,'Manejo de caja'),(2,'Facturacion POS'),(3,'devoluciones'),(4,'creacion de recibo de ingresos'),(5,'creacionusuario'),(6,'creacionsuperusuario'),(7,'creacionsuperusuarioadministrador'),(8,'creacionempresa'),(9,'VENTA'),(10,'Anular comprobantes'),(11,'Reportes generales'),(12,'Configuracion contable'),(13,'superadmin');
+INSERT  IGNORE INTO `permisos` (`codigo`, `nombre`) VALUES (5,'Empresas'),(8,'Mi Panel'),(9,'Usuarios'),(10,'Terceros'),(11,'Inventarios'),(12,'Compras'),(14,'Ventas'),(15,'Caja'),(16,'Nomina'),(17,'Contabilidad'),(18,'Reportes'),(19,'Parametros');
 /*!40000 ALTER TABLE `permisos` ENABLE KEYS */;
 UNLOCK TABLES;
 
 LOCK TABLES `permisos_roles` WRITE;
 /*!40000 ALTER TABLE `permisos_roles` DISABLE KEYS */;
-INSERT  IGNORE INTO `permisos_roles` (`codigo`, `codigopermiso`, `codigorol`, `estado`, `codigousuariocreado`, `fechacreado`) VALUES (1,1,1,'ACTIVO',0,'2025-07-23 12:26:14'),(2,2,1,'ACTIVO',0,'2025-07-23 12:26:14'),(4,4,1,'ACTIVO',0,'2025-07-23 12:26:14'),(5,5,2,'ACTIVO',0,'2025-07-23 12:30:57'),(6,6,2,'ACTIVO',0,'2025-07-23 12:30:57'),(7,8,2,'ACTIVO',0,'2025-08-09 10:49:53'),(8,9,1,'ACTIVO',0,'2026-03-31 07:54:05'),(10,1,4,'ACTIVO',0,'2026-04-04 15:36:24'),(11,2,4,'ACTIVO',0,'2026-04-04 15:36:25'),(12,3,4,'ACTIVO',0,'2026-04-04 15:36:26'),(13,4,4,'ACTIVO',0,'2026-04-04 15:36:26'),(14,5,4,'ACTIVO',0,'2026-04-04 15:36:27'),(15,6,4,'ACTIVO',0,'2026-04-04 15:36:28'),(16,7,4,'ACTIVO',0,'2026-04-04 15:36:29'),(17,8,4,'ACTIVO',0,'2026-04-04 15:36:30'),(18,9,4,'ACTIVO',0,'2026-04-04 15:36:32'),(19,1,5,'ACTIVO',0,'2026-04-04 15:36:47'),(20,2,5,'ACTIVO',0,'2026-04-04 15:36:47'),(21,3,5,'ACTIVO',0,'2026-04-04 15:36:51'),(22,4,5,'ACTIVO',0,'2026-04-04 15:36:52'),(23,5,5,'ACTIVO',0,'2026-04-04 15:36:53'),(24,6,5,'ACTIVO',0,'2026-04-04 15:36:54'),(25,7,5,'ACTIVO',0,'2026-04-04 15:36:55'),(26,8,5,'ACTIVO',0,'2026-04-04 15:36:55'),(27,9,5,'ACTIVO',0,'2026-04-04 15:36:56'),(29,10,5,'ACTIVO',3,'2026-05-03 21:18:46'),(30,12,5,'ACTIVO',3,'2026-05-04 15:52:08'),(31,11,5,'ACTIVO',0,'2026-05-07 16:14:15'),(32,10,4,'ACTIVO',0,'2026-05-22 14:55:14'),(33,11,4,'ACTIVO',0,'2026-05-22 14:55:15'),(34,12,4,'ACTIVO',0,'2026-05-22 14:55:16'),(35,13,5,'ACTIVO',0,'2026-05-27 10:32:30');
+INSERT  IGNORE INTO `permisos_roles` (`codigo`, `codigopermiso`, `codigorol`, `estado`, `codigousuariocreado`, `fechacreado`) VALUES (1,5,6,'ACTIVO',0,NOW()),(2,8,6,'ACTIVO',0,NOW()),(3,9,6,'ACTIVO',0,NOW()),(4,10,6,'ACTIVO',0,NOW()),(5,11,6,'ACTIVO',0,NOW()),(6,12,6,'ACTIVO',0,NOW()),(7,14,6,'ACTIVO',0,NOW()),(8,15,6,'ACTIVO',0,NOW()),(9,16,6,'ACTIVO',0,NOW()),(10,17,6,'ACTIVO',0,NOW()),(11,18,6,'ACTIVO',0,NOW()),(12,19,6,'ACTIVO',0,NOW()),(13,11,7,'ACTIVO',0,NOW()),(14,12,7,'ACTIVO',0,NOW()),(15,14,8,'ACTIVO',0,NOW()),(16,15,8,'ACTIVO',0,NOW());
 /*!40000 ALTER TABLE `permisos_roles` ENABLE KEYS */;
 UNLOCK TABLES;
 
