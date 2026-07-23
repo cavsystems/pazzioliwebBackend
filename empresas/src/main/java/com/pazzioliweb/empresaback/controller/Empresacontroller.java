@@ -106,6 +106,16 @@ public class Empresacontroller {
 		nombredb.setNombre(dto.getRazonsocial());
 		
 		  String schema = nombredb.getNombre().toLowerCase().replaceAll("[^a-z0-9_]", "");
+		  
+		  // Verificar si ya existe un esquema con ese nombre
+		  Integer schemaExists = jdbc.queryForObject(
+			  "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?",
+			  Integer.class, schema);
+		  
+		  if (schemaExists != null && schemaExists > 0) {
+			  throw new RuntimeException("Ya existe una empresa creada con el nombre: " + dto.getRazonsocial());
+		  }
+		  
 		   jdbc.execute("CREATE SCHEMA IF NOT EXISTS `" + schema + "`");
 		   tenantService.initTenantSchema(schema);
 		  	/*Esto establece el tenant actual.  */	  
