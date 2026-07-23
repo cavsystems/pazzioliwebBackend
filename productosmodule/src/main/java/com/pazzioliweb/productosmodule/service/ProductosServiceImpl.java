@@ -255,8 +255,10 @@ public class ProductosServiceImpl implements ProductosService{
                  existente.setManifiesto(dto.getManifiesto());
              }
 
+             // Imagen / manifiesto (PDF): "" es una orden EXPLÍCITA de quitarlo (se guarda null).
+             // null = campo no enviado / no cambiar (para actualizaciones parciales de otros endpoints).
              if (dto.getImagen() != null) {
-                 existente.setImagen(dto.getImagen());
+                 existente.setImagen(dto.getImagen().isEmpty() ? null : dto.getImagen());
              }
 
              // Relaciones

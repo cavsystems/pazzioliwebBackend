@@ -43,6 +43,27 @@ public interface ComprobanteContableRepository extends JpaRepository<Comprobante
             @Param("cajeroId") Integer cajeroId,
             @Param("tipo") TipoMovimientoComprobante tipo);
 
+    /**
+     * Busca un comprobante por id CON lock pesimista, para reservar su consecutivo
+     * de forma segura cuando el usuario elige explícitamente el comprobante (selector de compra).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ComprobanteContable c WHERE c.id = :id")
+    Optional<ComprobanteContable> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * Comprobantes activos (no legacy) de un tipo, CON lock pesimista y orden estable por id.
+     * Se usa para asignar consecutivo sin cajero (compra por bodega/empresa) de forma segura
+     * y determinista cuando hay varios prefijos del mismo tipo.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ComprobanteContable c " +
+           " WHERE c.tipoMovimiento = :tipo " +
+           "   AND c.activo = true " +
+           "   AND c.esLegacy = false " +
+           " ORDER BY c.id ASC")
+    List<ComprobanteContable> findActivosByTipoForUpdate(@Param("tipo") TipoMovimientoComprobante tipo);
+
     /** El comprobante LEGACY de un tipo (sin cajeros asignados). Único por tipo. */
     @Query("SELECT c FROM ComprobanteContable c " +
            " WHERE c.tipoMovimiento = :tipo " +

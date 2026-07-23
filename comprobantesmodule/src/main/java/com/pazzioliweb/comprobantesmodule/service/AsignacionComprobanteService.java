@@ -207,16 +207,47 @@ public class AsignacionComprobanteService {
     }
 
     /**
+     * Asignación por comprobante ELEGIDO explícitamente (selector de compra). Reserva el
+     * consecutivo del comprobante indicado. Útil cuando la operación no depende del cajero
+     * (p. ej. compras: el usuario escoge el prefijo/comprobante).
+     */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public Resultado asignarPorComprobanteId(Long comprobanteId, TipoMovimientoComprobante... tiposPermitidos) {
+        ComprobanteContable c = repo.findByIdForUpdate(comprobanteId)
+                .orElseThrow(() -> new ComprobanteNoConfiguradoException(
+                        "El comprobante seleccionado (id " + comprobanteId + ") no existe."));
+        if (!Boolean.TRUE.equals(c.getActivo())) {
+            throw new ComprobanteNoConfiguradoException(
+                    "El comprobante '" + c.getPrefijo() + "' está inactivo; elija otro.");
+        }
+        // Validar que el comprobante elegido sea del tipo esperado (evita, p.ej., usar una
+        // numeración de VENTA/DIAN en una compra y quemar un consecutivo legal ajeno).
+        if (tiposPermitidos != null && tiposPermitidos.length > 0
+                && java.util.Arrays.stream(tiposPermitidos).noneMatch(t -> t == c.getTipoMovimiento())) {
+            throw new ComprobanteNoConfiguradoException(
+                    "El comprobante '" + c.getPrefijo() + "' es de tipo " + c.getTipoMovimiento().name()
+                    + " y no es válido para esta operación.");
+        }
+        int consecutivo = c.getSiguienteConsecutivo();
+        validarResolucionDian(c, consecutivo);
+        c.setSiguienteConsecutivo(consecutivo + 1);
+        repo.save(c);
+        eventPublisher.publishEvent(new ConsecutivoIncrementadoEvent(
+                this, c.getId(), c.getTipoMovimiento().name(), consecutivo + 1));
+        return new Resultado(c, c.getPrefijo() + "-" + consecutivo, consecutivo);
+    }
+
+    /**
      * Asignación SIN cajero para tipos auto-generados (DS, etc.). Busca el primer
      * comprobante activo del tipo y avanza el consecutivo. Si no hay ninguno
      * configurado, falla con mensaje claro.
      */
     @Transactional(propagation = Propagation.REQUIRED)
     public Resultado asignarSinCajero(TipoMovimientoComprobante tipo) {
-        ComprobanteContable c = repo.findAll().stream()
-                .filter(x -> tipo.equals(x.getTipoMovimiento())
-                          && Boolean.TRUE.equals(x.getActivo())
-                          && !Boolean.TRUE.equals(x.getEsLegacy()))
+        // Lock pesimista + orden estable por id: evita consecutivos DUPLICADOS en operaciones
+        // concurrentes (este es el camino por defecto de una compra sin cajero) y hace la
+        // elección determinista cuando hay varios prefijos del mismo tipo.
+        ComprobanteContable c = repo.findActivosByTipoForUpdate(tipo).stream()
                 .findFirst()
                 .orElseThrow(() -> new ComprobanteNoConfiguradoException(
                         "No hay comprobante " + tipo.name() + " (" + tipo.getDescripcion() +

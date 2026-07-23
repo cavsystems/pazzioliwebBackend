@@ -153,6 +153,41 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         );
     }
 
+    /**
+     * Asigna el comprobante de una compra SIN exigir cajero (la numeración de compra va por
+     * bodega/empresa). Orden de preferencia:
+     *   1. Si el usuario ELIGIÓ un comprobante (selector) → usar ese comprobante/prefijo.
+     *   2. Si hay un cajero con comprobante del tipo (compatibilidad) → usarlo.
+     *   3. Si no → tomar el comprobante activo del tipo (asignarSinCajero).
+     * Lanza OrdenCompraException con mensaje claro si no hay ningún comprobante del tipo configurado.
+     */
+    private AsignacionComprobanteService.Resultado asignarComprobanteCompra(
+            Long comprobanteId, Integer cajeroId, TipoMovimientoComprobante tipo) {
+        try {
+            if (comprobanteId != null) {
+                // Solo se permite elegir un comprobante de COMPRA (CC/CR): evita quemar numeración de ventas/DIAN.
+                return asignacionComprobante.asignarPorComprobanteId(
+                        comprobanteId, TipoMovimientoComprobante.CC, TipoMovimientoComprobante.CR);
+            }
+            if (cajeroId != null
+                    && comprobanteRepository.findActivoByCajeroAndTipo(cajeroId, tipo).isPresent()) {
+                return asignacionComprobante.asignar(cajeroId, tipo);
+            }
+            Integer cajeroDefault = configCompras.obtenerCajeroDefaultId();
+            if (cajeroDefault != null
+                    && comprobanteRepository.findActivoByCajeroAndTipo(cajeroDefault, tipo).isPresent()) {
+                return asignacionComprobante.asignar(cajeroDefault, tipo);
+            }
+            // Sin cajero: numeración por bodega/empresa (toma el comprobante activo del tipo).
+            return asignacionComprobante.asignarSinCajero(tipo);
+        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
+            throw new OrdenCompraException(
+                "No hay un comprobante de " + tipo.name() + " (" + tipo.getDescripcion()
+                + ") configurado. Cree uno en Contabilidad → Comprobantes (el cajero es opcional para compras)."
+            );
+        }
+    }
+
     @Override
     @Transactional(readOnly = true)
     public Page<OrdenCompraDTO> buscarConFiltros(String estado, LocalDate fechaDesde,
@@ -708,17 +743,14 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         TipoMovimientoComprobante tipo = esCredito
                 ? TipoMovimientoComprobante.CR
                 : TipoMovimientoComprobante.CC;
-        Integer cajeroEfectivo = resolverCajeroParaComprobante(request.getCajeroId(), tipo);
-        try {
-            AsignacionComprobanteService.Resultado r =
-                    asignacionComprobante.asignar(cajeroEfectivo, tipo);
-            orden.setComprobante(r.getComprobante());
-            orden.setConsecutivoComprobante(r.getConsecutivo());
-            orden.setNumeroOrden(r.getNumeroDocumento());
-            orden.setCajeroId(cajeroEfectivo);
-        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
-            throw new OrdenCompraException(ex.getMessage());
-        }
+        // Compra SIN cajero obligatorio: usa el comprobante elegido (selector) o, en su defecto,
+        // el cajero (si aplica) o el comprobante activo del tipo (por bodega/empresa).
+        AsignacionComprobanteService.Resultado r =
+                asignarComprobanteCompra(request.getComprobanteId(), request.getCajeroId(), tipo);
+        orden.setComprobante(r.getComprobante());
+        orden.setConsecutivoComprobante(r.getConsecutivo());
+        orden.setNumeroOrden(r.getNumeroDocumento());
+        orden.setCajeroId(request.getCajeroId()); // puede ser null (compra sin cajero)
         orden.setEstado("PENDIENTE");
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
@@ -1215,23 +1247,20 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         }
         TipoMovimientoComprobante tipo = esCredito ? TipoMovimientoComprobante.CR : TipoMovimientoComprobante.CC;
         Integer cajeroId = dto.getCajeroId() != null ? dto.getCajeroId() : orden.getCajeroId();
-        Integer cajeroEfectivo = resolverCajeroParaComprobante(cajeroId, tipo);
 
-        try {
-            AsignacionComprobanteService.Resultado r = asignacionComprobante.asignar(cajeroEfectivo, tipo);
-            orden.setComprobante(r.getComprobante());
-            orden.setConsecutivoComprobante(r.getConsecutivo());
-            // Preservar el número OC original si aún no se había guardado
-            if (orden.getNumeroOc() == null && orden.getNumeroOrden() != null
-                    && orden.getNumeroOrden().startsWith("OC-")) {
-                orden.setNumeroOc(orden.getNumeroOrden());
-            }
-            // numero_orden pasa a ser el número del comprobante contable (CC-X / CR-X)
-            orden.setNumeroOrden(r.getNumeroDocumento());
-            orden.setCajeroId(cajeroEfectivo);
-        } catch (AsignacionComprobanteService.ComprobanteNoConfiguradoException ex) {
-            throw new OrdenCompraException(ex.getMessage());
+        // Compra SIN cajero obligatorio: comprobante elegido (selector) → cajero → comprobante del tipo.
+        AsignacionComprobanteService.Resultado r =
+                asignarComprobanteCompra(dto.getComprobanteId(), cajeroId, tipo);
+        orden.setComprobante(r.getComprobante());
+        orden.setConsecutivoComprobante(r.getConsecutivo());
+        // Preservar el número OC original si aún no se había guardado
+        if (orden.getNumeroOc() == null && orden.getNumeroOrden() != null
+                && orden.getNumeroOrden().startsWith("OC-")) {
+            orden.setNumeroOc(orden.getNumeroOrden());
         }
+        // numero_orden pasa a ser el número del comprobante contable (CC-X / CR-X)
+        orden.setNumeroOrden(r.getNumeroDocumento());
+        if (cajeroId != null) orden.setCajeroId(cajeroId);
 
         // 3. Procesar métodos de pago
         BigDecimal totalPagado = procesarMetodosPagoFinalizar(orden, dto.getMetodosPago());

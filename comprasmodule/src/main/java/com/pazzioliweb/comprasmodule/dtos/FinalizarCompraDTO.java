@@ -50,8 +50,11 @@ public class FinalizarCompraDTO {
     /** Fecha de la factura del proveedor en formato MM/dd/yyyy. */
     private String fechaFactura;
 
-    /** ID del cajero que registra el ingreso (para asignar el comprobante). */
+    /** ID del cajero que registra el ingreso (opcional: la compra ya no está atada al cajero). */
     private Integer cajeroId;
+
+    /** Comprobante/prefijo elegido en el selector de compra (opcional). Si viene, se usa ese. */
+    private Long comprobanteId;
 
     /** ID del proveedor (Terceros). Necesario para los créditos del asiento. */
     private Integer proveedorId;

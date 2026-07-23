@@ -49,15 +49,16 @@ public enum TipoMovimientoComprobante {
      * para poder operar (porque la asignación de consecutivo se hace por cajero).
      *
      * Tipos que SÍ requieren cajero:
-     *   FC, VC (ventas), CC, CR (compras), RC, CE (movimientos de caja), DV (devolución)
+     *   FC, VC (ventas), RC, CE (movimientos de caja), DV (devolución)
      *
      * Tipos que NO requieren cajero (se vinculan a bodega o son auto-generados):
+     *   CC, CR (compras) — la numeración de compra NO está atada al cajero, va por bodega/empresa
      *   EI, SI, TI (movimientos manuales de inventario)
      *   NC, ND, TPOS, DS (documentos DIAN generados automáticamente)
      */
     public boolean requiereCajero() {
         switch (this) {
-            case FC: case VC: case CC: case CR: case RC: case CE: case DV:
+            case FC: case VC: case RC: case CE: case DV:
                 return true;
             default:
                 return false;

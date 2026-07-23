@@ -49,11 +49,24 @@ public class ModoContabilidadService {
         }
     }
 
+    /**
+     * Interpreta contabilidad_activa de forma resiliente: MySQL devuelve tinyint(1) como
+     * Boolean (driver con tinyInt1isBit=true, el default) o como Number según configuración.
+     * Antes se casteaba directo a Number → ClassCastException "Boolean cannot be cast to Number".
+     */
+    private static boolean toBool(Object v) {
+        if (v == null) return true;                         // fail-safe ON
+        if (v instanceof Boolean) return (Boolean) v;
+        if (v instanceof Number) return ((Number) v).intValue() != 0;
+        String s = String.valueOf(v).trim();
+        return !s.equals("0") && !s.equalsIgnoreCase("false");
+    }
+
     /** true si la empresa lleva contabilidad (default/fail-safe = true). */
     public boolean contabilidadActiva() {
         Object[] r = leerConfig();
         if (r == null || r[0] == null) return true; // fail-safe ON
-        return ((Number) r[0]).intValue() != 0;
+        return toBool(r[0]);
     }
 
     /** Fecha de corte de contabilidad, o null si no hay corte. */
@@ -71,7 +84,7 @@ public class ModoContabilidadService {
     public boolean esContable(LocalDate fecha) {
         Object[] r = leerConfig();
         if (r == null || r[0] == null) return true; // fail-safe ON
-        boolean activa = ((Number) r[0]).intValue() != 0;
+        boolean activa = toBool(r[0]);
         if (!activa) return false;
         LocalDate desde = r[1] != null ? ((java.sql.Date) r[1]).toLocalDate() : null;
         if (desde == null || fecha == null) return true; // sin corte, o sin fecha → contable

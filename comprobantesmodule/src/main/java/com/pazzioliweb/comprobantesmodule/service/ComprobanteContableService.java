@@ -138,7 +138,10 @@ public class ComprobanteContableService {
 
         // Validar que ningún cajero asignado ya tenga OTRO comprobante activo del mismo tipo.
         // Excepción: si el otro comprobante es éste mismo (idActual), está bien.
-        if (dto.getCajeroIds() != null) {
+        // Excepción COMPRAS (CC/CR): la compra NO está atada al cajero; se permiten VARIOS
+        // prefijos de compra aunque compartan cajero, por eso no se aplica esta regla a CC/CR.
+        boolean esCompra = tipo == TipoMovimientoComprobante.CC || tipo == TipoMovimientoComprobante.CR;
+        if (dto.getCajeroIds() != null && !esCompra) {
             for (Integer cajId : dto.getCajeroIds()) {
                 Optional<ComprobanteContable> existente = repo.findActivoByCajeroAndTipo(cajId, tipo);
                 if (existente.isPresent() && (idActual == null || !existente.get().getId().equals(idActual))) {
