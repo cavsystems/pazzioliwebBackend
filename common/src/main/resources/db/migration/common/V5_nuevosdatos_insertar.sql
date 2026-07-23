@@ -1,1 +1,1 @@
-INSERT INTO `roles` VALUES (6,'Administrador'),(7,'Bodegas'),(8,'Ventas');
+INSERT IGNORE INTO `roles` VALUES (6,'Administrador'),(7,'Bodegas'),(8,'Ventas');
