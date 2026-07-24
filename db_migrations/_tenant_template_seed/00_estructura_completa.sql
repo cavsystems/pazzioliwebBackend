@@ -2128,7 +2128,7 @@ DROP TABLE IF EXISTS `unidades_medida`;
 CREATE TABLE `unidades_medida` (
   `unidad_medida_id` int NOT NULL AUTO_INCREMENT,
   `descripcion` varchar(100) NOT NULL,
-  `sigla` varchar(10) NOT NULL,
+  `sigla` varchar(50) NOT NULL,
   PRIMARY KEY (`unidad_medida_id`),
   UNIQUE KEY `uq_unidades_medida_sigla` (`sigla`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

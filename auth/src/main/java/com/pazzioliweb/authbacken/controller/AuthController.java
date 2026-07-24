@@ -288,7 +288,7 @@ public class AuthController {
             // Así un admin, supervisor o cualquier rol con permiso VENTA también abre caja
             boolean tienePermisoVenta = datos.getPermisos() != null
                     && datos.getPermisos().stream()
-                    .anyMatch(p -> p.equalsIgnoreCase("VENTA"));
+                    .anyMatch(p -> p.equalsIgnoreCase("VENTAS"));
 
             if (!tienePermisoVenta) {
                 System.out.println("[cajero] usuario SIN permiso VENTA → no abre caja");

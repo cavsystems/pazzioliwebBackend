@@ -655,6 +655,17 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             dto.setSaldo(row[11] != null ? getDoubleValue(row[11]) : null);
             dto.setNombrebodega(row[12] != null ? (String) row[12] : null);
             dto.setCliente(row[13] != null ? (String) row[13] : null);
+            if (row.length > 14 && row[14] != null) {
+                if (row[14] instanceof java.sql.Timestamp) {
+                    dto.setFechaEmision(((java.sql.Timestamp) row[14]).toLocalDateTime());
+                } else if (row[14] instanceof java.sql.Date) {
+                    dto.setFechaEmision(((java.sql.Date) row[14]).toLocalDate().atStartOfDay());
+                } else if (row[14] instanceof java.time.LocalDate) {
+                    dto.setFechaEmision(((java.time.LocalDate) row[14]).atStartOfDay());
+                } else if (row[14] instanceof java.time.LocalDateTime) {
+                    dto.setFechaEmision((java.time.LocalDateTime) row[14]);
+                }
+            }
             dtos.add(dto);
         }
         

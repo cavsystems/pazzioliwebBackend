@@ -20,6 +20,9 @@ import com.pazzioliweb.usuariosbacken.entity.PermisoRol;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.PermisoRolRepository;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
+import com.pazzioliweb.empresasback.entity.Empresa;
+import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
+import com.pazzioliweb.commonbacken.conexiondb.TenantContext;
 
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -34,6 +37,9 @@ public class JwUtilJava {
 
 	@Autowired
 	private PermisoRolRepository permisoRolRepository;
+
+	@Autowired
+	private EmpresaRepositori empresaRepositori;
 
 	private final String SECRET_KEY = "clave_secreta_clave_secreta_clave_secreta"; // 🔐 mínimo 32 bytes para HS256
 	private final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
@@ -74,6 +80,35 @@ public class JwUtilJava {
 			sesion.setExpira(Instant.now().plus(24, ChronoUnit.HOURS));
 			// cajeroId y detalleCajeroId se establecen en AuthController.verificarYAbrirSesionCajero()
 
+			// Obtener datos de la empresa del tenant actual
+			String tenantOriginal = TenantContext.getCurrentTenant();
+			try {
+				TenantContext.setCurrentTenant(db);
+				
+				Empresa empresa = empresaRepositori.findAll().stream()
+					.findFirst()
+					.orElse(null);
+				
+				if (empresa != null) {
+					sesion.setImagenempresa(empresa.getImagenEmpresa());
+					sesion.setTipoImagen(empresa.getTipoImagen());
+					sesion.setNombreEmpresa(empresa.getRazonsocial());
+					sesion.setNumeroIdentificacion(empresa.getNumeroidentificacion());
+					sesion.setDigitoVerificacion(empresa.getDigitoverificacion());
+					
+					// Obtener tipo de identificación como sigla (NIT, CC, etc.)
+					if (empresa.getCodigotipoidentificacion() != null) {
+						sesion.setTipoIdentificacion(
+							abreviarTipoIdentificacion(empresa.getCodigotipoidentificacion().getCodigoTipoIdentificacion())
+						);
+					}
+				}
+			} catch (Exception e) {
+				System.out.println("[JwUtilJava] Error al obtener datos de empresa: " + e.getMessage());
+			} finally {
+				TenantContext.setCurrentTenant(tenantOriginal);
+			}
+
 			redisTemplate.opsForValue().set(sessionId, sesion, Duration.ofHours(24));
 
 			return Jwts.builder()
@@ -107,6 +142,22 @@ public class JwUtilJava {
 			return true;
 		} catch (Exception e) {
 			return false;
+		}
+	}
+
+	/** Mapea el código DIAN de tipo de identificación a su sigla estándar. */
+	private String abreviarTipoIdentificacion(int codigoDian) {
+		switch (codigoDian) {
+			case 11: return "RC";   // Registro Civil de Nacimiento
+			case 12: return "TI";   // Tarjeta de Identidad
+			case 13: return "CC";   // Cédula de Ciudadanía
+			case 21: return "TE";   // Tarjeta de Extranjería
+			case 22: return "CE";   // Cédula de Extranjería
+			case 31: return "NIT";  // NIT
+			case 41: return "PA";   // Pasaporte
+			case 42: return "DE";   // Documento de identificación extranjero
+			case 43: return "IE";   // Sin identificación del exterior
+			default: return String.valueOf(codigoDian);
 		}
 	}
 

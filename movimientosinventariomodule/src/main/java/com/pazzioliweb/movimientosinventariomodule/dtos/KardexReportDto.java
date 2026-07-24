@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public class KardexReportDto {
     private LocalDateTime fechaCreacion;
+    private LocalDateTime fechaEmision;
     private String numeroFactura;
     private String movimiento;
     private String tipoMovimiento;
@@ -24,6 +25,14 @@ public class KardexReportDto {
 
     public void setFechaCreacion(LocalDateTime fechaCreacion) {
         this.fechaCreacion = fechaCreacion;
+    }
+
+    public LocalDateTime getFechaEmision() {
+        return fechaEmision;
+    }
+
+    public void setFechaEmision(LocalDateTime fechaEmision) {
+        this.fechaEmision = fechaEmision;
     }
 
     public String getNumeroFactura() {

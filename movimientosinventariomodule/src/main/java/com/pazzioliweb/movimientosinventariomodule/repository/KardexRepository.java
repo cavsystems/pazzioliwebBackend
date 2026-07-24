@@ -21,7 +21,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
         List<Kardex> findByBodega(Bodegas bodega);
 
         @Query(value = "SELECT fecha_creacion, numerofactura, tipo_movimiento AS movimiento, tipoentrada AS tipo_movimiento, tipo, " +
-                       "descripcion AS Producto, entrada, salida, costo_unitario, costo_promedio, total_costo, saldo, nombrebodega, cliente " +
+                       "descripcion AS Producto, entrada, salida, costo_unitario, costo_promedio, total_costo, saldo, nombrebodega, cliente, fecha_emision " +
                        "FROM (" +
                        "SELECT " +
                        "  m.tipo_movimiento AS tipoentrada, " +
@@ -36,6 +36,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                 "b.codigo as bodega_id,"+
                        "  k.costo_unitario, " +
                        "  k.fecha_creacion, " +
+                       "  k.fecha_emision, " +
                        "  CONCAT(co.prefijo, '-', m.consecutivo) AS numerofactura, " +
                        "  mov.movimiento_cajero_id, " +
                        "  mov.detalle_cajero_id, " +
@@ -87,7 +88,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "AND (:varianteproductoid IS NULL OR t.variante_id = :varianteproductoid) " +
                        "AND (:bodega IS NULL OR t.nombrebodega LIKE CONCAT('%', :bodega, '%')) " +
                        "AND (:movimiento IS NULL OR t.tipo_movimiento LIKE CONCAT('%', :movimiento, '%')) " +
-                       "ORDER BY fecha_creacion", nativeQuery = true)
+                       "ORDER BY fecha_emision", nativeQuery = true)
         List<Object[]> getKardexReportRaw(@Param("desde") String desde, @Param("hasta") String hasta, 
                                           @Param("varianteproductoid") Integer varianteproductoid,
                                           @Param("bodega") String bodega,

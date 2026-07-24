@@ -101,6 +101,51 @@ public class DatosSesiones {
 		this.detalleCajeroId = detalleCajeroId;
 	}
 
+	// ✅ Datos de la empresa
+	private byte[] imagenempresa;
+	private String tipoImagen;
+	private String nombreEmpresa;
+	private String numeroIdentificacion;
+	private String digitoVerificacion;
+	private String tipoIdentificacion;
+
+	public byte[] getImagenempresa() {
+		return imagenempresa;
+	}
+	public void setImagenempresa(byte[] imagenempresa) {
+		this.imagenempresa = imagenempresa;
+	}
+	public String getTipoImagen() {
+		return tipoImagen;
+	}
+	public void setTipoImagen(String tipoImagen) {
+		this.tipoImagen = tipoImagen;
+	}
+	public String getNombreEmpresa() {
+		return nombreEmpresa;
+	}
+	public void setNombreEmpresa(String nombreEmpresa) {
+		this.nombreEmpresa = nombreEmpresa;
+	}
+	public String getNumeroIdentificacion() {
+		return numeroIdentificacion;
+	}
+	public void setNumeroIdentificacion(String numeroIdentificacion) {
+		this.numeroIdentificacion = numeroIdentificacion;
+	}
+	public String getDigitoVerificacion() {
+		return digitoVerificacion;
+	}
+	public void setDigitoVerificacion(String digitoVerificacion) {
+		this.digitoVerificacion = digitoVerificacion;
+	}
+	public String getTipoIdentificacion() {
+		return tipoIdentificacion;
+	}
+	public void setTipoIdentificacion(String tipoIdentificacion) {
+		this.tipoIdentificacion = tipoIdentificacion;
+	}
+
 	private Instant creada;
 	private Instant expira;
 

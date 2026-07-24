@@ -68,7 +68,7 @@ import lombok.Data;
 						@ColumnResult(name = "codigodepartamento", type = Integer.class),
 						@ColumnResult(name = "codigomunicipio", type = Integer.class),
 
-						@ColumnResult(name = "imagenempresa", type = String.class),
+						@ColumnResult(name = "imagenempresa"),
 						@ColumnResult(name = "tipoImagen", type = String.class),
 						@ColumnResult(name = "fechainiciolicencia", type = String.class),
 						@ColumnResult(name = "fecharenovacion", type = String.class),

@@ -15,7 +15,7 @@ public class EmpresaTenantProjection {
     private  Integer codigotipoidentificacion;
     private String numeroidentificacion;
     private Integer digitoverificacion;
-
+    private  byte[] imagenempresa;
     private String primernombre;
     private String segundonombre;
     private String primerapellido;
@@ -37,7 +37,6 @@ public class EmpresaTenantProjection {
     private Integer codigodepartamento;
     private Integer codigomunicipio;
 
-    private String imagenempresa;
     private String tipoImagen;
 
 
@@ -78,7 +77,7 @@ private   Integer plazo;
             Integer codigopais,
             Integer codigodepartamento,
             Integer codigomunicipio,
-            String imagenempresa,
+            byte[] imagenempresa,
             String tipoImagen,
             String fechainiciolicencia,
     String fechafinallicencia,
