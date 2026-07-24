@@ -324,6 +324,127 @@ public class AsientoContableService {
         asientoRepo.save(a);
     }
 
+    /**
+     * Edita un asiento MANUAL en sitio: reemplaza sus líneas, descripción y fecha, revalidando
+     * cuadre, periodo abierto y reglas de cuenta (movimiento/activa/tercero/doc. cruce/centro de costo).
+     * Solo aplica a asientos MANUAL no anulados. El controller registra la edición en el log de auditoría.
+     */
+    @Transactional
+    public AsientoContable actualizarManualAsiento(Long id, LocalDate fecha, String descripcion, List<LineaDTO> lineas) {
+        AsientoContable asiento = asientoRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Asiento no encontrado: " + id));
+        if ("ANULADO".equals(asiento.getEstado())) {
+            throw new IllegalStateException("El asiento está ANULADO y no se puede editar.");
+        }
+        String t = asiento.getDocumentoOrigenTipo();
+        boolean esManual = t == null || "MANUAL".equalsIgnoreCase(t);
+        if (!esManual) {
+            throw new IllegalStateException("Solo se pueden editar asientos MANUALES. Este (" + t
+                    + ") se corrige desde su documento origen.");
+        }
+
+        LocalDate fechaAsiento = fecha != null ? fecha : asiento.getFecha();
+        // El periodo del asiento (original) y el nuevo deben estar ABIERTOS.
+        if (periodoService.estaCerrado(asiento.getFecha())) {
+            throw new PeriodoCerradoException("El periodo " + asiento.getFecha().getMonthValue() + "/"
+                    + asiento.getFecha().getYear() + " (del asiento) está CERRADO. Reábralo para poder editarlo.");
+        }
+        if (periodoService.estaCerrado(fechaAsiento)) {
+            throw new PeriodoCerradoException("El periodo " + fechaAsiento.getMonthValue() + "/"
+                    + fechaAsiento.getYear() + " está CERRADO. No se puede mover el asiento a un periodo cerrado.");
+        }
+
+        // Filtrar líneas vacías y validar cuadre (partida doble).
+        List<LineaDTO> validas = new ArrayList<>();
+        for (LineaDTO l : lineas) {
+            BigDecimal d = l.debito != null ? l.debito : BigDecimal.ZERO;
+            BigDecimal c = l.credito != null ? l.credito : BigDecimal.ZERO;
+            if (d.signum() == 0 && c.signum() == 0) continue;
+            l.debito = d; l.credito = c; validas.add(l);
+        }
+        if (validas.size() < 2) {
+            throw new IllegalArgumentException("El asiento debe tener al menos 2 líneas con valor.");
+        }
+        BigDecimal totalDebito = validas.stream().map(l -> l.debito).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCredito = validas.stream().map(l -> l.credito).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (totalDebito.subtract(totalCredito).abs().compareTo(new BigDecimal("0.02")) > 0) {
+            throw new IllegalStateException("Asiento no cuadra: débitos=" + totalDebito + " créditos=" + totalCredito
+                    + " (diferencia " + totalDebito.subtract(totalCredito).abs() + ").");
+        }
+
+        // BLOQUEO de integridad: no se permite EDITAR un asiento que afecta CARTERA (CxC 1305 /
+        // CxP 2205 con tercero) ni que tenga líneas ya CONCILIADAS con el banco. Editarlo
+        // desincronizaría el subledger de cartera y la conciliación bancaria (los listeners de
+        // cartera no son reversibles/idempotentes para ediciones). En esos casos el flujo correcto
+        // es ANULAR + crear uno nuevo (consistente y auditable).
+        for (AsientoContableLinea vieja : asiento.getLineas()) {
+            String cod = vieja.getCuentaContable() != null ? vieja.getCuentaContable().getCodigo() : null;
+            if (cod != null && (cod.startsWith("1305") || cod.startsWith("2205")) && vieja.getTerceroId() != null) {
+                throw new IllegalStateException("Este asiento afecta CARTERA (CxC/CxP). Para corregirlo, "
+                        + "anúlelo y cree uno nuevo, así la cartera queda sincronizada.");
+            }
+            if (Boolean.TRUE.equals(vieja.getConciliado())) {
+                throw new IllegalStateException("Este asiento tiene líneas CONCILIADAS con el banco y no se "
+                        + "puede editar. Anúlelo y cree uno nuevo.");
+            }
+        }
+
+        // Reemplazar líneas (orphanRemoval borra las anteriores).
+        asiento.getLineas().clear();
+        int orden = 1;
+        for (LineaDTO ldto : validas) {
+            CuentaContable cc = cuentaRepo.findById(ldto.cuentaContableId)
+                    .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe: " + ldto.cuentaContableId));
+            // Tampoco se permite INTRODUCIR cartera al editar (crearía CxC/CxP sin registrar en el subledger).
+            if (cc.getCodigo() != null && (cc.getCodigo().startsWith("1305") || cc.getCodigo().startsWith("2205"))
+                    && ldto.terceroId != null && ldto.terceroId != 0) {
+                throw new IllegalStateException("No se puede agregar una cuenta de CARTERA (CxC/CxP con tercero) "
+                        + "editando un asiento. Cree un asiento nuevo para movimientos de cartera.");
+            }
+            if (cc.getEsMovimiento() != null && !cc.getEsMovimiento()) {
+                throw new IllegalStateException("La cuenta '" + cc.getCodigo() + " - " + cc.getNombre()
+                        + "' es una cuenta PADRE y no admite movimientos. Use una subcuenta hoja.");
+            }
+            if (cc.getEstado() != null && !"ACTIVO".equalsIgnoreCase(cc.getEstado())) {
+                throw new IllegalStateException("La cuenta '" + cc.getCodigo() + " - " + cc.getNombre()
+                        + "' está INACTIVA y no admite movimientos.");
+            }
+            if (Boolean.TRUE.equals(cc.getRequiereTercero()) && (ldto.terceroId == null || ldto.terceroId == 0)) {
+                throw new IllegalStateException("La cuenta '" + cc.getCodigo() + " - " + cc.getNombre()
+                        + "' requiere tercero, pero la línea no lo trae.");
+            }
+            String documentoCruce = ldto.documentoCruce;
+            if (Boolean.TRUE.equals(cc.getRequiereDocumentoCruce())) {
+                if (ldto.terceroId == null || ldto.terceroId == 0) {
+                    throw new IllegalStateException("La cuenta '" + cc.getCodigo() + "' exige tercero (documento de cruce).");
+                }
+                if (documentoCruce == null || documentoCruce.isBlank()) {
+                    throw new IllegalStateException("La cuenta '" + cc.getCodigo() + "' exige un documento de cruce.");
+                }
+            }
+            if (Boolean.TRUE.equals(cc.getRequiereCentroCosto()) && (ldto.centroCostoId == null || ldto.centroCostoId == 0)) {
+                throw new IllegalStateException("La cuenta '" + cc.getCodigo() + "' exige centro de costo.");
+            }
+            AsientoContableLinea linea = new AsientoContableLinea();
+            linea.setAsiento(asiento);
+            linea.setCuentaContable(cc);
+            linea.setDebito(ldto.debito);
+            linea.setCredito(ldto.credito);
+            linea.setTerceroId(ldto.terceroId);
+            linea.setTerceroNombre(ldto.terceroNombre);
+            linea.setDescripcion(ldto.descripcion);
+            linea.setDocumentoCruce(documentoCruce);
+            linea.setCentroCostoId(ldto.centroCostoId);
+            linea.setOrden(orden++);
+            asiento.getLineas().add(linea);
+        }
+        asiento.setFecha(fechaAsiento);
+        if (descripcion != null && !descripcion.isBlank()) asiento.setDescripcion(descripcion);
+        asiento.setTotalDebito(totalDebito);
+        asiento.setTotalCredito(totalCredito);
+        return asientoRepo.save(asiento);
+    }
+
     /** Anula el asiento de un documento (lo marca como ANULADO sin borrar). */
     @Transactional
     public void anularAsientoDeDocumento(String documentoOrigenTipo, Long documentoOrigenId) {

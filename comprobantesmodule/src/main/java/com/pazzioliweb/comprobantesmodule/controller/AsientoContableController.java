@@ -262,6 +262,81 @@ public class AsientoContableController {
     }
 
     /**
+     * Edita un asiento MANUAL existente (reemplaza líneas, descripción y fecha). Revalida cuadre,
+     * periodo abierto y reglas de cuenta. Registra la edición en el log de auditoría (EDITAR_ASIENTO).
+     */
+    @PutMapping("/{id}/manual")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> actualizarManual(@PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            jakarta.servlet.http.HttpServletRequest request) {
+        try {
+            LocalDate fecha = body.get("fecha") != null ? LocalDate.parse(body.get("fecha").toString()) : null;
+            String descripcion = body.get("descripcion") != null ? body.get("descripcion").toString() : null;
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> lineasIn = (List<Map<String, Object>>) body.get("lineas");
+            if (lineasIn == null || lineasIn.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El asiento debe tener al menos 1 línea"));
+            }
+
+            List<com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO> lineas = new ArrayList<>();
+            for (Map<String, Object> li : lineasIn) {
+                Integer cuentaId = li.get("cuentaContableId") != null
+                        ? Integer.parseInt(li.get("cuentaContableId").toString()) : null;
+                if (cuentaId == null) continue;
+                java.math.BigDecimal debito = new java.math.BigDecimal(li.getOrDefault("debito", "0").toString());
+                java.math.BigDecimal credito = new java.math.BigDecimal(li.getOrDefault("credito", "0").toString());
+                String desc = li.get("descripcion") != null ? li.get("descripcion").toString()
+                        : (descripcion != null ? descripcion : "Asiento manual");
+
+                com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO l;
+                if (debito.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    l = com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.debito(cuentaId, debito, desc);
+                } else if (credito.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    l = com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO.credito(cuentaId, credito, desc);
+                } else {
+                    continue;
+                }
+                if (li.get("terceroId") != null) {
+                    Integer tid = Integer.parseInt(li.get("terceroId").toString());
+                    String tnombre = li.get("terceroNombre") != null ? li.get("terceroNombre").toString() : "";
+                    l.conTercero(tid, tnombre);
+                }
+                if (li.get("documentoCruce") != null) {
+                    l.documentoCruce = li.get("documentoCruce").toString();
+                }
+                if (li.get("centroCostoId") != null && !li.get("centroCostoId").toString().isBlank()) {
+                    l.centroCostoId = Integer.parseInt(li.get("centroCostoId").toString());
+                }
+                lineas.add(l);
+            }
+            if (lineas.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Ninguna línea tiene débito o crédito > 0"));
+            }
+
+            com.pazzioliweb.comprobantesmodule.entity.AsientoContable a =
+                    asientoService.actualizarManualAsiento(id, fecha, descripcion, lineas);
+
+            auditar("EDITAR_ASIENTO",
+                    "Asiento " + a.getNumeroAsiento() + " (id " + a.getId() + ") editado. "
+                    + "Débito=" + a.getTotalDebito() + " Crédito=" + a.getTotalCredito()
+                    + " Líneas=" + (a.getLineas() != null ? a.getLineas().size() : 0),
+                    usuarioActual(request));
+
+            return ResponseEntity.ok(Map.of(
+                    "id", a.getId(),
+                    "numeroAsiento", a.getNumeroAsiento(),
+                    "totalDebito", a.getTotalDebito(),
+                    "totalCredito", a.getTotalCredito(),
+                    "mensaje", "Asiento manual actualizado correctamente"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * Saldos iniciales → asiento de apertura. Recibe una fecha y las líneas
      * (cuenta + débito/crédito ya ubicados en su naturaleza por el front).
      * Origen "APERTURA" con documentoOrigenId = año → idempotente: una sola
