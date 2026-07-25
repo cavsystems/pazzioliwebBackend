@@ -37,16 +37,7 @@ public class TenantService {
 
 	/** Crea o actualiza el schema plantilla corriendo Flyway sobre él. Se llama al iniciar la app. */
 	public void initTemplateSchema() {
-		// El schema plantilla se mantiene de forma manual (seed SQL: estructura completa + maestras
-		// + PUC + config). Ya está completo y actualizado. Si YA existe con tablas, NO corremos Flyway
-		// sobre él: evita re-aplicar migraciones desactualizadas (p.ej. V3 hace un ALTER sin
-		// IF NOT EXISTS que fallaría con "columna duplicada") y no arriesga el template que ya funciona.
-		if (templateSchemaExiste() && templateTieneTablasCreadas()) {
-			System.out.println("[TenantService] Template ya existe con tablas; se omite Flyway (mantenimiento manual).");
-			return;
-		}
-
-		// Sólo para un arranque desde cero (template inexistente): construir con Flyway.
+		// Siempre ejecuta Flyway sobre el template para aplicar las migraciones más recientes.
 		Flyway flyway = Flyway.configure()
 			.dataSource(ds)
 			.schemas(TEMPLATE_SCHEMA)
@@ -115,8 +106,100 @@ public class TenantService {
 				// Copiar datos de referencia (actividades económicas, impuestos, etc.)
 				jdbc.execute("INSERT IGNORE INTO " + dst + " SELECT * FROM " + src);
 			}
+
+			// Copiar funciones y procedimientos almacenados
+			clonarRutinasDesdeTemplate(nuevoSchema);
 		} finally {
 			jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
+		}
+	}
+
+	private void clonarRutinasDesdeTemplate(String nuevoSchema) {
+		System.out.println("[TenantService] Iniciando clonación de rutinas para schema: " + nuevoSchema);
+		try {
+			// Obtener funciones del template
+			String sqlFunciones = "SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES " +
+				"WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = 'FUNCTION'";
+			List<Map<String, Object>> funciones = jdbc.queryForList(sqlFunciones, TEMPLATE_SCHEMA);
+			System.out.println("[TenantService] Funciones encontradas en template: " + funciones.size());
+
+			for (Map<String, Object> funcion : funciones) {
+				String nombreFuncion = (String) funcion.get("ROUTINE_NAME");
+				System.out.println("[TenantService] Procesando función: " + nombreFuncion);
+				try {
+					// Obtener el código de creación de la función
+					String createSql = jdbc.queryForObject(
+						"SHOW CREATE FUNCTION `" + TEMPLATE_SCHEMA + "`.`" + nombreFuncion + "`",
+						(rs, rowNum) -> rs.getString("Create Function")
+					);
+					System.out.println("[TenantService] SQL original obtenido para función: " + nombreFuncion);
+
+					// Eliminar DEFINER para evitar problemas de permisos
+					createSql = createSql.replaceAll("DEFINER=`[^`]+`@`[^`]+` ", "");
+					System.out.println("[TenantService] SQL sin DEFINER para función: " + nombreFuncion);
+
+					// Reemplazar el nombre del schema en el código
+					createSql = createSql.replace(TEMPLATE_SCHEMA, nuevoSchema);
+					System.out.println("[TenantService] SQL con schema reemplazado para función: " + nombreFuncion);
+
+					// Cambiar al schema destino antes de eliminar y crear
+					jdbc.execute("USE `" + nuevoSchema + "`");
+
+					// Eliminar la función si existe en el destino
+					jdbc.execute("DROP FUNCTION IF EXISTS `" + nombreFuncion + "`");
+
+					// Crear la función en el nuevo schema
+					jdbc.execute(createSql);
+					System.out.println("[TenantService] Función clonada exitosamente: " + nombreFuncion);
+				} catch (Exception e) {
+					System.err.println("[TenantService] Error clonando función " + nombreFuncion + ": " + e.getMessage());
+					e.printStackTrace();
+				}
+			}
+
+			// Obtener procedimientos del template
+			String sqlProcedimientos = "SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES " +
+				"WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = 'PROCEDURE'";
+			List<Map<String, Object>> procedimientos = jdbc.queryForList(sqlProcedimientos, TEMPLATE_SCHEMA);
+			System.out.println("[TenantService] Procedimientos encontrados en template: " + procedimientos.size());
+
+			for (Map<String, Object> procedimiento : procedimientos) {
+				String nombreProcedimiento = (String) procedimiento.get("ROUTINE_NAME");
+				System.out.println("[TenantService] Procesando procedimiento: " + nombreProcedimiento);
+				try {
+					// Obtener el código de creación del procedimiento
+					String createSql = jdbc.queryForObject(
+						"SHOW CREATE PROCEDURE `" + TEMPLATE_SCHEMA + "`.`" + nombreProcedimiento + "`",
+						(rs, rowNum) -> rs.getString("Create Procedure")
+					);
+					System.out.println("[TenantService] SQL original obtenido para procedimiento: " + nombreProcedimiento);
+
+					// Eliminar DEFINER para evitar problemas de permisos
+					createSql = createSql.replaceAll("DEFINER=`[^`]+`@`[^`]+` ", "");
+					System.out.println("[TenantService] SQL sin DEFINER para procedimiento: " + nombreProcedimiento);
+
+					// Reemplazar el nombre del schema en el código
+					createSql = createSql.replace(TEMPLATE_SCHEMA, nuevoSchema);
+					System.out.println("[TenantService] SQL con schema reemplazado para procedimiento: " + nombreProcedimiento);
+
+					// Cambiar al schema destino antes de eliminar y crear
+					jdbc.execute("USE `" + nuevoSchema + "`");
+
+					// Eliminar el procedimiento si existe en el destino
+					jdbc.execute("DROP PROCEDURE IF EXISTS `" + nombreProcedimiento + "`");
+
+					// Crear el procedimiento en el nuevo schema
+					jdbc.execute(createSql);
+					System.out.println("[TenantService] Procedimiento clonado exitosamente: " + nombreProcedimiento);
+				} catch (Exception e) {
+					System.err.println("[TenantService] Error clonando procedimiento " + nombreProcedimiento + ": " + e.getMessage());
+					e.printStackTrace();
+				}
+			}
+			System.out.println("[TenantService] Clonación de rutinas completada para schema: " + nuevoSchema);
+		} catch (Exception e) {
+			System.err.println("[TenantService] Error general clonando rutinas: " + e.getMessage());
+			e.printStackTrace();
 		}
 	}
 }
