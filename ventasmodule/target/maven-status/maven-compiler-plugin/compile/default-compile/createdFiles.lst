@@ -57,4 +57,5 @@ com\pazzioliweb\ventasmodule\entity\CuentaPorCobrar.class
 com\pazzioliweb\ventasmodule\dtos\CuentaPorCobrarDTO.class
 com\pazzioliweb\ventasmodule\service\impl\PedidoServiceImpl.class
 com\pazzioliweb\ventasmodule\exception\CotizacionException.class
+com\pazzioliweb\ventasmodule\service\EmailDevolucionService.class
 com\pazzioliweb\ventasmodule\repository\PedidoSpecification.class

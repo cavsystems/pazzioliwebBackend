@@ -1,5 +1,6 @@
 package com.pazzioliweb.tesoreriamodule.service;
 
+import com.pazzioliweb.commonbacken.dtos.DocumentoAdjuntoDTO;
 import com.pazzioliweb.commonbacken.util.HtmlPdfUtil;
 import com.pazzioliweb.tesoreriamodule.dtos.ReciboCajaResponseDTO;
 import com.pazzioliweb.tesoreriamodule.dtos.ComprobanteEgresoResponseDTO;
@@ -28,21 +29,67 @@ public class EmailTesoreriaService {
     private String remitente;
 
     public boolean enviarRecibo(ReciboCajaResponseDTO rc, String correo) {
-        String html = buildHtml("Recibo de caja", nvl(rc.getNumeroDocumento(), "RC-" + rc.getConsecutivo()),
-                rc.getTerceroNombre(), rc.getTerceroNit(), String.valueOf(rc.getFecha()),
-                Boolean.TRUE.equals(rc.getConceptoAbierto()) ? rc.getConcepto() : null, rc.getMetodoPago(),
-                rc.getSubtotal(), rc.getRetefuente(), rc.getReteiva(), rc.getReteica(), rc.getDescuento(), rc.getTotal());
         return enviar(correo, "Recibo de caja " + nvl(rc.getNumeroDocumento(), ""),
-                "Recibo-" + nvl(rc.getNumeroDocumento(), String.valueOf(rc.getConsecutivo())), html);
+                nombreArchivoRecibo(rc), htmlRecibo(rc));
     }
 
     public boolean enviarEgreso(ComprobanteEgresoResponseDTO ce, String correo) {
-        String html = buildHtml("Comprobante de egreso", nvl(ce.getNumeroDocumento(), "CE-" + ce.getConsecutivo()),
+        return enviar(correo, "Comprobante de egreso " + nvl(ce.getNumeroDocumento(), ""),
+                nombreArchivoEgreso(ce), htmlEgreso(ce));
+    }
+
+    // ── Documento listo para otros canales (WhatsApp). Mismo HTML/PDF que el correo. ──
+
+    public DocumentoAdjuntoDTO documentoRecibo(ReciboCajaResponseDTO rc) {
+        String numero = nvl(rc.getNumeroDocumento(), "RC-" + rc.getConsecutivo());
+        String caption = "*RECIBO DE CAJA " + numero + "*"
+                + "\nTercero: " + nvl(rc.getTerceroNombre(), "-")
+                + "\nFecha: " + rc.getFecha()
+                + "\nTotal: " + fmt(rc.getTotal());
+        return new DocumentoAdjuntoDTO(nombreArchivoRecibo(rc), caption, pdfSeguro(htmlRecibo(rc)));
+    }
+
+    public DocumentoAdjuntoDTO documentoEgreso(ComprobanteEgresoResponseDTO ce) {
+        String numero = nvl(ce.getNumeroDocumento(), "CE-" + ce.getConsecutivo());
+        String caption = "*COMPROBANTE DE EGRESO " + numero + "*"
+                + "\nTercero: " + nvl(ce.getTerceroNombre(), "-")
+                + "\nFecha: " + ce.getFecha()
+                + "\nTotal: " + fmt(ce.getTotal());
+        return new DocumentoAdjuntoDTO(nombreArchivoEgreso(ce), caption, pdfSeguro(htmlEgreso(ce)));
+    }
+
+    // ── Construcción del HTML por tipo de documento (usado por correo y por WhatsApp) ──
+
+    private String htmlRecibo(ReciboCajaResponseDTO rc) {
+        return buildHtml("Recibo de caja", nvl(rc.getNumeroDocumento(), "RC-" + rc.getConsecutivo()),
+                rc.getTerceroNombre(), rc.getTerceroNit(), String.valueOf(rc.getFecha()),
+                Boolean.TRUE.equals(rc.getConceptoAbierto()) ? rc.getConcepto() : null, rc.getMetodoPago(),
+                rc.getSubtotal(), rc.getRetefuente(), rc.getReteiva(), rc.getReteica(), rc.getDescuento(), rc.getTotal());
+    }
+
+    private String htmlEgreso(ComprobanteEgresoResponseDTO ce) {
+        return buildHtml("Comprobante de egreso", nvl(ce.getNumeroDocumento(), "CE-" + ce.getConsecutivo()),
                 ce.getTerceroNombre(), ce.getTerceroNit(), String.valueOf(ce.getFecha()),
                 Boolean.TRUE.equals(ce.getConceptoAbierto()) ? ce.getConcepto() : null, ce.getMetodoPago(),
                 ce.getSubtotal(), ce.getRetefuente(), ce.getReteiva(), ce.getReteica(), ce.getDescuento(), ce.getTotal());
-        return enviar(correo, "Comprobante de egreso " + nvl(ce.getNumeroDocumento(), ""),
-                "Egreso-" + nvl(ce.getNumeroDocumento(), String.valueOf(ce.getConsecutivo())), html);
+    }
+
+    private String nombreArchivoRecibo(ReciboCajaResponseDTO rc) {
+        return "Recibo-" + nvl(rc.getNumeroDocumento(), String.valueOf(rc.getConsecutivo()));
+    }
+
+    private String nombreArchivoEgreso(ComprobanteEgresoResponseDTO ce) {
+        return "Egreso-" + nvl(ce.getNumeroDocumento(), String.valueOf(ce.getConsecutivo()));
+    }
+
+    /** Render del PDF best-effort: si falla devuelve null y el llamador decide qué hacer. */
+    private byte[] pdfSeguro(String html) {
+        try {
+            return HtmlPdfUtil.htmlToPdf(html);
+        } catch (Throwable ex) {
+            System.out.println("[EmailTesoreria] No se pudo generar el PDF: " + ex.getMessage());
+            return null;
+        }
     }
 
     // ── Envío común ──

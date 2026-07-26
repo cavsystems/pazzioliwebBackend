@@ -303,19 +303,24 @@ public class AuthController {
             // ✅ Búsqueda directa: Usuario → Cajero (one-to-one por usuario_id)
             cajeroOpt
                     .ifPresent(cajero -> {
-                        // Abre sesión de caja o retorna la existente si ya hay una abierta
-                        DetalleCajero detalle = detalleCajeroService.abrirSesionCajero(cajero, BigDecimal.ZERO);
-
+                        // El usuario SÍ tiene cajero: fijar cajeroId PRIMERO. La apertura de la sesión
+                        // de caja es secundaria; si falla (cierre por cambio de día, Z pendiente, error
+                        // de BD, etc.) NO debe dejar al usuario "sin cajero" y bloquearle Ventas.
                         datos.setCajeroId(cajero.getCajeroId());
-                        datos.setDetalleCajeroId(detalle.getDetalleCajeroId());
+                        try {
+                            DetalleCajero detalle = detalleCajeroService.abrirSesionCajero(cajero, BigDecimal.ZERO);
+                            datos.setDetalleCajeroId(detalle.getDetalleCajeroId());
+                            System.out.println("✅ Sesión de cajero abierta — usuario: " + usuario.getUsuario()
+                                    + " cajeroId: " + cajero.getCajeroId()
+                                    + " detalleCajeroId: " + detalle.getDetalleCajeroId());
+                        } catch (Exception ex) {
+                            System.out.println("⚠️ No se pudo abrir/retornar la sesión de caja del cajero "
+                                    + cajero.getCajeroId() + " (se conserva el cajeroId): " + ex.getMessage());
+                        }
 
-                        // Actualizar Redis con los datos del cajero
+                        // Actualizar Redis con los datos del cajero (cajeroId siempre; detalle si abrió).
                         String sessionId = claims.get("idsecion", String.class);
                         redisTemplate.opsForValue().set(sessionId, datos);
-
-                        System.out.println("✅ Sesión de cajero abierta — usuario: " + usuario.getUsuario()
-                                + " cajeroId: " + cajero.getCajeroId()
-                                + " detalleCajeroId: " + detalle.getDetalleCajeroId());
                     });
 
         } catch (Exception e) {

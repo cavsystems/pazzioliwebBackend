@@ -253,8 +253,8 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 			UNION ALL
 			SELECT t.razon_social AS razonSocial, t.tercero_id AS terceroId, SUM(c.saldo) AS saldo, 'Cobrar' AS tipo
 			FROM cuentas_por_cobrar c
-			JOIN ventas v ON c.venta_id = v.id
-			JOIN terceros t ON t.tercero_id = v.cliente_id
+			LEFT JOIN ventas v ON c.venta_id = v.id
+			JOIN terceros t ON t.tercero_id = COALESCE(c.cliente_id, v.cliente_id)
 			WHERE c.estado = 'PENDIENTE'
 			GROUP BY t.tercero_id, t.razon_social
 			""", nativeQuery = true)
