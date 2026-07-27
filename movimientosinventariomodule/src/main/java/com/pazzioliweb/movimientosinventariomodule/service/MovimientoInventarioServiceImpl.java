@@ -525,7 +525,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
 
         return movimientos.map(mov -> {
             List<MovimientoInventarioDetalle> detalles =
-                    detalleRepository.findByMovimiento_MovimientoId(mov.getMovimientoId());
+                    detalleRepository.findByMovimiento_MovimientoIdWithProducto(mov.getMovimientoId());
             return mapper.toResponse(mov, detalles);
         });
     }
@@ -536,7 +536,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                 .orElseThrow(() -> new RuntimeException("Movimiento no encontrado"));
 
         List<MovimientoInventarioDetalle> detalles =
-                detalleRepository.findByMovimiento_MovimientoId(movimiento.getMovimientoId());
+                detalleRepository.findByMovimiento_MovimientoIdWithProducto(movimiento.getMovimientoId());
         return mapper.toResponse(movimiento, detalles);
     }
 
