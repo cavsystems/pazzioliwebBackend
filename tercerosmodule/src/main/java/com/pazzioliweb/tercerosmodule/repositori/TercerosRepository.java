@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.pazzioliweb.tercerosmodule.dtos.SaldoTerceroDTO;
 import com.pazzioliweb.tercerosmodule.dtos.TerceroDTO;
@@ -79,9 +81,17 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 			SELECT t
 			FROM Terceros t
 			LEFT JOIN t.regimen r
+			JOIN t.clasificacionTercero c
 			WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
 			   OR LOWER(t.razonSocial) LIKE LOWER(:busqueda))
-			AND t.clasificacionTercero.clasificacionTerceroId = :tipousuario
+			AND (
+			    CASE
+			        WHEN :tipousuario = 1 AND UPPER(c.nombre) IN ('CLIENTE', 'CLIENTE-PROVEEDOR') THEN 1
+			        WHEN :tipousuario = 2 AND UPPER(c.nombre) IN ('PROVEEDOR', 'CLIENTE-PROVEEDOR') THEN 1
+			        WHEN :tipousuario = 3 AND UPPER(c.nombre) = 'EMPLEADO' THEN 1
+			        ELSE 0
+			    END = 1
+			)
 			""")
 	Page<Terceros> traerTercerosXFiltropro(@Param("busqueda") String busqueda,@Param("tipousuario") int tipousuario, Pageable pageable);
 

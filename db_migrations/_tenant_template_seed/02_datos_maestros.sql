@@ -2816,11 +2816,18 @@ DROP PROCEDURE IF EXISTS `sp_listar_empresas_todos_tenants`;
 
 DELIMITER $$
 
+DROP PROCEDURE IF EXISTS `sp_listar_empresas_todos_tenants`$$
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_listar_empresas_todos_tenants`()
 BEGIN
     DECLARE done INT DEFAULT FALSE;
     DECLARE db_name VARCHAR(255);
     DECLARE sql_query LONGTEXT DEFAULT '';
+    DECLARE cols_sql LONGTEXT;
+    DECLARE has_fechafinal INT;
+    DECLARE has_plazo INT;
+    DECLARE estado_expr VARCHAR(500);
+
     DECLARE cur CURSOR FOR
         SELECT t.TABLE_SCHEMA
         FROM information_schema.TABLES t
@@ -2834,49 +2841,92 @@ BEGIN
         IF done THEN
             LEAVE read_loop;
         END IF;
+
+        -- 1. Construir dinámicamente la lista de columnas normales,
+        --    poniendo NULL si la columna no existe en este tenant
+        SELECT GROUP_CONCAT(
+                 CASE
+                    WHEN ic.COLUMN_NAME IS NOT NULL
+                        THEN CONCAT('`', d.col_name, '` AS ', d.alias)
+                    ELSE CONCAT('NULL AS ', d.alias)
+                 END
+                 ORDER BY d.ord SEPARATOR ',\n            ')
+          INTO cols_sql
+          FROM (
+              SELECT 1  ord, 'estado'                    col_name, 'estado'                    alias UNION ALL
+              SELECT 2,  'codigo',                       'codigo'                        UNION ALL
+              SELECT 3,  'codigotipopersona',             'codigotipopersona'             UNION ALL
+              SELECT 4,  'codigotipoidentificacion',      'codigotipoidentificacion'      UNION ALL
+              SELECT 5,  'numeroidentificacion',          'numeroidentificacion'          UNION ALL
+              SELECT 6,  'digitoverificacion',            'digitoverificacion'            UNION ALL
+              SELECT 7,  'primernombre',                  'primernombre'                  UNION ALL
+              SELECT 8,  'segundonombre',                 'segundonombre'                 UNION ALL
+              SELECT 9,  'primerapellido',                'primerapellido'                UNION ALL
+              SELECT 10, 'segundoapellido',                'segundoapellido'               UNION ALL
+              SELECT 11, 'razonsocial',                    'razonsocial'                   UNION ALL
+              SELECT 12, 'codigopostal',                   'codigopostal'                  UNION ALL
+              SELECT 13, 'nombrecomercial',                'nombrecomercial'               UNION ALL
+              SELECT 14, 'codigoactividadeconomica',       'codigoactividadeconomica'      UNION ALL
+              SELECT 15, 'codigoregimen',                  'codigoregimen'                 UNION ALL
+              SELECT 16, 'correoempresa',                  'correoempresa'                 UNION ALL
+              SELECT 17, 'celularempresa',                 'celularempresa'                UNION ALL
+              SELECT 18, 'telfonofijo',                    'telfonofijo'                   UNION ALL
+              SELECT 19, 'codigopais',                     'codigopais'                    UNION ALL
+              SELECT 20, 'codigodepartamento',             'codigodepartamento'            UNION ALL
+              SELECT 21, 'codigomunicipio',                'codigomunicipio'               UNION ALL
+              SELECT 22, 'imagenempresa',                  'imagenempresa'                 UNION ALL
+              SELECT 23, 'tipoImagen',                     'tipoImagen'                    UNION ALL
+              SELECT 24, 'fechainiciolicencia',            'fechainiciolicencia'           UNION ALL
+              SELECT 25, 'fecharenovacion',                'fecharenovacion'               UNION ALL
+              SELECT 26, 'fechafinallicencia',             'fechafinallicencia'            UNION ALL
+              SELECT 27, 'plazo',                          'plazo'                         UNION ALL
+              SELECT 28, 'numerousuarios',                 'numerousuarios'                UNION ALL
+              SELECT 29, 'responsabilidad_fiscal',         'responsabilidadFiscal'         UNION ALL
+              SELECT 30, 'tipo_contribuyente',              'tipoContribuyente'             UNION ALL
+              SELECT 31, 'gran_contribuyente',              'granContribuyente'             UNION ALL
+              SELECT 32, 'autorretenedor',                  'autorretenedor'                UNION ALL
+              SELECT 33, 'responsable_iva',                 'responsableIva'
+          ) d
+          LEFT JOIN information_schema.COLUMNS ic
+                 ON ic.TABLE_SCHEMA = db_name
+                AND ic.TABLE_NAME   = 'empresa'
+                AND ic.COLUMN_NAME  = d.col_name;
+
+        -- 2. Verificar si existen las columnas necesarias para calcular estadolicencia
+        SELECT COUNT(*) INTO has_fechafinal
+          FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = db_name AND TABLE_NAME = 'empresa' AND COLUMN_NAME = 'fechafinallicencia';
+
+        SELECT COUNT(*) INTO has_plazo
+          FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = db_name AND TABLE_NAME = 'empresa' AND COLUMN_NAME = 'plazo';
+
+        IF has_fechafinal = 0 THEN
+            SET estado_expr = '''SIN_LICENCIA'' AS estadolicencia';
+        ELSEIF has_plazo = 0 THEN
+            SET estado_expr = CONCAT(
+                'CASE ',
+                'WHEN fechafinallicencia IS NULL THEN ''SIN_LICENCIA'' ',
+                'WHEN CURDATE() <= fechafinallicencia THEN ''ACTIVA'' ',
+                'ELSE ''VENCIDA'' END AS estadolicencia'
+            );
+        ELSE
+            SET estado_expr = CONCAT(
+                'CASE ',
+                'WHEN fechafinallicencia IS NULL THEN ''SIN_LICENCIA'' ',
+                'WHEN CURDATE() <= DATE_ADD(fechafinallicencia, INTERVAL IFNULL(plazo,0) DAY) THEN ''ACTIVA'' ',
+                'ELSE ''VENCIDA'' END AS estadolicencia'
+            );
+        END IF;
+
+        -- 3. Armar el SELECT completo para este tenant
         SET sql_query = CONCAT(sql_query,
-        'SELECT
-            "', db_name, '" AS tenant,
-            estado,
-            codigo,
-            codigotipopersona,
-            codigotipoidentificacion,
-            numeroidentificacion,
-            digitoverificacion,
-            primernombre,
-            segundonombre,
-            primerapellido,
-            segundoapellido,
-            razonsocial,
-            codigopostal,
-            nombrecomercial,
-            codigoactividadeconomica,
-            codigoregimen,
-            correoempresa,
-            celularempresa,
-            telfonofijo,
-            codigopais,
-            codigodepartamento,
-            codigomunicipio,
-            imagenempresa,
-            tipoImagen,
-            fechainiciolicencia,
-            fecharenovacion,
-            fechafinallicencia,
-            CASE
-                WHEN fechafinallicencia IS NULL THEN ''SIN_LICENCIA''
-                WHEN CURDATE() <= DATE_ADD(fechafinallicencia, INTERVAL IFNULL(plazo,0) DAY) THEN ''ACTIVA''
-                ELSE ''VENCIDA''
-            END AS estadolicencia,
-            plazo,
-            numerousuarios,
-            responsabilidad_fiscal AS responsabilidadFiscal,
-            tipo_contribuyente     AS tipoContribuyente,
-            gran_contribuyente     AS granContribuyente,
-            autorretenedor,
-            responsable_iva        AS responsableIva
-        FROM ', db_name, '.empresa
-        UNION ALL ');
+            'SELECT\n',
+            '            "', db_name, '" AS tenant,\n            ',
+            cols_sql, ',\n            ',
+            estado_expr,
+            '\n        FROM ', db_name, '.empresa\n        UNION ALL ');
+
     END LOOP;
     CLOSE cur;
 

@@ -12,6 +12,7 @@ public class MovimientoInventarioDetalleResponseDto {
 	private Double costoUnitario;
 	private Double costoPromedio;
 	private Double totalDetalle;
+	private ProductoInfoDto producto;
 	public Long getDetalleId() {
 		return detalleId;
 	}
@@ -77,6 +78,12 @@ public class MovimientoInventarioDetalleResponseDto {
 	}
 	public void setTotalDetalle(Double totalDetalle) {
 		this.totalDetalle = totalDetalle;
+	}
+	public ProductoInfoDto getProducto() {
+		return producto;
+	}
+	public void setProducto(ProductoInfoDto producto) {
+		this.producto = producto;
 	}
 	
 	

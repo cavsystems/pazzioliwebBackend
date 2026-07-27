@@ -12,8 +12,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import com.pazzioliweb.empresasback.entity.Empresa;
+import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
+import com.pazzioliweb.productosmodule.entity.Usuariobodega;
 import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
+import com.pazzioliweb.productosmodule.repositori.UsuariobodegaRepository;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
 import com.pazzioliweb.vendedoresmodule.dtos.VendedorCreateRequest;
@@ -31,13 +35,17 @@ public class VendedoresService {
 	private final UsuarioVendedorRepository usuarioVendedorRepository;
 	private final UsuarioRepository usuarioRepository;
 	private final BodegasRepository bodegasRepository;
+	private final UsuariobodegaRepository usuariobodegaRepository;
+	private final EmpresaRepositori empresaRepository;
 	
 	@Autowired
-	public VendedoresService(VendedoresRepository vendedorRepository, UsuarioVendedorRepository usuarioVendedorRepository, UsuarioRepository usuarioRepository, BodegasRepository bodegasRepository) {
+	public VendedoresService(VendedoresRepository vendedorRepository, UsuarioVendedorRepository usuarioVendedorRepository, UsuarioRepository usuarioRepository, BodegasRepository bodegasRepository, UsuariobodegaRepository usuariobodegaRepository, EmpresaRepositori empresaRepository) {
 		this.vendedorRepository = vendedorRepository;
 		this.usuarioVendedorRepository = usuarioVendedorRepository;
 		this.usuarioRepository = usuarioRepository;
 		this.bodegasRepository = bodegasRepository;
+		this.usuariobodegaRepository = usuariobodegaRepository;
+		this.empresaRepository = empresaRepository;
 	}
 	
 	public Page<VendedorDTO> listar(int page, int size, String sortField, String sortDirection){
@@ -48,32 +56,91 @@ public class VendedoresService {
     	
     	Page<Object[]> results = vendedorRepository.listarVendedoresDTO(pageable);
     	
+    	// Obtener datos de la empresa (correo y dirección)
+    	Empresa empresa = empresaRepository.findAll().stream().findFirst().orElse(null);
+    	String empresaCorreo = empresa != null ? empresa.getCorreoempresa() : null;
+    	String empresaDireccion = empresa != null ? empresa.getDireccion() : null;
+    	
     	List<VendedorDTO> dtoList = results.getContent().stream().map(row -> {
     		java.sql.Date sqlDate = row[11] != null ? (java.sql.Date) row[11] : null;
     		java.time.LocalDate localDate = sqlDate != null ? sqlDate.toLocalDate() : null;
 
-    		// Robusto ante el tipo real de cada columna numérica (comision=decimal, meta_ventas=double,
-    		// ids=int): se lee como Number. Antes se casteaba meta_ventas a BigDecimal y, al traer un
-    		// valor (double), lanzaba ClassCastException → la lista se caía (quedaba vacía) apenas un
-    		// vendedor tenía meta de ventas.
+    		Integer vendedorId = row[0] != null ? ((Number) row[0]).intValue() : null;
+    		String nombre = (String) row[1];
+    		String direccion = (String) row[2];
+    		String telefono = (String) row[3];
+    		String identificacion = (String) row[4];
+    		String correo = (String) row[5];
+    		Double comision = row[6] != null ? ((Number) row[6]).doubleValue() : null;
+    		Double metaVentas = row[7] != null ? ((Number) row[7]).doubleValue() : null;
+    		String tipoVendedor = (String) row[8];
+    		String estado = (String) row[9];
+    		Integer codigoUsuarioCreo = row[10] != null ? ((Number) row[10]).intValue() : null;
+    		Integer usuarioCodigo = row[12] != null ? ((Number) row[12]).intValue() : null;
+    		String usuarioNombre = (String) row[13];
+    		String rolNombre = (String) row[14];
+    		Integer bodegaId = row[15] != null ? ((Number) row[15]).intValue() : null;
+    		String bodegaNombre = (String) row[16];
+
+    		// Aplicar lógica de mapeo para correo y dirección según tipo de vendedor
+    		if ("EXTERNO".equalsIgnoreCase(tipoVendedor)) {
+    			// Si es EXTERNO, obtener correo y dirección de la bodega del usuario
+    			if (usuarioCodigo != null) {
+    				Usuario usuario = usuarioRepository.findById(usuarioCodigo).orElse(null);
+    				if (usuario != null) {
+    					List<Usuariobodega> usuarioBodegas = usuariobodegaRepository.findByUsuarioid(usuario);
+    					if (!usuarioBodegas.isEmpty()) {
+    						Bodegas bodegaUsuario = usuarioBodegas.get(0).getBodegaid();
+    						if (bodegaUsuario != null) {
+    							// Usar correo y dirección de la bodega del usuario si existen
+    							correo = (bodegaUsuario.getCorreo() != null && !bodegaUsuario.getCorreo().isEmpty()) 
+    								? bodegaUsuario.getCorreo() : empresaCorreo;
+    							direccion = (bodegaUsuario.getDireccion() != null && !bodegaUsuario.getDireccion().isEmpty()) 
+    								? bodegaUsuario.getDireccion() : empresaDireccion;
+    						} else {
+    							// Usuario no tiene bodega asignada, usar datos de empresa
+    							correo = empresaCorreo;
+    							direccion = empresaDireccion;
+    						}
+    					} else {
+    						// Usuario no tiene bodega, usar datos de empresa
+    						correo = empresaCorreo;
+    						direccion = empresaDireccion;
+    					}
+    				} else {
+    					// Usuario no encontrado, usar datos de empresa
+    					correo = empresaCorreo;
+    					direccion = empresaDireccion;
+    				}
+    			} else {
+    				// No hay usuario asociado, usar datos de empresa
+    				correo = empresaCorreo;
+    				direccion = empresaDireccion;
+    			}
+    		} else {
+    			// Si es INTERNO, usar correo y dirección de la empresa
+    			correo = empresaCorreo;
+    			direccion = empresaDireccion;
+    		}
+
     		return new VendedorDTO(
-    			row[0]  != null ? ((Number) row[0]).intValue()    : null,  // vendedor_id
-    			(String) row[1],            // nombre
-    			(String) row[2],            // direccion
-    			(String) row[3],            // telefono
-    			(String) row[4],            // identificacion
-    			(String) row[5],            // correo
-    			row[6]  != null ? ((Number) row[6]).doubleValue() : null,  // comision
-    			row[7]  != null ? ((Number) row[7]).doubleValue() : null,  // meta_ventas
-    			(String) row[8],            // tipo_vendedor
-    			(String) row[9],            // estado
-    			row[10] != null ? ((Number) row[10]).intValue()   : null,  // codigo_usuario_creo
-    			localDate,                  // fechacreado
-    			row[12] != null ? ((Number) row[12]).intValue()   : null,  // usuarioCodigo (can be null)
-    			(String) row[13],           // usuarioNombre (can be null)
-    			(String) row[14],           // rolNombre (can be null)
-    			row[15] != null ? ((Number) row[15]).intValue()   : null,  // bodegaId (can be null)
-    			(String) row[16]            // bodegaNombre (can be null)
+    			vendedorId,
+    			nombre,
+    			direccion,
+    			telefono,
+    			identificacion,
+    			correo,
+    			comision,
+    			metaVentas,
+    			tipoVendedor,
+    			estado,
+    			codigoUsuarioCreo,
+    			localDate,
+    			usuarioCodigo,
+    			usuarioNombre,
+    			rolNombre,
+    			bodegaId,
+    			bodegaNombre
     		);
     	}).collect(Collectors.toList());
     	
@@ -140,7 +207,7 @@ public class VendedoresService {
         return vendedorRepository.save(vendedor);
     }
 
-    @jakarta.transaction.Transactional
+    @org.springframework.transaction.annotation.Transactional
     public void eliminar(Integer id) {
         Long registros = vendedorRepository.contarRegistrosAsociados(id);
         if (registros != null && registros > 0) {
