@@ -10,12 +10,14 @@ import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCrea
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleResponseDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
+import com.pazzioliweb.movimientosinventariomodule.dtos.ProductoInfoDto;
 import com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventario;
 import com.pazzioliweb.movimientosinventariomodule.entity.MovimientoInventarioDetalle;
 import com.pazzioliweb.movimientosinventariomodule.enums.EstadoMovimiento;
 import com.pazzioliweb.movimientosinventariomodule.enums.TipoMovimiento;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.productosmodule.entity.ProductoVariante;
+import com.pazzioliweb.productosmodule.entity.Productos;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 
 
@@ -26,97 +28,123 @@ public class MovimientoInventarioMapper {
 	            ComprobanteContable comprobante,
 	            Usuario usuario) {
 
-	        MovimientoInventario mov = new MovimientoInventario();
+        MovimientoInventario mov = new MovimientoInventario();
 
-	        mov.setComprobante(comprobante);
-	        mov.setConsecutivo(dto.getConsecutivo()); // puede venir null
-	        mov.setTipo(TipoMovimiento.valueOf(dto.getTipo()));
-	        mov.setUsuario(usuario);
-	        mov.setFechaEmision(dto.getFechaEmision());
-	        mov.setFechaCreacion(LocalDateTime.now());
-	        mov.setEstado(dto.getEstado() == null
-	                ? EstadoMovimiento.ACTIVO
-	                : EstadoMovimiento.valueOf(dto.getEstado()));
-	        mov.setTotal(dto.getTotal());
-	        mov.setObservaciones(dto.getObservaciones());
+        mov.setComprobante(comprobante);
+        mov.setConsecutivo(dto.getConsecutivo()); // puede venir null
+        mov.setTipo(TipoMovimiento.valueOf(dto.getTipo()));
+        mov.setUsuario(usuario);
+        mov.setFechaEmision(dto.getFechaEmision());
+        mov.setFechaCreacion(LocalDateTime.now());
+        mov.setEstado(dto.getEstado() == null
+                ? EstadoMovimiento.ACTIVO
+                : EstadoMovimiento.valueOf(dto.getEstado()));
+        mov.setTotal(dto.getTotal());
+        mov.setObservaciones(dto.getObservaciones());
 
-	        return mov;
-	    }
-
-
-	    public MovimientoInventarioDetalle toDetalleEntity(
-	            MovimientoInventarioDetalleCreateDto dto,
-	            MovimientoInventario movimiento,
-	            ProductoVariante variante,
-	            Bodegas origen,
-	            Bodegas destino) {
-
-	        MovimientoInventarioDetalle det = new MovimientoInventarioDetalle();
-
-	        det.setMovimiento(movimiento);
-	        det.setProductoVariante(variante);
-	        det.setBodegaOrigen(origen);
-	        det.setBodegaDestino(destino);
-	        det.setCantidad(dto.getCantidad());
-	        det.setCostoUnitario(dto.getCostoUnitario());
-	        det.setCostoPromedio(dto.getCostoPromedio());
-	        det.setTotalDetalle(dto.getTotalDetalle());
-
-	        return det;
-	    }
+        return mov;
+    }
 
 
-	    public MovimientoInventarioResponseDto toResponse(
-	            MovimientoInventario entity,
-	            List<MovimientoInventarioDetalle> detalles) {
+    public MovimientoInventarioDetalle toDetalleEntity(
+            MovimientoInventarioDetalleCreateDto dto,
+            MovimientoInventario movimiento,
+            ProductoVariante variante,
+            Bodegas origen,
+            Bodegas destino) {
 
-	        MovimientoInventarioResponseDto dto = new MovimientoInventarioResponseDto();
+        MovimientoInventarioDetalle det = new MovimientoInventarioDetalle();
 
-	        dto.setMovimientoId(entity.getMovimientoId());
-	        dto.setComprobanteId(entity.getComprobante() != null ? entity.getComprobante().getId().intValue() : null);
-	        dto.setComprobanteNombre(entity.getComprobante() != null
-	                ? (entity.getComprobante().getPrefijo() + " — " + entity.getComprobante().getDescripcion())
-	                : null);
-	        dto.setConsecutivo(entity.getConsecutivo());
-	        dto.setTipo(entity.getTipo().name());
-	        dto.setUsuarioId(entity.getUsuario() != null ? entity.getUsuario().getCodigo() : null);
-	        dto.setUsuarioNombre(entity.getUsuario() != null ? entity.getUsuario().getNombre() : null);
-	        dto.setFechaEmision(entity.getFechaEmision());
-	        dto.setFechaCreacion(entity.getFechaCreacion());
-	        dto.setEstado(entity.getEstado().name());
-	        dto.setTotal(entity.getTotal());
-	        dto.setObservaciones(entity.getObservaciones());
-	        dto.setDocumentoOrigenTipo(entity.getDocumentoOrigenTipo());
-	        dto.setDocumentoOrigenId(entity.getDocumentoOrigenId());
+        det.setMovimiento(movimiento);
+        det.setProductoVariante(variante);
+        det.setBodegaOrigen(origen);
+        det.setBodegaDestino(destino);
+        det.setCantidad(dto.getCantidad());
+        det.setCostoUnitario(dto.getCostoUnitario());
+        det.setCostoPromedio(dto.getCostoPromedio());
+        det.setTotalDetalle(dto.getTotalDetalle());
 
-	        // Mapear detalles
-	        dto.setDetalles(detalles.stream()
-	                .map(this::toDetalleResponse)
-	                .toList());
-
-	        return dto;
-	    }
+        return det;
+    }
 
 
-	    public MovimientoInventarioDetalleResponseDto toDetalleResponse(MovimientoInventarioDetalle det) {
+    public MovimientoInventarioResponseDto toResponse(
+            MovimientoInventario entity,
+            List<MovimientoInventarioDetalle> detalles) {
 
-	        MovimientoInventarioDetalleResponseDto dto = new MovimientoInventarioDetalleResponseDto();
+        MovimientoInventarioResponseDto dto = new MovimientoInventarioResponseDto();
 
-	        dto.setDetalleId(det.getDetalleId());
-	        dto.setProductoVarianteId(det.getProductoVariante().getProductoVarianteId());
-	        dto.setProductoSku(det.getProductoVariante().getSku());
+        dto.setMovimientoId(entity.getMovimientoId());
+        dto.setComprobanteId(entity.getComprobante() != null ? entity.getComprobante().getId().intValue() : null);
+        dto.setComprobanteNombre(entity.getComprobante() != null
+                ? (entity.getComprobante().getPrefijo() + " — " + entity.getComprobante().getDescripcion())
+                : null);
+        dto.setConsecutivo(entity.getConsecutivo());
+        dto.setTipo(entity.getTipo().name());
+        dto.setUsuarioId(entity.getUsuario() != null ? entity.getUsuario().getCodigo() : null);
+        dto.setUsuarioNombre(entity.getUsuario() != null ? entity.getUsuario().getNombre() : null);
+        dto.setFechaEmision(entity.getFechaEmision());
+        dto.setFechaCreacion(entity.getFechaCreacion());
+        dto.setEstado(entity.getEstado().name());
+        dto.setTotal(entity.getTotal());
+        dto.setObservaciones(entity.getObservaciones());
+        dto.setDocumentoOrigenTipo(entity.getDocumentoOrigenTipo());
+        dto.setDocumentoOrigenId(entity.getDocumentoOrigenId());
 
-	        dto.setBodegaOrigenId(det.getBodegaOrigen() != null ? det.getBodegaOrigen().getCodigo() : null);
-	        dto.setBodegaOrigenNombre(det.getBodegaOrigen() != null ? det.getBodegaOrigen().getNombre() : null);
+        // Mapear detalles
+        dto.setDetalles(detalles.stream()
+                .map(this::toDetalleResponse)
+                .toList());
 
-	        dto.setBodegaDestinoId(det.getBodegaDestino() != null ? det.getBodegaDestino().getCodigo() : null);
-	        dto.setBodegaDestinoNombre(det.getBodegaDestino() != null ? det.getBodegaDestino().getNombre() : null);
+        return dto;
+    }
 
-	        dto.setCantidad(det.getCantidad());
-	        dto.setCostoUnitario(det.getCostoUnitario());
-	        dto.setCostoPromedio(det.getCostoPromedio());
-	        dto.setTotalDetalle(det.getTotalDetalle());
 
-	        return dto;
-	    }
+    public MovimientoInventarioDetalleResponseDto toDetalleResponse(MovimientoInventarioDetalle det) {
+
+        MovimientoInventarioDetalleResponseDto dto = new MovimientoInventarioDetalleResponseDto();
+
+        dto.setDetalleId(det.getDetalleId());
+        dto.setProductoVarianteId(det.getProductoVariante().getProductoVarianteId());
+        dto.setProductoSku(det.getProductoVariante().getSku());
+
+        dto.setBodegaOrigenId(det.getBodegaOrigen() != null ? det.getBodegaOrigen().getCodigo() : null);
+        dto.setBodegaOrigenNombre(det.getBodegaOrigen() != null ? det.getBodegaOrigen().getNombre() : null);
+
+        dto.setBodegaDestinoId(det.getBodegaDestino() != null ? det.getBodegaDestino().getCodigo() : null);
+        dto.setBodegaDestinoNombre(det.getBodegaDestino() != null ? det.getBodegaDestino().getNombre() : null);
+
+        dto.setCantidad(det.getCantidad());
+        dto.setCostoUnitario(det.getCostoUnitario());
+        dto.setCostoPromedio(det.getCostoPromedio());
+        dto.setTotalDetalle(det.getTotalDetalle());
+
+        // Populate producto information
+        ProductoInfoDto productoInfo = new ProductoInfoDto();
+        ProductoVariante variante = det.getProductoVariante();
+        Productos producto = variante.getProducto();
+
+        // Variant information
+        productoInfo.setVarianteId(variante.getProductoVarianteId());
+        productoInfo.setVarianteSku(variante.getSku());
+        productoInfo.setVarianteReferencia(variante.getReferenciaVariantes());
+        productoInfo.setVarianteCodigoBarras(variante.getCodigoBarras());
+        productoInfo.setVarianteActiva(variante.getActivo());
+        productoInfo.setVariantePredeterminada(variante.getPredeterminada());
+        productoInfo.setVarianteImagen(variante.getImagen());
+
+        // Product information
+        if (producto != null) {
+            productoInfo.setProductoId(producto.getProductoId());
+            productoInfo.setProductoCodigoContable(producto.getCodigoContable());
+            productoInfo.setProductoReferencia(producto.getReferencia());
+            productoInfo.setProductoDescripcion(producto.getDescripcion());
+            productoInfo.setProductoEstado(producto.getEstado());
+            productoInfo.setProductoImagen(producto.getImagen());
+        }
+
+        dto.setProducto(productoInfo);
+
+        return dto;
+    }
 }
