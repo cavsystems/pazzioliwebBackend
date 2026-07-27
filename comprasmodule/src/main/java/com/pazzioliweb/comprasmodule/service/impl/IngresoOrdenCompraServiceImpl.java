@@ -224,17 +224,39 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
             }
             Integer comprobanteId = orden.getComprobante() != null ? orden.getComprobante().getId().intValue() : null;
             Integer consecutivo = orden.getConsecutivoComprobante();
-            movimientoInventarioAutoService.registrarEntradaPorCompra(
-                    orden.getNumeroOrden(),
-                    orden.getId(),
-                    orden.getBodega().getCodigo(),
-                    orden.getFechaEmision() != null ? orden.getFechaEmision()
-                            : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now()),
-                    items,
-                    tipoComprobante,
-                    comprobanteId,
-                    consecutivo
-            );
+            final String numeroOrden = orden.getNumeroOrden();
+            final Long ordenId = orden.getId();
+            final Integer bodegaCodigo = orden.getBodega().getCodigo();
+            final LocalDate fechaMov = orden.getFechaEmision() != null ? orden.getFechaEmision()
+                    : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now());
+            final String tipoComp = tipoComprobante;
+            final List<MovimientoInventarioAutoService.ItemMovimiento> itemsMov = items;
+            Runnable registrar = () -> {
+                try {
+                    movimientoInventarioAutoService.registrarEntradaPorCompra(
+                            numeroOrden, ordenId, bodegaCodigo, fechaMov, itemsMov,
+                            tipoComp, comprobanteId, consecutivo);
+                } catch (Exception ex) {
+                    log.error("[MovInv-Compra] Error generando movimiento (no crítico): {}", ex.getMessage());
+                }
+            };
+            // Registrar el movimiento DESPUÉS del commit del ingreso (REQUIRES_NEW en el
+            // servicio): dentro de la misma transacción, un error del movimiento (p. ej.
+            // Duplicate entry en existencias) la marcaba rollback-only y revertía en
+            // silencio TODO el ingreso aunque este catch lo tratara como "no crítico".
+            // Además, tras el commit el snapshot fresco ve las existencias creadas por
+            // transacciones concurrentes y no hay conflicto de locks con esta transacción.
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override
+                            public void afterCommit() {
+                                registrar.run();
+                            }
+                        });
+            } else {
+                registrar.run();
+            }
         } catch (Exception ex) {
             log.error("[MovInv-Compra] Error generando movimiento (no crítico): {}", ex.getMessage());
         }

@@ -1,5 +1,6 @@
 com\pazzioliweb\comprasmodule\service\impl\IngresoOrdenCompraServiceImpl.class
 com\pazzioliweb\comprasmodule\dtos\FinalizarCompraDTO$ItemFinalDTO.class
+com\pazzioliweb\comprasmodule\service\impl\IngresoOrdenCompraServiceImpl$1.class
 com\pazzioliweb\comprasmodule\dtos\CuentaPorPagarDTO.class
 com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO$AtributoDTO.class
 com\pazzioliweb\comprasmodule\service\impl\DevolucionCompraServiceImpl.class
@@ -81,6 +82,7 @@ com\pazzioliweb\comprasmodule\dtos\ProductoRequestDTO$PrecioDTO.class
 com\pazzioliweb\comprasmodule\service\ManifestoImportacionService.class
 com\pazzioliweb\comprasmodule\dtos\RealizarOrdenRequestDTO$AtributoPayloadDTO.class
 com\pazzioliweb\comprasmodule\dtos\ConfiguracionComprasDTO.class
+com\pazzioliweb\comprasmodule\service\impl\OrdenCompraServiceImpl$1.class
 com\pazzioliweb\comprasmodule\dtos\ManifestoImportacionDTO.class
 com\pazzioliweb\comprasmodule\dtos\OrdenCompraRecienteDTO.class
 com\pazzioliweb\comprasmodule\dtos\ProductoActualizarCrearDTO$ExistenciaDTO.class

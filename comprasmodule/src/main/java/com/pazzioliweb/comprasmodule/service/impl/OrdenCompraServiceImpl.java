@@ -1359,11 +1359,35 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                         ? orden.getComprobante().getTipoMovimiento().name() : "CC";
                 Integer comprobanteId = orden.getComprobante() != null ? orden.getComprobante().getId().intValue() : null;
                 Integer consecutivo = orden.getConsecutivoComprobante();
-                movimientoInventarioAutoService.registrarEntradaPorCompra(
-                        orden.getNumeroOrden(), orden.getId(),
-                        orden.getBodega().getCodigo(),
-                        orden.getFechaEmision() != null ? orden.getFechaEmision() : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now()),
-                        kardexItems, tipoComp, comprobanteId, consecutivo);
+                final String numeroOrdenMov = orden.getNumeroOrden();
+                final Long ordenIdMov = orden.getId();
+                final Integer bodegaCodigoMov = orden.getBodega().getCodigo();
+                final LocalDate fechaMov = orden.getFechaEmision() != null ? orden.getFechaEmision()
+                        : (orden.getFechaCreacion() != null ? orden.getFechaCreacion() : LocalDate.now());
+                final List<com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService.ItemMovimiento> itemsMov = kardexItems;
+                Runnable registrar = () -> {
+                    try {
+                        movimientoInventarioAutoService.registrarEntradaPorCompra(
+                                numeroOrdenMov, ordenIdMov, bodegaCodigoMov, fechaMov, itemsMov,
+                                tipoComp, comprobanteId, consecutivo);
+                    } catch (Exception ex) {
+                        System.out.println("[FinalizarIngreso] Movimiento inventario (no crítico): " + ex.getMessage());
+                    }
+                };
+                // Después del commit (REQUIRES_NEW en el servicio): un error del movimiento
+                // dentro de la misma transacción la marcaba rollback-only y revertía en
+                // silencio toda la compra aunque el catch lo tratara como "no crítico".
+                if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                    org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                            new org.springframework.transaction.support.TransactionSynchronization() {
+                                @Override
+                                public void afterCommit() {
+                                    registrar.run();
+                                }
+                            });
+                } else {
+                    registrar.run();
+                }
             }
         } catch (Exception ex) {
             System.out.println("[FinalizarIngreso] Movimiento inventario (no crítico): " + ex.getMessage());

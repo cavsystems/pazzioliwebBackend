@@ -121,8 +121,14 @@ public class MovimientoInventarioAutoService {
      * Crea un movimiento de ENTRADA generado desde un ingreso de orden de compra.
      * tipoComprobante: "CC" (contado) o "CR" (crédito) — para que el historial
      * muestre correctamente el origen.
+     *
+     * REQUIRES_NEW: los callers de compras lo invocan en afterCommit (la compra ya
+     * commiteó y liberó sus locks). Con transacción propia, cualquier error aquí no
+     * puede marcar rollback-only la transacción del documento — antes un Duplicate
+     * entry en existencias revertía en silencio TODO el ingreso de la compra aunque
+     * el caller lo atrapara como "no crítico".
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void registrarEntradaPorCompra(String numeroOrden, Long ordenId, Integer bodegaCodigo,
                                            LocalDate fecha, List<ItemMovimiento> items,
                                            String tipoComprobante, Integer comprobanteId, Integer consecutivo) {
@@ -132,7 +138,7 @@ public class MovimientoInventarioAutoService {
     }
 
     /** Compat: sobrecarga que asume CC (compra contado) si el caller no especifica. */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void registrarEntradaPorCompra(String numeroOrden, Long ordenId, Integer bodegaCodigo,
                                            LocalDate fecha, List<ItemMovimiento> items) {
         registrarEntradaPorCompra(numeroOrden, ordenId, bodegaCodigo, fecha, items, "CC", null, null);
@@ -408,22 +414,13 @@ public class MovimientoInventarioAutoService {
             kardex.setObservaciones(descripcion);
             kardexRepo.save(kardex);
 
-            // Actualizar tabla existencias para mantener sincronización con Kardex
-            Optional<Existencias> existenciasOpt = existenciasRepo
-                    .findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(
-                            variante.getProductoVarianteId(), bodega.getCodigo());
-            if (existenciasOpt.isPresent()) {
-                Existencias existencias = existenciasOpt.get();
-                existencias.setExistencia(java.math.BigDecimal.valueOf(saldoNuevo));
-                existenciasRepo.save(existencias);
-            } else {
-                // Si no existe registro de existencias, crearlo
-                Existencias nuevasExistencias = new Existencias();
-                nuevasExistencias.setProductoVariante(variante);
-                nuevasExistencias.setBodega(bodega);
-                nuevasExistencias.setExistencia(java.math.BigDecimal.valueOf(saldoNuevo));
-                existenciasRepo.save(nuevasExistencias);
-            }
+            // Actualizar tabla existencias para mantener sincronización con Kardex.
+            // UPSERT atómico: el viejo SELECT→INSERT chocaba con el UNIQUE (variante, bodega)
+            // si otra transacción creaba la fila después del snapshot de esta transacción
+            // (p. ej. la actualización de productos que dispara el flujo de compras), y el
+            // Duplicate entry marcaba la transacción del documento como rollback-only.
+            existenciasRepo.upsertSaldo(variante.getProductoVarianteId(), bodega.getCodigo(),
+                    java.math.BigDecimal.valueOf(saldoNuevo));
 
             // Refresh el costo promedio del detalle
             detGuardado.setCostoPromedio(promedioNuevo);
