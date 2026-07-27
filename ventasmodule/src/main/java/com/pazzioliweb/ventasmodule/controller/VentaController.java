@@ -47,6 +47,12 @@ public class VentaController {
         VentaDTO venta = ventaService.getVentaByNumero(numeroVenta);
         return ResponseEntity.ok(venta);
     }
+
+    /** Trae una venta por id (totales: subtotal/gravada, iva, retenciones, total). */
+    @GetMapping("/{ventaId}")
+    public ResponseEntity<VentaDTO> getVentaById(@PathVariable Long ventaId) {
+        return ResponseEntity.ok(ventaService.getVentaById(ventaId));
+    }
 /*
 obtener el id de la ultima venta
  */
