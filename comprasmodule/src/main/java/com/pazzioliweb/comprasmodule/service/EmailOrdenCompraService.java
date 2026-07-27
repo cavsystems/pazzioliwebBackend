@@ -1,5 +1,7 @@
 package com.pazzioliweb.comprasmodule.service;
 
+import com.pazzioliweb.commonbacken.dtos.DocumentoAdjuntoDTO;
+import com.pazzioliweb.commonbacken.util.HtmlPdfUtil;
 import com.pazzioliweb.comprasmodule.dtos.OrdenCompraDTO;
 import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,10 +53,33 @@ public class EmailOrdenCompraService {
         }
     }
 
+    // ── Documento listo para otros canales (WhatsApp). Mismo HTML que el correo. ──
+
+    public DocumentoAdjuntoDTO documentoOrden(OrdenCompraDTO orden) {
+        String numero = nvl(orden.getNumeroOrden());
+        String caption = "*ORDEN DE COMPRA " + numero + "*"
+                + "\nProveedor: " + nvl(orden.getProveedorNombre())
+                + "\nFecha: " + orden.getFechaEmision()
+                + "\nTotal: " + fmt(orden.getTotal());
+        return new DocumentoAdjuntoDTO("OC-" + numero, caption, pdfSeguro(construirHtml(orden)));
+    }
+
+    /** Render del PDF best-effort: si falla devuelve null y el llamador decide qué hacer. */
+    private byte[] pdfSeguro(String html) {
+        try {
+            return HtmlPdfUtil.htmlToPdf(html);
+        } catch (Throwable ex) {
+            System.out.println("[EmailOC] No se pudo generar el PDF: " + ex.getMessage());
+            return null;
+        }
+    }
+
     private String construirHtml(OrdenCompraDTO orden) {
         StringBuilder sb = new StringBuilder();
+        // OJO: la etiqueta meta va CERRADA (<meta ... />). openhtmltopdf exige XHTML válido y con
+        // <meta charset='UTF-8'> sin cerrar el render del PDF falla (ver HtmlPdfUtil).
         sb.append("<!DOCTYPE html><html><head>")
-          .append("<meta charset='UTF-8'>")
+          .append("<meta charset='UTF-8' />")
           .append("<style>")
           .append("body{font-family:Arial,sans-serif;color:#333;margin:0;padding:20px}")
           .append("h2{color:#2c5282;border-bottom:2px solid #2c5282;padding-bottom:8px}")

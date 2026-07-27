@@ -74,6 +74,10 @@ public class SecurityConfig {
 						.requestMatchers("/api/reportes-contables/**").permitAll()
 						.requestMatchers("/api/conciliacion-bancaria/**").permitAll()
 						.requestMatchers("/api/periodos-contables/**").permitAll()
+						// Solo expone un booleano (si el envío automático por WhatsApp está configurado);
+						// va abierto igual que el resto de endpoints de negocio. Los envíos en sí viven
+						// bajo /api/ventas, /api/devoluciones, /api/compras, etc.
+						.requestMatchers("/api/whatsapp/**").permitAll()
 						.anyRequest().authenticated()).exceptionHandling(ex -> ex
 						.accessDeniedHandler((request, response, accessDeniedException) -> {
 							if (!response.isCommitted()) {

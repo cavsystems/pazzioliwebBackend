@@ -1,5 +1,6 @@
 package com.pazzioliweb.ventasmodule.service;
 
+import com.pazzioliweb.commonbacken.dtos.DocumentoAdjuntoDTO;
 import com.pazzioliweb.commonbacken.util.HtmlPdfUtil;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
@@ -98,6 +99,37 @@ public class EmailVentaService {
             return true;
         } catch (Exception ex) {
             throw new RuntimeException("Error enviando cotización: " + ex.getMessage(), ex);
+        }
+    }
+
+    // ── Documento listo para otros canales (WhatsApp). Mismo HTML/PDF que el correo. ──
+
+    public DocumentoAdjuntoDTO documentoVenta(VentaDTO venta) {
+        String numero = nvl(venta.getNumeroVenta());
+        String caption = "*FACTURA DE VENTA " + numero + "*"
+                + "\nCliente: " + nvl(venta.getClienteNombre(), "-")
+                + "\nFecha: " + venta.getFechaEmision()
+                + "\nTotal: " + fmt(venta.getTotal());
+        return new DocumentoAdjuntoDTO("Factura-" + numero, caption, pdfSeguro(construirHtml(venta)));
+    }
+
+    public DocumentoAdjuntoDTO documentoCotizacion(CotizacionDTO cot) {
+        String numero = nvl(cot.getNumeroCotizacion());
+        String caption = "*COTIZACIÓN " + numero + "*"
+                + "\nCliente: " + nvl(cot.getClienteNombre(), "-")
+                + "\nFecha: " + cot.getFechaEmision()
+                + "\nVence: " + cot.getFechaVencimiento()
+                + "\nTotal: " + fmt(cot.getTotal());
+        return new DocumentoAdjuntoDTO("Cotizacion-" + numero, caption, pdfSeguro(construirHtmlCotizacion(cot)));
+    }
+
+    /** Render del PDF best-effort: si falla devuelve null y el llamador decide qué hacer. */
+    private byte[] pdfSeguro(String html) {
+        try {
+            return HtmlPdfUtil.htmlToPdf(html);
+        } catch (Throwable ex) {
+            System.out.println("[EmailVenta] No se pudo generar el PDF: " + ex.getMessage());
+            return null;
         }
     }
 

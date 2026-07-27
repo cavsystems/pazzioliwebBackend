@@ -1,5 +1,7 @@
 package com.pazzioliweb.ventasmodule.controller;
 
+import com.pazzioliweb.commonbacken.dtos.DocumentoAdjuntoDTO;
+import com.pazzioliweb.commonbacken.services.WhatsappService;
 import com.pazzioliweb.ventasmodule.dtos.DetalleVentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaDTO;
 import com.pazzioliweb.ventasmodule.dtos.VentaMetodoPagoDTO;
@@ -25,6 +27,9 @@ public class VentaController {
 
     @Autowired
     private EmailVentaService emailVentaService;
+
+    @Autowired
+    private WhatsappService whatsappService;
 
     @Autowired
     public VentaController(VentaService ventaService) {
@@ -93,6 +98,27 @@ obtener el id de la ultima venta
         resp.put("mensaje", enviado
                 ? "Recibo enviado a " + correo
                 : "Servicio de email no configurado. Configure spring.mail.* en application.properties.");
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * Envía la factura por WhatsApp (Cloud API de Meta) con el PDF adjunto.
+     * Si WhatsApp automático no está configurado responde {@code configurado:false} y el frontend
+     * degrada al link wa.me, así el botón sirve igual sin credenciales de Meta.
+     */
+    @PostMapping("/{ventaId}/enviar-whatsapp")
+    public ResponseEntity<java.util.Map<String, Object>> enviarWhatsapp(
+            @PathVariable Long ventaId,
+            @RequestParam String telefono) {
+        VentaDTO venta = ventaService.getVentaById(ventaId);
+        DocumentoAdjuntoDTO doc = emailVentaService.documentoVenta(venta);
+        WhatsappService.Resultado r = whatsappService.enviarDocumento(
+                telefono, doc.nombreArchivo(), doc.caption(), doc.pdf());
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("enviado", r.enviado());
+        resp.put("configurado", r.configurado());
+        resp.put("mensaje", r.mensaje());
+        resp.put("texto", doc.caption());
         return ResponseEntity.ok(resp);
     }
 

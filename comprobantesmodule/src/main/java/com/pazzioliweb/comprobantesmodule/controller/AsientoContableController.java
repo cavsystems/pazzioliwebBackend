@@ -30,6 +30,14 @@ public class AsientoContableController {
     @PersistenceContext
     private EntityManager em;
 
+    // Para resolver el TIPO (ACTIVO/PASIVO) de la cuenta al generar la cartera de apertura.
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.comprobantesmodule.repositori.CuentaContableRepository cuentaContableRepo;
+
+    // Para correr cada documento de cartera de apertura en su propia transacción (REQUIRES_NEW).
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.transaction.PlatformTransactionManager txManager;
+
     // Publica AsientoManualRegistradoEvent para que ventas/compras sincronicen el subledger de cartera.
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
@@ -397,18 +405,143 @@ public class AsientoContableController {
             // Tipo propio SALDOS_INI (no APERTURA) para NO colisionar con la clave de
             // idempotencia del traslado de cierre anual, que usa ("APERTURA", año+1).
             String numero = "SALDOS-INI-" + anio;
+            // generarAsiento es idempotente: si la apertura del año ya existe la retorna sin
+            // duplicar. Detectamos ANTES si existía para no duplicar tampoco la cartera.
+            // Los ANULADOS se ignoran: generarAsiento tampoco los cuenta y crearía uno nuevo,
+            // que sí debe traer su cartera.
+            boolean aperturaYaExistia = repo
+                    .findByDocumentoOrigenTipoAndDocumentoOrigenId("SALDOS_INI", anio)
+                    .filter(a -> !"ANULADO".equalsIgnoreCase(a.getEstado()))
+                    .isPresent();
             AsientoContable asiento = asientoService.generarAsiento(
                     numero, fecha, descripcion, "SALDOS_INI", anio, null, lineas);
+            String msgCartera = "";
+            if (!aperturaYaExistia) {
+                int[] r = generarCarteraApertura(fecha, lineas);
+                if (r[0] + r[1] > 0) {
+                    msgCartera = " Cartera: " + r[0] + " documento(s) generado(s)"
+                            + (r[1] > 0 ? ", " + r[1] + " omitido(s) (documento ya existente o error)" : "") + ".";
+                }
+            }
             return ResponseEntity.ok(Map.of(
                     "id", asiento.getId(),
                     "numeroAsiento", asiento.getNumeroAsiento(),
                     "totalDebito", asiento.getTotalDebito(),
                     "totalCredito", asiento.getTotalCredito(),
-                    "mensaje", "Asiento de apertura registrado correctamente"
+                    "mensaje", "Asiento de apertura registrado correctamente." + msgCartera
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * Cartera de apertura: por cada línea de saldos iniciales con DOCUMENTO DE CRUCE
+     * y tercero, genera el documento de cartera equivalente para que el saldo no
+     * quede solo en el mayor:
+     *  - cuenta de ACTIVO con saldo débito  → cuenta por cobrar (CxC)
+     *  - cuenta de PASIVO con saldo crédito → cuenta por pagar (CxP)
+     * Se inserta con SQL nativo porque cuentas_por_cobrar/cuentas_por_pagar viven en
+     * los módulos de ventas/compras y este módulo no puede depender de ellos.
+     *
+     * CADA línea corre en su PROPIA transacción (REQUIRES_NEW): un catch dentro de la
+     * transacción del controller NO alcanza, porque una PersistenceException capturada
+     * igual marca esa transacción rollback-only y el commit del request revienta con
+     * UnexpectedRollbackException, revirtiendo la cartera ya insertada. Con REQUIRES_NEW,
+     * la línea que falla se revierte sola y las demás quedan commiteadas.
+     *
+     * @return {generadas, omitidas} para informarlo en la respuesta.
+     */
+    private int[] generarCarteraApertura(
+            LocalDate fecha,
+            List<com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO> lineas) {
+        var txDef = new org.springframework.transaction.support.DefaultTransactionDefinition(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        var txTemplate = new org.springframework.transaction.support.TransactionTemplate(txManager, txDef);
+
+        int generadas = 0, omitidas = 0;
+        for (var li : lineas) {
+            if (li.documentoCruce == null || li.documentoCruce.isBlank() || li.terceroId == null) continue;
+            try {
+                Boolean inserto = txTemplate.execute(status -> insertarDocumentoCartera(fecha, li));
+                if (Boolean.TRUE.equals(inserto)) generadas++; else omitidas++;
+            } catch (Exception ex) {
+                // Solo se revierte la transacción interna de ESTA línea; el asiento y las
+                // demás líneas de cartera no se ven afectadas.
+                omitidas++;
+                System.out.println("[Apertura] No se pudo generar cartera para doc "
+                        + li.documentoCruce + ": " + ex.getMessage());
+            }
+        }
+        return new int[]{generadas, omitidas};
+    }
+
+    /** Inserta la CxC/CxP de una línea. @return true si insertó, false si se omitió. */
+    private boolean insertarDocumentoCartera(
+            LocalDate fecha,
+            com.pazzioliweb.comprobantesmodule.service.AsientoContableService.LineaDTO li) {
+        var cuentaOpt = cuentaContableRepo.findById(li.cuentaContableId);
+        if (cuentaOpt.isEmpty()) return false;
+        // Los tenants viejos tienen tipos con casing mixto (tablas latin1); comparar sin case.
+        String tipo = cuentaOpt.get().getTipo() != null ? cuentaOpt.get().getTipo().trim() : "";
+        String doc = li.documentoCruce.trim();
+
+        String nit = "";
+        String nombre = li.terceroNombre != null ? li.terceroNombre : "";
+        int plazo = 0;
+        var ter = tercerosRepo.findById(li.terceroId);
+        if (ter.isPresent()) {
+            nit = ter.get().getIdentificacion() != null ? ter.get().getIdentificacion() : "";
+            if (nombre.isBlank() && ter.get().getRazonSocial() != null) nombre = ter.get().getRazonSocial();
+            if (ter.get().getPlazo() != null) plazo = ter.get().getPlazo();
+        }
+        LocalDate vencimiento = fecha.plusDays(plazo);
+
+        java.math.BigDecimal debito = li.debito != null ? li.debito : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal credito = li.credito != null ? li.credito : java.math.BigDecimal.ZERO;
+
+        if ("ACTIVO".equalsIgnoreCase(tipo) && debito.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            Number existe = (Number) em.createNativeQuery(
+                    "SELECT COUNT(*) FROM cuentas_por_cobrar WHERE numero_venta = :doc")
+                    .setParameter("doc", doc).getSingleResult();
+            if (existe.longValue() > 0) return false;
+            em.createNativeQuery(
+                    "INSERT INTO cuentas_por_cobrar " +
+                    "(cliente_id, nit, nombre, numero_venta, venta_id, valor_neto, saldo, " +
+                    " fecha_emision, fecha_vencimiento, plazo_dias, estado, fecha_creacion) " +
+                    "VALUES (:cid, :nit, :nombre, :doc, NULL, :valor, :valor, :fecha, :vence, :plazo, 'PENDIENTE', CURRENT_DATE)")
+                    .setParameter("cid", li.terceroId)
+                    .setParameter("nit", nit)
+                    .setParameter("nombre", nombre)
+                    .setParameter("doc", doc)
+                    .setParameter("valor", debito)
+                    .setParameter("fecha", fecha)
+                    .setParameter("vence", vencimiento)
+                    .setParameter("plazo", plazo)
+                    .executeUpdate();
+            return true;
+        }
+        if ("PASIVO".equalsIgnoreCase(tipo) && credito.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            Number existe = (Number) em.createNativeQuery(
+                    "SELECT COUNT(*) FROM cuentas_por_pagar WHERE numero_factura = :doc")
+                    .setParameter("doc", doc).getSingleResult();
+            if (existe.longValue() > 0) return false;
+            em.createNativeQuery(
+                    "INSERT INTO cuentas_por_pagar " +
+                    "(nit, nombre, numero_factura, numero_factura_proveedor, fecha_vencimiento, " +
+                    " valor_neto, saldo, estado, proveedor_id, fecha_creacion, retefuente, reteiva, reteica) " +
+                    "VALUES (:nit, :nombre, :doc, NULL, :vence, :valor, :valor, 'PENDIENTE', :pid, CURRENT_DATE, 0, 0, 0)")
+                    .setParameter("nit", nit)
+                    .setParameter("nombre", nombre)
+                    .setParameter("doc", doc)
+                    .setParameter("vence", vencimiento)
+                    .setParameter("valor", credito)
+                    .setParameter("pid", li.terceroId)
+                    .executeUpdate();
+            return true;
+        }
+        // Otras clases de cuenta con doc de cruce no generan cartera (no aplica).
+        return false;
     }
 
     /** Lista asientos filtrando por rango de fechas. Default = mes actual. */

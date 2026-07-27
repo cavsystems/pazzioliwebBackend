@@ -1,8 +1,11 @@
 package com.pazzioliweb.ventasmodule.controller;
 
+import com.pazzioliweb.commonbacken.dtos.DocumentoAdjuntoDTO;
+import com.pazzioliweb.commonbacken.services.WhatsappService;
 import com.pazzioliweb.ventasmodule.dtos.DevolucionDTO;
 import com.pazzioliweb.ventasmodule.dtos.DevolucionRequestDTO;
 import com.pazzioliweb.ventasmodule.service.DevolucionService;
+import com.pazzioliweb.ventasmodule.service.EmailDevolucionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +28,12 @@ import java.util.List;
 public class DevolucionController {
 
     private final DevolucionService devolucionService;
+
+    @Autowired
+    private EmailDevolucionService emailDevolucionService;
+
+    @Autowired
+    private WhatsappService whatsappService;
 
     @Autowired
     public DevolucionController(DevolucionService devolucionService) {
@@ -106,5 +115,39 @@ public class DevolucionController {
                 request.getUserPrincipal() != null ? request.getUserPrincipal().getName() : "sistema")
                 : "sistema";
         return ResponseEntity.ok(devolucionService.anularDevolucion(id, motivo, usuario));
+    }
+
+    /** Envía la devolución por correo con el PDF adjunto. */
+    @PostMapping("/{id}/enviar-email")
+    public ResponseEntity<java.util.Map<String, Object>> enviarEmail(@PathVariable Long id,
+                                                                     @RequestParam String correo) {
+        DevolucionDTO dev = devolucionService.getDevolucionById(id);
+        boolean enviado = emailDevolucionService.enviarDevolucion(dev, correo);
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("enviado", enviado);
+        resp.put("mensaje", enviado
+                ? "Devolución enviada a " + correo
+                : "Servicio de email no configurado. Configure spring.mail.* en application.properties.");
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * Envía la devolución por WhatsApp (Cloud API de Meta) con el PDF adjunto.
+     * Si WhatsApp automático no está configurado responde {@code configurado:false} y el frontend
+     * degrada al link wa.me.
+     */
+    @PostMapping("/{id}/enviar-whatsapp")
+    public ResponseEntity<java.util.Map<String, Object>> enviarWhatsapp(@PathVariable Long id,
+                                                                        @RequestParam String telefono) {
+        DevolucionDTO dev = devolucionService.getDevolucionById(id);
+        DocumentoAdjuntoDTO doc = emailDevolucionService.documentoDevolucion(dev);
+        WhatsappService.Resultado r = whatsappService.enviarDocumento(
+                telefono, doc.nombreArchivo(), doc.caption(), doc.pdf());
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("enviado", r.enviado());
+        resp.put("configurado", r.configurado());
+        resp.put("mensaje", r.mensaje());
+        resp.put("texto", doc.caption());
+        return ResponseEntity.ok(resp);
     }
 }

@@ -34,6 +34,9 @@ public class OrdenCompraController {
     private final EmailOrdenCompraService emailService;
 
     @Autowired
+    private com.pazzioliweb.commonbacken.services.WhatsappService whatsappService;
+
+    @Autowired
     public OrdenCompraController(OrdenCompraService ordenCompraService,
                                   CuentaPorPagarService cuentaPorPagarService,
                                   EmailOrdenCompraService emailService) {
@@ -160,6 +163,28 @@ public class OrdenCompraController {
         java.util.Map<String, Object> resp = new java.util.HashMap<>();
         resp.put("enviado", enviado);
         resp.put("mensaje", enviado ? "Email enviado a " + correo : "Servicio de email no configurado. Configure spring.mail.* en application-prod.yaml");
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * Envía la orden de compra por WhatsApp (Cloud API de Meta) con el PDF adjunto.
+     * Si WhatsApp automático no está configurado responde {@code configurado:false} y el frontend
+     * degrada al link wa.me.
+     */
+    @PostMapping("/{id}/enviar-whatsapp")
+    public ResponseEntity<java.util.Map<String, Object>> enviarWhatsapp(
+            @PathVariable("id") Long ordenId,
+            @RequestParam String telefono) {
+        OrdenCompraDTO orden = ordenCompraService.obtenerPorId(ordenId)
+                .orElseThrow(() -> new com.pazzioliweb.comprasmodule.exception.OrdenCompraException("Orden no encontrada"));
+        com.pazzioliweb.commonbacken.dtos.DocumentoAdjuntoDTO doc = emailService.documentoOrden(orden);
+        com.pazzioliweb.commonbacken.services.WhatsappService.Resultado r = whatsappService.enviarDocumento(
+                telefono, doc.nombreArchivo(), doc.caption(), doc.pdf());
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("enviado", r.enviado());
+        resp.put("configurado", r.configurado());
+        resp.put("mensaje", r.mensaje());
+        resp.put("texto", doc.caption());
         return ResponseEntity.ok(resp);
     }
 

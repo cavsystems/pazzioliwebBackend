@@ -19,6 +19,9 @@ public class ReciboCajaController {
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.tesoreriamodule.service.EmailTesoreriaService emailService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pazzioliweb.commonbacken.services.WhatsappService whatsappService;
+
     public ReciboCajaController(ReciboCajaService service) {
         this.service = service;
     }
@@ -35,6 +38,32 @@ public class ReciboCajaController {
             return ResponseEntity.ok(resp);
         } catch (RuntimeException e) {
             resp.put("enviado", false);
+            resp.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(resp);
+        }
+    }
+
+    /**
+     * Envía el recibo de caja por WhatsApp (Cloud API de Meta) con el PDF adjunto.
+     * Si WhatsApp automático no está configurado responde {@code configurado:false} y el frontend
+     * degrada al link wa.me.
+     */
+    @PostMapping("/{id}/enviar-whatsapp")
+    public ResponseEntity<Map<String, Object>> enviarWhatsapp(@PathVariable Long id, @RequestParam String telefono) {
+        Map<String, Object> resp = new java.util.HashMap<>();
+        try {
+            com.pazzioliweb.commonbacken.dtos.DocumentoAdjuntoDTO doc =
+                    emailService.documentoRecibo(service.buscarPorId(id));
+            com.pazzioliweb.commonbacken.services.WhatsappService.Resultado r =
+                    whatsappService.enviarDocumento(telefono, doc.nombreArchivo(), doc.caption(), doc.pdf());
+            resp.put("enviado", r.enviado());
+            resp.put("configurado", r.configurado());
+            resp.put("mensaje", r.mensaje());
+            resp.put("texto", doc.caption());
+            return ResponseEntity.ok(resp);
+        } catch (RuntimeException e) {
+            resp.put("enviado", false);
+            resp.put("configurado", whatsappService.isConfigurado());
             resp.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(resp);
         }
