@@ -446,7 +446,7 @@ public class AsientoContableService {
     }
 
     /** Anula el asiento de un documento (lo marca como ANULADO sin borrar). */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void anularAsientoDeDocumento(String documentoOrigenTipo, Long documentoOrigenId) {
         asientoRepo.findByDocumentoOrigenTipoAndDocumentoOrigenId(documentoOrigenTipo, documentoOrigenId)
                 .ifPresent(a -> {

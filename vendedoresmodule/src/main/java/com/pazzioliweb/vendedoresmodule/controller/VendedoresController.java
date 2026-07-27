@@ -36,7 +36,7 @@ public class VendedoresController {
 	@GetMapping("/listar")
     public ResponseEntity<Map<String, Object>> listar(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "2000") int size,
             @RequestParam(defaultValue = "vendedor_id") String sortField,
             @RequestParam(defaultValue = "asc") String sortDirection) {
 

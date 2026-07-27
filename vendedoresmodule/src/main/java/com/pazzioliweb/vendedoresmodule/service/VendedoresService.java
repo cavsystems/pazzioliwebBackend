@@ -207,7 +207,7 @@ public class VendedoresService {
         return vendedorRepository.save(vendedor);
     }
 
-    @jakarta.transaction.Transactional
+    @org.springframework.transaction.annotation.Transactional
     public void eliminar(Integer id) {
         Long registros = vendedorRepository.contarRegistrosAsociados(id);
         if (registros != null && registros > 0) {

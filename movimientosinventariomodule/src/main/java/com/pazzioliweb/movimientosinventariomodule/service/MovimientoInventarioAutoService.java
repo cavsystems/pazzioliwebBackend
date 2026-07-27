@@ -215,7 +215,7 @@ public class MovimientoInventarioAutoService {
                 .orElse(0.0);
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void registrarAjusteAnulacion(String documentoTipo, Long documentoId, Integer bodegaCodigo,
                                          LocalDate fecha, List<ItemMovimiento> items, boolean entrada) {
         crearMovimientoAuto(documentoTipo, "Anulación inventario " + documentoTipo, documentoId, documentoTipo,
