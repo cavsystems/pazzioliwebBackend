@@ -330,11 +330,21 @@ public class ProductosServiceImpl implements ProductosService{
 
         // Set relations
         Grupos grupo = grupoRepository.findByDescripcion(dto.getGrupo())
-                .orElseThrow(() -> new EntityNotFoundException("Grupo no encontrado: " + dto.getGrupo()));
+                .orElseGet(() -> {
+                    Grupos nuevoGrupo = new Grupos();
+                    nuevoGrupo.setId(grupoRepository.findPrimerHueco());
+                    nuevoGrupo.setDescripcion(dto.getGrupo());
+                    return grupoRepository.save(nuevoGrupo);
+                });
         producto.setGrupo(grupo);
 
         Lineas linea = lineaRepository.findByDescripcion(dto.getLinea())
-                .orElseThrow(() -> new EntityNotFoundException("Linea no encontrada: " + dto.getLinea()));
+                .orElseGet(() -> {
+                    Lineas nuevaLinea = new Lineas();
+                    nuevaLinea.setId(lineaRepository.findPrimerHueco());
+                    nuevaLinea.setDescripcion(dto.getLinea());
+                    return lineaRepository.save(nuevaLinea);
+                });
         producto.setLinea(linea);
 
         Impuestos impuesto = impuestoRepository.findByTarifa(dto.getImpuesto())
