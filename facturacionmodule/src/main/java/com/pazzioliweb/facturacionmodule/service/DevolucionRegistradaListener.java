@@ -117,6 +117,16 @@ public class DevolucionRegistradaListener {
             DianDocumentoRequestDTO req = armarRequestNC(devolucion, venta, facturaOriginal,
                     compNC.getPrefijo(), siguiente, event.getCodigoConcepto());
 
+            // Propagar resolución/numeración del comprobante NC (nodo DRF del documento)
+            if (compNC.getResolucionDian() != null && !compNC.getResolucionDian().isBlank()) {
+                req.setResolucionDian(compNC.getResolucionDian());
+                req.setClaveTecnicaDian(compNC.getClaveTecnicaDian());
+                req.setFechaInicioResolucion(compNC.getFechaInicioResolucion());
+                req.setFechaFinResolucion(compNC.getFechaFinResolucion());
+                req.setConsecutivoDesde(compNC.getConsecutivoDesde());
+                req.setConsecutivoHasta(compNC.getConsecutivoHasta());
+            }
+
             log.info("Enviando NC {} {} (referencia CUFE: {})",
                     req.getPrefijo(), req.getConsecutivo(),
                     facturaOriginal.getCufe() != null ? facturaOriginal.getCufe().substring(0, Math.min(20, facturaOriginal.getCufe().length())) + "..." : "N/A");
@@ -178,9 +188,32 @@ public class DevolucionRegistradaListener {
                 emisor.setNumeroIdentificacion(empresa.getNumeroidentificacion());
                 emisor.setDigitoVerificacion(empresa.getDigitoverificacion());
                 emisor.setRazonSocial(empresa.getRazonsocial() != null ? empresa.getRazonsocial() : empresa.getNombrecomercial());
+                emisor.setNombreComercial(empresa.getNombrecomercial());
+                emisor.setDireccion(empresa.getDireccion());
                 emisor.setTelefono(empresa.getCelularempresa());
                 emisor.setCorreo(empresa.getCorreoempresa());
                 emisor.setPais("CO");
+                emisor.setCodigoPostal(empresa.getCodigopostal());
+                // Ubicación con códigos DANE (Facturatech tablas 34/35)
+                if (empresa.getCodigomunicipio() != null) {
+                    emisor.setMunicipio(empresa.getCodigomunicipio().getMunicipio());
+                    int codDep = empresa.getCodigomunicipio().getCodigoDepartamento();
+                    int codMun = empresa.getCodigomunicipio().getCodigoMunicipio();
+                    emisor.setCodigoMunicipio(codMun >= 1000
+                            ? String.format("%05d", codMun)
+                            : String.format("%02d%03d", codDep, codMun));
+                }
+                if (empresa.getCodigodepartamento() != null) {
+                    emisor.setDepartamento(empresa.getCodigodepartamento().getDepartamento());
+                    emisor.setCodigoDepartamento(String.format("%02d",
+                            empresa.getCodigodepartamento().getCodigoDepartamento()));
+                }
+                // Datos fiscales
+                emisor.setResponsabilidadFiscal(empresa.getResponsabilidadFiscal());
+                emisor.setTipoContribuyente(empresa.getTipoContribuyente());
+                emisor.setGranContribuyente(empresa.getGranContribuyente());
+                emisor.setAutorretenedor(empresa.getAutorretenedor());
+                emisor.setResponsableIva(empresa.getResponsableIva());
             }
         } catch (Exception ex) {
             log.warn("[NC] Error cargando empresa: {}", ex.getMessage());
@@ -201,6 +234,19 @@ public class DevolucionRegistradaListener {
                     : (cliente.getNombre1() != null ? cliente.getNombre1() : ""));
             receptor.setDireccion(cliente.getDireccion());
             receptor.setCorreo(cliente.getCorreo());
+            if (cliente.getCiudad() != null) {
+                receptor.setMunicipio(cliente.getCiudad().getMunicipio());
+                int codDep = cliente.getCiudad().getCodigoDepartamento();
+                int codMun = cliente.getCiudad().getCodigoMunicipio();
+                receptor.setCodigoMunicipio(codMun >= 1000
+                        ? String.format("%05d", codMun)
+                        : String.format("%02d%03d", codDep, codMun));
+            }
+            if (cliente.getDepartamento() != null) {
+                receptor.setDepartamento(cliente.getDepartamento().getDepartamento());
+                receptor.setCodigoDepartamento(String.format("%02d",
+                        cliente.getDepartamento().getCodigoDepartamento()));
+            }
         }
         req.setReceptor(receptor);
 

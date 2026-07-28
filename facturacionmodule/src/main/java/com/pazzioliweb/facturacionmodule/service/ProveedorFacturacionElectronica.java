@@ -34,5 +34,21 @@ public interface ProveedorFacturacionElectronica {
      * @return respuesta actualizada con el estado DIAN
      */
     DianDocumentoResponseDTO consultarEstado(String cufe);
+
+    /**
+     * Consulta el estado de un documento por prefijo + folio (consecutivo).
+     * Los proveedores tecnológicos como Facturatech identifican el documento
+     * por su numeración, no por CUFE. La implementación por defecto no la soporta.
+     *
+     * @param prefijo prefijo del comprobante (ej. "FE")
+     * @param folio   consecutivo del documento
+     * @return respuesta actualizada con estado, CUFE, XML, PDF y QR si ya está firmado
+     */
+    default DianDocumentoResponseDTO consultarEstadoDocumento(String prefijo, Integer folio) {
+        DianDocumentoResponseDTO response = new DianDocumentoResponseDTO();
+        response.setExitoso(false);
+        response.setMensajeDian("Consulta por prefijo+folio no soportada por este proveedor");
+        return response;
+    }
 }
 

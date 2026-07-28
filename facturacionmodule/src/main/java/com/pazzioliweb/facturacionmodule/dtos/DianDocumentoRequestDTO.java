@@ -67,9 +67,18 @@ public class DianDocumentoRequestDTO {
         private String numeroIdentificacion;
         private String digitoVerificacion;
         private String razonSocial;
+        private String nombreComercial;
         private String direccion;
         private String municipio;
         private String departamento;
+        /** Código DANE del departamento (2 dígitos, ej. "05"). Tabla 34 Facturatech. */
+        private String codigoDepartamento;
+        /** Código DANE del municipio (5 dígitos, ej. "05001"). Tabla 35 Facturatech. */
+        private String codigoMunicipio;
+        /** Código postal (Tabla 39 Facturatech). */
+        private String codigoPostal;
+        /** Matrícula mercantil (nodo ICC_1 Facturatech, persona jurídica). */
+        private String matriculaMercantil;
         private String pais;
         private String telefono;
         private String correo;
@@ -94,6 +103,12 @@ public class DianDocumentoRequestDTO {
         private String direccion;
         private String municipio;
         private String departamento;
+        /** Código DANE del departamento (2 dígitos). Tabla 34 Facturatech. */
+        private String codigoDepartamento;
+        /** Código DANE del municipio (5 dígitos). Tabla 35 Facturatech. */
+        private String codigoMunicipio;
+        /** Código postal (Tabla 39 Facturatech). */
+        private String codigoPostal;
         private String correo;
         private String telefono;
         /** Responsabilidad fiscal del receptor (códigos DIAN). "R-99-PN" si no aplica. */
