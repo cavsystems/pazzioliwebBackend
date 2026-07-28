@@ -9,31 +9,31 @@ CREATE TABLE IF NOT EXISTS actividadeconomica (
 
 CREATE TABLE IF NOT EXISTS departamentos (
     codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigopais INT,
-    codigo INT,
-    nombre VARCHAR(100)
+    codigoPais INT,
+    codigoDepartamento INT,
+    departamento VARCHAR(50)
 );
 
 CREATE TABLE IF NOT EXISTS municipios (
     codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigo INT,
-    codigodepartamento INT,
-    nombre VARCHAR(100)
+    codigoDepartamento INT,
+    codigoMunicipio INT,
+    municipio VARCHAR(50)
 );
 
 CREATE TABLE IF NOT EXISTS paises (
     codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigo INT,
+    codigoPais INT,
     nombre VARCHAR(100),
     sigla VARCHAR(10)
 );
 
 CREATE TABLE IF NOT EXISTS codigospostalesnacionales (
     codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigo INT,
-    municipio VARCHAR(100),
-    codigo INT,
-    codigo_postal VARCHAR(20)
+    codigoMunicipio INT,
+    nombreMunicipio VARCHAR(100),
+    zonaPostal INT,
+    codigoPostal VARCHAR(20)
 );
 
 CREATE TABLE IF NOT EXISTS regimen (
@@ -158,6 +158,15 @@ CREATE TABLE IF NOT EXISTS lineas (
     descripcion VARCHAR(255),
     estado VARCHAR(20) DEFAULT 'ACTIVO',
     FOREIGN KEY (grupo_id) REFERENCES grupos(grupo_id)
+);
+
+CREATE TABLE IF NOT EXISTS impuestos (
+    codigo INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100),
+    tarifa DOUBLE,
+    base DOUBLE,
+    sigla VARCHAR(10),
+    estado VARCHAR(20) DEFAULT 'ACTIVO'
 );
 
 CREATE TABLE IF NOT EXISTS productos (
@@ -312,21 +321,20 @@ CREATE TABLE IF NOT EXISTS sedes_tercero (
 );
 
 -- Tablas de contabilidad
-CREATE TABLE IF NOT EXISTS categoriascomprobantes (
-    codigo INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS categorias_comprobantes (
+    categoria_comprobante_id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100),
-    descripcion VARCHAR(255),
     estado VARCHAR(20) DEFAULT 'ACTIVO'
 );
 
 CREATE TABLE IF NOT EXISTS comprobantes (
     comprobante_id INT AUTO_INCREMENT PRIMARY KEY,
-    codigocategoria INT,
-    prefijo VARCHAR(10),
-    nombre VARCHAR(100),
-    consecutivo_actual INT DEFAULT 0,
+    nombre VARCHAR(100) NOT NULL,
+    categoria_comprobante_id INT NOT NULL,
+    inicio_consecutivo INT,
+    afecta_inventario VARCHAR(20) DEFAULT 'SI',
     estado VARCHAR(20) DEFAULT 'ACTIVO',
-    FOREIGN KEY (codigocategoria) REFERENCES categoriascomprobantes(codigo)
+    FOREIGN KEY (categoria_comprobante_id) REFERENCES categorias_comprobantes(categoria_comprobante_id)
 );
 
 CREATE TABLE IF NOT EXISTS cuentas_contables (
@@ -355,23 +363,31 @@ CREATE TABLE IF NOT EXISTS periodos_contables (
 );
 
 CREATE TABLE IF NOT EXISTS comprobantes_contables (
-    codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigocomprobante INT NOT NULL,
-    numerocomprobante VARCHAR(50) NOT NULL,
-    fecha DATE NOT NULL,
-    descripcion TEXT,
-    codigoperiodo INT NOT NULL,
-    estado VARCHAR(20) DEFAULT 'ACTIVO',
-    FOREIGN KEY (codigocomprobante) REFERENCES comprobantes(comprobante_id),
-    FOREIGN KEY (codigoperiodo) REFERENCES periodos_contables(id)
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tipo_movimiento VARCHAR(10) NOT NULL,
+    prefijo VARCHAR(20) NOT NULL,
+    descripcion VARCHAR(150),
+    siguiente_consecutivo INT NOT NULL DEFAULT 1,
+    cuenta_contable_id INT,
+    afecta_inventario TINYINT(1) NOT NULL DEFAULT 1,
+    activo TINYINT(1) NOT NULL DEFAULT 1,
+    es_legacy TINYINT(1) NOT NULL DEFAULT 0,
+    fecha_creacion DATETIME(6) NOT NULL,
+    bodega_id INT,
+    resolucion_dian VARCHAR(50),
+    fecha_inicio_resolucion DATE,
+    fecha_fin_resolucion DATE,
+    consecutivo_desde INT,
+    consecutivo_hasta INT,
+    clave_tecnica_dian VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS asientos_contables (
     codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigocomprobantecontable INT NOT NULL,
+    codigocomprobantecontable BIGINT NOT NULL,
     descripcion TEXT,
     estado VARCHAR(20) DEFAULT 'ACTIVO',
-    FOREIGN KEY (codigocomprobantecontable) REFERENCES comprobantes_contables(codigo)
+    FOREIGN KEY (codigocomprobantecontable) REFERENCES comprobantes_contables(id)
 );
 
 CREATE TABLE IF NOT EXISTS asientos_contables_lineas (
@@ -451,11 +467,11 @@ CREATE TABLE IF NOT EXISTS auditoria_mantenimiento (
 
 CREATE TABLE IF NOT EXISTS asientos_fallidos (
     codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigocomprobantecontable INT,
+    codigocomprobantecontable BIGINT,
     descripcion TEXT,
     error_mensaje TEXT,
     fecha_error TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (codigocomprobantecontable) REFERENCES comprobantes_contables(codigo)
+    FOREIGN KEY (codigocomprobantecontable) REFERENCES comprobantes_contables(id)
 );
 
 CREATE TABLE IF NOT EXISTS configuracion_contable_mapa (
@@ -574,7 +590,7 @@ CREATE TABLE IF NOT EXISTS facturas (
 CREATE TABLE IF NOT EXISTS tipo_totales_facturas (
     tipo_total_factura_id INT AUTO_INCREMENT PRIMARY KEY,
     tipo_total_id INT NOT NULL,
-    factura_id INT NOT NULL,
+    factura_id BIGINT NOT NULL,
     base DECIMAL(10,2) DEFAULT 0.00,
     valor DECIMAL(10,2) DEFAULT 0.00,
     FOREIGN KEY (tipo_total_id) REFERENCES tipo_totales(tipo_total_id),
@@ -1022,23 +1038,6 @@ CREATE TABLE IF NOT EXISTS parametrosglobales (
     parametro VARCHAR(100) NOT NULL UNIQUE,
     valor TEXT,
     descripcion VARCHAR(255),
-    estado VARCHAR(20) DEFAULT 'ACTIVO'
-);
-
--- Tablas de impuestos
-CREATE TABLE IF NOT EXISTS impuestos (
-    codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigo INT,
-    nombre VARCHAR(100),
-    porcentaje DECIMAL(10,2) DEFAULT 0.00,
-    estado VARCHAR(20) DEFAULT 'ACTIVO'
-);
-
-CREATE TABLE IF NOT EXISTS nuevosimpuestos (
-    codigo INT AUTO_INCREMENT PRIMARY KEY,
-    codigo INT,
-    nombre VARCHAR(100),
-    porcentaje DECIMAL(10,2) DEFAULT 0.00,
     estado VARCHAR(20) DEFAULT 'ACTIVO'
 );
 

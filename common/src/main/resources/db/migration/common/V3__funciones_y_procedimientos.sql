@@ -17,13 +17,13 @@ BEGIN
     -- Condición A: ¿tuvo movimientos ayer?
     SELECT COUNT(*) INTO v_transacciones
     FROM movimiento_cajero
-    WHERE DATE(fecha_movimiento) = CURDATE() - INTERVAL 1 DAY
+    WHERE DATE(fecha_apertura) = CURDATE() - INTERVAL 1 DAY
       AND cajero_id = p_cajero_id;
 
     -- Condición B: ¿tiene apertura registrada hoy?
     SELECT COUNT(*) INTO v_apertura_hoy
     FROM detalle_cajero
-    WHERE DATE(fecha_apertura) = CURDATE()
+    WHERE DATE(fecha) = CURDATE()
       AND cajero_id = p_cajero_id;
 
     -- Tiene Z pendiente SOLO SI:
