@@ -210,10 +210,18 @@ public class AsientoContableService {
         asiento.setTotalCredito(totalCredito);
         asiento.setEstado("CONFIRMADO");
 
+        // ── OPTIMIZACIÓN: cargar todas las cuentas en batch en lugar de N+1 queries ──
+        List<Integer> cuentaIds = validas.stream().map(l -> l.cuentaContableId).distinct().toList();
+        List<CuentaContable> cuentas = cuentaRepo.findAllById(cuentaIds);
+        java.util.Map<Integer, CuentaContable> cuentasMap = cuentas.stream()
+                .collect(java.util.stream.Collectors.toMap(CuentaContable::getId, c -> c));
+
         int orden = 1;
         for (LineaDTO ldto : validas) {
-            CuentaContable cc = cuentaRepo.findById(ldto.cuentaContableId)
-                    .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe: " + ldto.cuentaContableId));
+            CuentaContable cc = cuentasMap.get(ldto.cuentaContableId);
+            if (cc == null) {
+                throw new IllegalArgumentException("Cuenta contable no existe: " + ldto.cuentaContableId);
+            }
 
             // Validación 1: la cuenta debe ser de movimiento (hoja del árbol),
             // no una cuenta padre. Asientos contra cuentas padre rompen los

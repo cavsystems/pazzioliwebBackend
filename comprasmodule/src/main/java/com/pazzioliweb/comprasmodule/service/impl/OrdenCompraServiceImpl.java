@@ -389,7 +389,6 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     }
 
     @Override
-    @Transactional
     public OrdenCompraDTO realizarOrden(RealizarOrdenRequestDTO request) {
         // Validar periodo contable antes de cualquier escritura.
         if (request.getFechainicial() != null && !request.getFechainicial().isEmpty()) {
@@ -402,17 +401,23 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             }
         }
 
-        // 1. Procesar productos: actualizar o crear productos con variantes
+        // 1. Procesar productos: actualizar o crear productos con variantes (OUTSIDE transaction to avoid lock timeout)
         procesarProductosDesdeRequest(request.getOrden_compra().getProducts());
 
-        // 2. Crear la orden de compra
+        // 2. Execute the rest in a transaction
+        return realizarOrdenTransactional(request);
+    }
+
+    @Transactional
+    private OrdenCompraDTO realizarOrdenTransactional(RealizarOrdenRequestDTO request) {
+        // 1. Crear la orden de compra
         OrdenCompra ordenCompra = crearOrdenDesdeRequest(request);
 
-        // 3. Crear detalles de la orden
+        // 2. Crear detalles de la orden
         List<DetalleOrdenCompra> detalles = crearDetallesDesdeRequest(ordenCompra, request.getOrden_compra().getProducts());
         ordenCompra.setItems(detalles);
 
-        // 4. Guardar la orden
+        // 3. Guardar la orden
         OrdenCompra ordenGuardada = ordenCompraRepository.save(ordenCompra);
 
         // Actualizar último movimiento del proveedor
@@ -425,13 +430,13 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             System.out.println("[UltimoMovimiento] Error actualizando proveedor: " + ex.getMessage());
         }
 
-        // 5. Procesar métodos de pago (si vienen) — pueden ser parciales
+        // 4. Procesar métodos de pago (si vienen) — pueden ser parciales
         BigDecimal totalPagado = procesarMetodosPago(ordenGuardada, request);
 
-        // 6. Crear cuenta por pagar (solo por el saldo no pagado)
+        // 5. Crear cuenta por pagar (solo por el saldo no pagado)
         crearCuentaPorPagarDesdeRequest(ordenGuardada, request, totalPagado);
 
-        // 7. Generar asiento contable (toma en cuenta los métodos de pago para los créditos)
+        // 6. Generar asiento contable (toma en cuenta los métodos de pago para los créditos)
         generarAsientoCompra(ordenGuardada, request);
 
         return ordenCompraMapper.toDto(ordenGuardada);
@@ -642,10 +647,14 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     }
 
     private void procesarProductosDesdeRequest(List<RealizarOrdenRequestDTO.ProductoRequestPayloadDTO> products) {
+        if (products == null || products.isEmpty()) return;
+        
+        // Batch all products into a single list to make ONE HTTP call instead of N calls
+        List<ProductoActualizarCrearDTO> productosDTO = new ArrayList<>();
         for (RealizarOrdenRequestDTO.ProductoRequestPayloadDTO product : products) {
-            ProductoActualizarCrearDTO productoDTO = mapToProductoActualizarCrearDTO(product);
-            productoService.actualizarOCrearProducto(productoDTO);
+            productosDTO.add(mapToProductoActualizarCrearDTO(product));
         }
+        productoService.actualizarOCrearProductoBatch(productosDTO);
     }
 
     private ProductoActualizarCrearDTO mapToProductoActualizarCrearDTO(RealizarOrdenRequestDTO.ProductoRequestPayloadDTO product) {
@@ -868,13 +877,25 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         if (request.getMetodosPago() == null || request.getMetodosPago().isEmpty()) {
             return totalPagado;
         }
+
+        // Batch fetch all payment methods to avoid N+1 queries
+        java.util.List<Integer> metodoIds = request.getMetodosPago().stream()
+                .filter(mp -> mp.getMetodoPagoId() != null)
+                .map(RealizarOrdenRequestDTO.MetodoPagoCompraDTO::getMetodoPagoId)
+                .distinct()
+                .toList();
+        
+        java.util.Map<Integer, com.pazzioliweb.metodospagomodule.entity.MetodosPago> metodosMap = new java.util.HashMap<>();
+        if (!metodoIds.isEmpty()) {
+            metodosPagoRepository.findAllById(metodoIds).forEach(m -> metodosMap.put(m.getMetodo_pago_id(), m));
+        }
+
         java.util.List<OrdenCompraMetodoPago> persistidos = new java.util.ArrayList<>();
         for (RealizarOrdenRequestDTO.MetodoPagoCompraDTO mpDto : request.getMetodosPago()) {
             if (mpDto.getMetodoPagoId() == null || mpDto.getMonto() == null) continue;
             if (mpDto.getMonto().compareTo(BigDecimal.ZERO) <= 0) continue;
             try {
-                com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo =
-                        metodosPagoRepository.findById(mpDto.getMetodoPagoId()).orElse(null);
+                com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo = metodosMap.get(mpDto.getMetodoPagoId());
                 if (metodo == null) continue;
                 OrdenCompraMetodoPago mp = new OrdenCompraMetodoPago();
                 mp.setOrdenCompra(orden);

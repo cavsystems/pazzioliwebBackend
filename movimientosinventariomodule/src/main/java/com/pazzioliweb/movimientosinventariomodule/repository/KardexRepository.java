@@ -20,6 +20,20 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
 
         List<Kardex> findByBodega(Bodegas bodega);
 
+        @Query(value = "SELECT * FROM kardex k " +
+                       "WHERE k.kardex_id IN (" +
+                       "  SELECT k2.kardex_id FROM (" +
+                       "    SELECT kardex_id, producto_variante_id, " +
+                       "           ROW_NUMBER() OVER (PARTITION BY producto_variante_id ORDER BY fecha_creacion DESC) as rn " +
+                       "    FROM kardex " +
+                       "    WHERE producto_variante_id IN :varianteIds " +
+                       "    AND bodega_id = :bodegaCodigo " +
+                       "  ) k2 " +
+                       "  WHERE k2.rn = 1" +
+                       ")", nativeQuery = true)
+        List<Kardex> findUltimosPorVariantesYBodega(@Param("varianteIds") List<Long> varianteIds, 
+                                                    @Param("bodegaCodigo") Integer bodegaCodigo);
+
         @Query(value = "SELECT fecha_creacion, numerofactura, tipo_movimiento AS movimiento, tipoentrada AS tipo_movimiento, tipo, " +
                        "descripcion AS Producto, entrada, salida, costo_unitario, costo_promedio, total_costo, saldo, nombrebodega, cliente, fecha_emision " +
                        "FROM (" +

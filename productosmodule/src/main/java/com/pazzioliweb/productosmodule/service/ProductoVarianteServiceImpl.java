@@ -152,6 +152,17 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
         Page<ProductoVariante> variantes =
                 varianteRepository.findByProductoProductoId(productoId, pageable);
 
+        // ── OPTIMIZACIÓN: cargar existencias de todas las variantes en batch ──
+        List<Long> varianteIds = variantes.getContent().stream()
+                .map(ProductoVariante::getProductoVarianteId)
+                .toList();
+        List<ExistenciasBodegaDTO> todasExistencias = new ArrayList<>();
+        if (!varianteIds.isEmpty()) {
+            todasExistencias = serviexistencia.listadoExistenciasNombreBodegaVariantesBatch(varianteIds);
+        }
+        java.util.Map<Integer, List<ExistenciasBodegaDTO>> existenciasPorVariante = todasExistencias.stream()
+                .collect(java.util.stream.Collectors.groupingBy(ExistenciasBodegaDTO::getProductoVarianteId));
+
         return variantes.map(variant -> {
              String sortDirection="ASC";
              String sortField="precioId";
@@ -169,7 +180,8 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
             dto.setImagen(variant.getImagen());
             List<Integer> idpre = new ArrayList<>(List.of(variant.getProductoVarianteId().intValue()));
             List<PreciosProductoVarianteDTO> precios=repopreciova.preciosProductoVarianteMultiple(idpre,pageablepre).getContent();
-            List<ExistenciasBodegaDTO> e=serviexistencia.listadoExistenciasNombreBodegaVariante(variant.getProductoVarianteId());
+            // ── OPTIMIZACIÓN: usar existencias cargadas en batch en lugar de query individual ──
+            List<ExistenciasBodegaDTO> e = existenciasPorVariante.getOrDefault(variant.getProductoVarianteId().intValue(), new ArrayList<>());
             List<ProductoVarianteConDetallesDTO.existenciaDTO> existenciasDtos = new ArrayList<>();
              dto.setPrecios(precios);
             for(ExistenciasBodegaDTO exis: e) {
@@ -202,6 +214,18 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
     @Override
     public Page<ProductoVarianteConDetallesDTO> listarConDetallesPorCodigos(List<String> codigos, Pageable pageable) {
         Page<ProductoVariante> variantes = varianteRepository.findBySkuIn(codigos, pageable);
+
+        // ── OPTIMIZACIÓN: cargar existencias de todas las variantes en batch ──
+        List<Long> varianteIds = variantes.getContent().stream()
+                .map(ProductoVariante::getProductoVarianteId)
+                .toList();
+        List<ExistenciasBodegaDTO> todasExistencias = new ArrayList<>();
+        if (!varianteIds.isEmpty()) {
+            todasExistencias = serviexistencia.listadoExistenciasNombreBodegaVariantesBatch(varianteIds);
+        }
+        java.util.Map<Integer, List<ExistenciasBodegaDTO>> existenciasPorVariante = todasExistencias.stream()
+                .collect(java.util.stream.Collectors.groupingBy(ExistenciasBodegaDTO::getProductoVarianteId));
+
         return variantes.map(variant -> {
             ProductoVarianteConDetallesDTO dto = new ProductoVarianteConDetallesDTO();
             dto.setProductoVarianteId(variant.getProductoVarianteId());
@@ -210,7 +234,8 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
             dto.setCodigoBarras(variant.getCodigoBarras());
             dto.setActivo(variant.getActivo());
             dto.setImagen(variant.getImagen());
-            List<ExistenciasBodegaDTO> e=serviexistencia.listadoExistenciasNombreBodegaVariante(variant.getProductoVarianteId());
+            // ── OPTIMIZACIÓN: usar existencias cargadas en batch en lugar de query individual ──
+            List<ExistenciasBodegaDTO> e = existenciasPorVariante.getOrDefault(variant.getProductoVarianteId().intValue(), new ArrayList<>());
             List<ProductoVarianteConDetallesDTO.existenciaDTO> existenciasDtos = new ArrayList<>();
             for(ExistenciasBodegaDTO exis: e) {
                 ProductoVarianteConDetallesDTO.existenciaDTO ex= new ProductoVarianteConDetallesDTO.existenciaDTO();

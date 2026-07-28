@@ -155,7 +155,7 @@ return ordenCreada;
     }
     @Transactional
     public List<LegalizacionDTO> obtenerTodasLasLegalizaciones() {
-        List<Legalizacion> legalizaciones = legalizacionRepository.findAll();
+        List<com.pazzioliweb.comprasmodule.entity.Legalizacion> legalizaciones = legalizacionRepository.findAllWithRelations();
 
         return legalizaciones.stream().map(this::mapToDTO).collect(Collectors.toList());
     }
@@ -163,7 +163,7 @@ return ordenCreada;
     @Override
     @Transactional(readOnly = true)
     public List<LegalizacionDTO> obtenerLegalizacionesPorProveedor(Long proveedorId) {
-        return legalizacionRepository.findByProveedorId(proveedorId, Pageable.unpaged())
+        return legalizacionRepository.findByProveedorIdWithRelations(proveedorId, Pageable.unpaged())
                 .getContent()
                 .stream()
                 .map(this::mapToDTO)
@@ -173,10 +173,10 @@ return ordenCreada;
     private LegalizacionDTO mapToDTO(Legalizacion legalizacion) {
         LegalizacionDTO dto = new LegalizacionDTO();
 
-        Terceros tercero = terrepo.findByTerceroId(legalizacion.getProveedorId().intValue())
-                .orElse(null);
-        OrdenCompra ord = ordenCompraRepository.findById(legalizacion.getOrdenCompra().getId())
-                .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada: " + legalizacion.getOrdenCompra().getId()));
+        Terceros tercero = legalizacion.getOrdenCompra() != null 
+                ? legalizacion.getOrdenCompra().getProveedor() 
+                : null;
+        OrdenCompra ord = legalizacion.getOrdenCompra();
 
         DateTimeFormatter formato = DateTimeFormatter.ofPattern("MM/dd/yyyy");
         dto.setFechainicial(ord.getFechaCreacion() != null ? ord.getFechaCreacion().format(formato) : null);

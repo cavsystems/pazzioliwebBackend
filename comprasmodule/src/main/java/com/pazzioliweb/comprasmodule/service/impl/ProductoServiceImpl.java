@@ -26,6 +26,12 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
+    public void actualizarOCrearProductoBatch(List<ProductoActualizarCrearDTO> productosDTO) {
+        // Batch call to create/update multiple products in a single HTTP request
+        productoClient.actualizarOCrearProducto(productosDTO);
+    }
+
+    @Override
     public void actualizarInventario(String codigoProducto, String codigoVariante, Integer cantidad, Integer bodegaId) {
         // Llamar al servicio de productos para actualizar el inventario
         productoClient.actualizarInventario(codigoProducto, codigoVariante, cantidad, bodegaId);
