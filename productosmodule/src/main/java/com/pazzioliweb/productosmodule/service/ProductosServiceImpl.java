@@ -376,7 +376,7 @@ public class ProductosServiceImpl implements ProductosService{
         }
 
         // Handle variants
-        if (dto.getVariantes() != null && !dto.getVariantes().isEmpty()) {
+        if (Boolean.TRUE.equals(producto.getManejaVariantes()) && dto.getVariantes() != null && !dto.getVariantes().isEmpty()) {
             for (ProductoActualizarCrearDTO.VarianteDTO varianteDto : dto.getVariantes()) {
                 System.out.println("Producto actulizado VARIANTES" +varianteDto.getCodigoBarraVariante());
                 ProductoVariante variante = productoVarianteRepository.findByCodigoBarras(varianteDto.getCodigoBarraVariante())
@@ -506,14 +506,14 @@ public class ProductosServiceImpl implements ProductosService{
             }
 
         } else {
-            // Create default variant
+            // Create default variant for non-multivariant product
             ProductoVariante variante = productoVarianteRepository.findByProductoAndPredeterminada(producto, true)
                     .orElse(new ProductoVariante());
 
             variante.setProducto(producto);
             variante.setSku(dto.getCodigo());
-            variante.setCodigoBarras(dto.getCodigoBarras());
-            variante.setReferenciaVariantes(dto.getReferencia());
+            if (dto.getCodigoBarras() != null) variante.setCodigoBarras(dto.getCodigoBarras());
+            if (dto.getReferencia() != null) variante.setReferenciaVariantes(dto.getReferencia());
             variante.setActivo(true);
             variante.setPredeterminada(true);
 
