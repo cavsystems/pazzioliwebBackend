@@ -158,7 +158,7 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
                 .toList();
         List<ExistenciasBodegaDTO> todasExistencias = new ArrayList<>();
         if (!varianteIds.isEmpty()) {
-            todasExistencias = serviexistencia.listadoExistenciasNombreBodegaVariantesBatch(varianteIds);
+            todasExistencias = serviexistencia.listadoExistenciasNombreBodegaVariantes(varianteIds);
         }
         java.util.Map<Integer, List<ExistenciasBodegaDTO>> existenciasPorVariante = todasExistencias.stream()
                 .collect(java.util.stream.Collectors.groupingBy(ExistenciasBodegaDTO::getProductoVarianteId));
@@ -221,7 +221,7 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
                 .toList();
         List<ExistenciasBodegaDTO> todasExistencias = new ArrayList<>();
         if (!varianteIds.isEmpty()) {
-            todasExistencias = serviexistencia.listadoExistenciasNombreBodegaVariantesBatch(varianteIds);
+            todasExistencias = serviexistencia.listadoExistenciasNombreBodegaVariantes(varianteIds);
         }
         java.util.Map<Integer, List<ExistenciasBodegaDTO>> existenciasPorVariante = todasExistencias.stream()
                 .collect(java.util.stream.Collectors.groupingBy(ExistenciasBodegaDTO::getProductoVarianteId));

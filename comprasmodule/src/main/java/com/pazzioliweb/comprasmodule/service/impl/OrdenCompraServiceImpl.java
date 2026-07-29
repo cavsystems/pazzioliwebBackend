@@ -60,6 +60,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final ConfiguracionComprasService configCompras;
     private final ComprobanteContableRepository comprobanteRepository;
     private final com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository metodosPagoRepository;
+    private final com.pazzioliweb.comprasmodule.service.OrdenCompraWebSocketService ordenCompraWebSocketService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService movimientoInventarioAutoService;
 
@@ -76,7 +77,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                                   ConfiguracionContableService configContable,
                                   ConfiguracionComprasService configCompras,
                                   ComprobanteContableRepository comprobanteRepository,
-                                  com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository metodosPagoRepository) {
+                                  com.pazzioliweb.metodospagomodule.repositori.MetodosPagoRepository metodosPagoRepository,
+                                  com.pazzioliweb.comprasmodule.service.OrdenCompraWebSocketService ordenCompraWebSocketService) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.ordenCompraMapper = ordenCompraMapper;
         this.productoService = productoService;
@@ -90,6 +92,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         this.configCompras = configCompras;
         this.comprobanteRepository = comprobanteRepository;
         this.metodosPagoRepository = metodosPagoRepository;
+        this.ordenCompraWebSocketService = ordenCompraWebSocketService;
     }
 
     /** Username autenticado actual; "SYSTEM" si no hay sesión válida. */
@@ -1103,78 +1106,96 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     @Override
     @Transactional
     public OrdenCompraDTO realizarOrdenSimple(RealizarOrdenRequestDTO request) {
-        if (request.getFechainicial() != null && !request.getFechainicial().isEmpty()) {
-            try {
-                LocalDate fecha = LocalDate.parse(request.getFechainicial(),
-                        java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-                periodoContableService.validarPeriodoAbierto(fecha);
-            } catch (java.time.format.DateTimeParseException ignore) {}
-        }
+        String usuario = obtenerUsuarioAutenticado();
 
-        // 1. Crear/actualizar productos en catálogo
-        procesarProductosDesdeRequest(request.getOrden_compra().getProducts());
-
-        // 2. Construir la orden SIN comprobante ni contabilidad
-        OrdenCompra orden = new OrdenCompra();
-        orden.setEstado("PENDIENTE");
-        orden.setUsuarioCreacion(obtenerUsuarioAutenticado());
-        orden.setFechaCreacion(LocalDate.now());
-
-        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy");
-        LocalDate fechaEmision = (request.getFechainicial() != null && !request.getFechainicial().isBlank())
-                ? LocalDate.parse(request.getFechainicial(), fmt)
-                : LocalDate.now();
-        orden.setFechaEmision(fechaEmision);
-
-        LocalDate fechaEntrega = (request.getFechafinal() != null && !request.getFechafinal().isBlank())
-                ? LocalDate.parse(request.getFechafinal(), fmt)
-                : fechaEmision.plusDays(request.getPlazo() != null ? request.getPlazo() : 0);
-        orden.setFechaEntregaEsperada(fechaEntrega);
-
-        orden.setGravada(request.getOrden_compra().getGravada());
-        orden.setIva(request.getOrden_compra().getIva());
-        orden.setDescuentos(request.getOrden_compra().getDescuentos());
-        orden.setTotalOrdenCompra(request.getOrden_compra().getTotalOrdenCompra());
-        orden.setRetefuente(request.getOrden_compra().getRetefuente() != null ? request.getOrden_compra().getRetefuente() : BigDecimal.ZERO);
-        orden.setReteiva(request.getOrden_compra().getReteiva() != null ? request.getOrden_compra().getReteiva() : BigDecimal.ZERO);
-        orden.setReteica(request.getOrden_compra().getReteica() != null ? request.getOrden_compra().getReteica() : BigDecimal.ZERO);
-        orden.setCajeroId(request.getCajeroId());
-        orden.setPlazo(request.getPlazo());
-
-        orden.setProveedor(tercerosRepository.findById(request.getProvedor().getTerceroId())
-                .orElseThrow(() -> new OrdenCompraException("Proveedor no encontrado")));
-        orden.setBodega(bodegasRepository.findByCodigo(request.getBodegaId())
-                .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
-
-        // 3. Guardar para obtener el ID y generar número OC.
-        // numero_orden es NOT NULL: se pone un placeholder antes del primer INSERT,
-        // luego se asigna el número secuencial usando el ID generado.
-        // numero_oc queda permanente; numero_orden se reemplazará con el comprobante al finalizar.
-        orden.setNumeroOrden("OC-TEMP");
-        OrdenCompra ordenGuardada = ordenCompraRepository.save(orden);
-        String numeroOc = "OC-" + String.format("%06d", ordenGuardada.getId());
-        ordenGuardada.setNumeroOrden(numeroOc);
-        ordenGuardada.setNumeroOc(numeroOc);
-
-        // 4. Crear detalles
-        List<DetalleOrdenCompra> detalles = crearDetallesDesdeRequest(ordenGuardada, request.getOrden_compra().getProducts());
-        ordenGuardada.setItems(detalles);
-        ordenGuardada = ordenCompraRepository.save(ordenGuardada);
-
-        // Actualizar último movimiento del proveedor
         try {
-            if (ordenGuardada.getProveedor() != null) {
-                tercerosRepository.actualizarUltimoMovimiento(
-                        ordenGuardada.getProveedor().getTerceroId(), java.time.LocalDateTime.now());
+            // Paso 1: Validar periodo contable
+            ordenCompraWebSocketService.enviarProgreso(usuario, 1, "Validando periodo contable...", 20, null);
+            
+            if (request.getFechainicial() != null && !request.getFechainicial().isEmpty()) {
+                try {
+                    LocalDate fecha = LocalDate.parse(request.getFechainicial(),
+                            java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                    periodoContableService.validarPeriodoAbierto(fecha);
+                } catch (java.time.format.DateTimeParseException ignore) {}
             }
+
+            // Paso 2: Crear/actualizar productos en catálogo
+            ordenCompraWebSocketService.enviarProgreso(usuario, 2, "Procesando productos...", 40, null);
+            procesarProductosDesdeRequest(request.getOrden_compra().getProducts());
+
+            // Paso 3: Construir la orden SIN comprobante ni contabilidad
+            ordenCompraWebSocketService.enviarProgreso(usuario, 3, "Construyendo orden de compra...", 60, null);
+            OrdenCompra orden = new OrdenCompra();
+            orden.setEstado("PENDIENTE");
+            orden.setUsuarioCreacion(obtenerUsuarioAutenticado());
+            orden.setFechaCreacion(LocalDate.now());
+
+            java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy");
+            LocalDate fechaEmision = (request.getFechainicial() != null && !request.getFechainicial().isBlank())
+                    ? LocalDate.parse(request.getFechainicial(), fmt)
+                    : LocalDate.now();
+            orden.setFechaEmision(fechaEmision);
+
+            LocalDate fechaEntrega = (request.getFechafinal() != null && !request.getFechafinal().isBlank())
+                    ? LocalDate.parse(request.getFechafinal(), fmt)
+                    : fechaEmision.plusDays(request.getPlazo() != null ? request.getPlazo() : 0);
+            orden.setFechaEntregaEsperada(fechaEntrega);
+
+            orden.setGravada(request.getOrden_compra().getGravada());
+            orden.setIva(request.getOrden_compra().getIva());
+            orden.setDescuentos(request.getOrden_compra().getDescuentos());
+            orden.setTotalOrdenCompra(request.getOrden_compra().getTotalOrdenCompra());
+            orden.setRetefuente(request.getOrden_compra().getRetefuente() != null ? request.getOrden_compra().getRetefuente() : BigDecimal.ZERO);
+            orden.setReteiva(request.getOrden_compra().getReteiva() != null ? request.getOrden_compra().getReteiva() : BigDecimal.ZERO);
+            orden.setReteica(request.getOrden_compra().getReteica() != null ? request.getOrden_compra().getReteica() : BigDecimal.ZERO);
+            orden.setCajeroId(request.getCajeroId());
+            orden.setPlazo(request.getPlazo());
+
+            orden.setProveedor(tercerosRepository.findById(request.getProvedor().getTerceroId())
+                    .orElseThrow(() -> new OrdenCompraException("Proveedor no encontrado")));
+            orden.setBodega(bodegasRepository.findByCodigo(request.getBodegaId())
+                    .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
+
+            // Paso 4: Guardar para obtener el ID y generar número OC.
+            ordenCompraWebSocketService.enviarProgreso(usuario, 4, "Guardando orden de compra...", 80, null);
+            // numero_orden es NOT NULL: se pone un placeholder antes del primer INSERT,
+            // luego se asigna el número secuencial usando el ID generado.
+            // numero_oc queda permanente; numero_orden se reemplazará con el comprobante al finalizar.
+            orden.setNumeroOrden("OC-TEMP");
+            OrdenCompra ordenGuardada = ordenCompraRepository.save(orden);
+            String numeroOc = "OC-" + String.format("%06d", ordenGuardada.getId());
+            ordenGuardada.setNumeroOrden(numeroOc);
+            ordenGuardada.setNumeroOc(numeroOc);
+
+            // Paso 5: Crear detalles
+            ordenCompraWebSocketService.enviarProgreso(usuario, 5, "Creando detalles de la orden...", 90, ordenGuardada.getId());
+            List<DetalleOrdenCompra> detalles = crearDetallesDesdeRequest(ordenGuardada, request.getOrden_compra().getProducts());
+            ordenGuardada.setItems(detalles);
+            ordenGuardada = ordenCompraRepository.save(ordenGuardada);
+
+            // Actualizar último movimiento del proveedor
+            try {
+                if (ordenGuardada.getProveedor() != null) {
+                    tercerosRepository.actualizarUltimoMovimiento(
+                            ordenGuardada.getProveedor().getTerceroId(), java.time.LocalDateTime.now());
+                }
+            } catch (Exception ex) {
+                System.out.println("[UltimoMovimiento] Error actualizando proveedor: " + ex.getMessage());
+            }
+
+            // Paso 6: Guardar métodos de pago — necesarios para determinar CC vs CR al hacer el ingreso
+            ordenCompraWebSocketService.enviarProgreso(usuario, 6, "Procesando métodos de pago...", 95, ordenGuardada.getId());
+            procesarMetodosPago(ordenGuardada, request);
+
+            // Completado
+            ordenCompraWebSocketService.enviarCompletado(usuario, ordenGuardada.getId());
+
+            return ordenCompraMapper.toDto(ordenGuardada);
         } catch (Exception ex) {
-            System.out.println("[UltimoMovimiento] Error actualizando proveedor: " + ex.getMessage());
+            ordenCompraWebSocketService.enviarError(usuario, "Error en orden de compra: " + ex.getMessage(), null);
+            throw ex;
         }
-
-        // 5. Guardar métodos de pago — necesarios para determinar CC vs CR al hacer el ingreso
-        procesarMetodosPago(ordenGuardada, request);
-
-        return ordenCompraMapper.toDto(ordenGuardada);
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.pazzioliweb.comprasmodule.mapper.OrdenCompraMapper;
 import com.pazzioliweb.comprasmodule.repository.LegalizacionRepository;
 import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.*;
+import com.pazzioliweb.comprasmodule.service.LegalizacionWebSocketService;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,7 @@ public class LegalizacionServiceImpl implements LegalizacionService {
     private final OrdenCompraService ordenCompraService;
     private final IngresoOrdenCompraService ingresoOrdenCompraService;
     private final LegalizacionRepository legalizacionRepository;
+    private final LegalizacionWebSocketService legalizacionWebSocketService;
     @Autowired
     private OrdenCompraMapper detallemaper;
 
@@ -43,21 +45,27 @@ public class LegalizacionServiceImpl implements LegalizacionService {
   private TercerosRepository terrepo;
     @Autowired
     private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
-    public LegalizacionServiceImpl(ProductoService productoService, ProductoClient productoClient, CuentaPorPagarService cuentaPorPagarService, OrdenCompraService ordenCompraService, IngresoOrdenCompraService ingresoOrdenCompraService, LegalizacionRepository legalizacionRepository) {
+    public LegalizacionServiceImpl(ProductoService productoService, ProductoClient productoClient, CuentaPorPagarService cuentaPorPagarService, OrdenCompraService ordenCompraService, IngresoOrdenCompraService ingresoOrdenCompraService, LegalizacionRepository legalizacionRepository, LegalizacionWebSocketService legalizacionWebSocketService) {
         this.productoService = productoService;
         this.productoClient = productoClient;
         this.cuentaPorPagarService = cuentaPorPagarService;
         this.ordenCompraService = ordenCompraService;
         this.ingresoOrdenCompraService = ingresoOrdenCompraService;
         this.legalizacionRepository = legalizacionRepository;
+        this.legalizacionWebSocketService = legalizacionWebSocketService;
     }
 
     @Override
     @Transactional
     public   OrdenCompraDTO  legalizarCompra(LegalizacionRequestDTO request) {
+        String usuario = obtenerUsuarioAutenticado();
 
+        try {
             RealizarOrdenRequestDTO realizarRequest = request.getOrdenCompraData();
 
+            // Paso 1: Validar periodo contable
+            legalizacionWebSocketService.enviarProgreso(usuario, 1, "Validando periodo contable...", 16, null);
+            
             // Validar periodo contable abierto (la fecha de la factura define el periodo de afectación),
             // y ANCLAR la fecha de emisión de la orden a la fecha de la factura, para que el asiento y
             // el kardex (que se fechan con fechaEmision) caigan en el mismo periodo validado.
@@ -69,10 +77,12 @@ public class LegalizacionServiceImpl implements LegalizacionService {
                 }
             } catch (java.time.format.DateTimeParseException ignored) { /* dejar validar por realizarOrden */ }
 
-            // 1. Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
+            // Paso 2: Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
+            legalizacionWebSocketService.enviarProgreso(usuario, 2, "Creando orden de compra...", 33, null);
             OrdenCompraDTO ordenCreada = ordenCompraService.realizarOrden(realizarRequest);
 
-            // 2. Marcar todos los items como 100% recibidos (es una compra directa, llega todo)
+            // Paso 3: Marcar todos los items como 100% recibidos (es una compra directa, llega todo)
+            legalizacionWebSocketService.enviarProgreso(usuario, 3, "Procesando items recibidos...", 50, ordenCreada.getId());
             List<DetalleOrdenCompraDTO> itemsRecibidos = ordenCreada.getItems().stream()
                     .peek(e -> {
                         e.setCantidadRecibida(e.getCantidad());
@@ -80,13 +90,22 @@ public class LegalizacionServiceImpl implements LegalizacionService {
                     })
                     .collect(Collectors.toList());
 
-            // 3. Ingresar la orden con las cantidades completas
+            // Paso 4: Ingresar la orden con las cantidades completas
+            legalizacionWebSocketService.enviarProgreso(usuario, 4, "Ingresando orden de compra al inventario...", 66, ordenCreada.getId());
             ingresoOrdenCompraService.ingresarOrdenCompra(ordenCreada.getId(), itemsRecibidos, request.getNumeroFactura());
 
-            // 3. Crear registro de legalización
+            // Paso 5: Crear registro de legalización
+            legalizacionWebSocketService.enviarProgreso(usuario, 5, "Creando registro de legalización...", 83, ordenCreada.getId());
             crearLegalizacion(request, ordenCreada);
 
-return ordenCreada;
+            // Paso 6: Completado
+            legalizacionWebSocketService.enviarCompletado(usuario, ordenCreada.getId());
+
+            return ordenCreada;
+        } catch (Exception ex) {
+            legalizacionWebSocketService.enviarError(usuario, "Error en legalización: " + ex.getMessage(), null);
+            throw ex;
+        }
     }
 
     private void crearLegalizacion(LegalizacionRequestDTO request, OrdenCompraDTO ordenCreada) {
