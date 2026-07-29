@@ -111,9 +111,9 @@ public class NotasElectronicasController {
                 out.add(row);
             }
         }
-        // ── Notas Débito, Tiquetes POS y Documentos Soporte desde documentos_electronicos ──
+        // ── Notas Débito, Tiquetes POS, Documentos Soporte y sus notas de ajuste ──
         String tipoLower = tipo == null ? null : tipo.toUpperCase();
-        if (tipoLower == null || java.util.Arrays.asList("ND", "TPOS", "DS").contains(tipoLower)) {
+        if (tipoLower == null || java.util.Arrays.asList("ND", "TPOS", "DS", "NADS").contains(tipoLower)) {
             List<DocumentoElectronico> docs = docElectRepository.findFiltrado(
                     tipoLower != null && !"NC".equals(tipoLower) ? tipoLower : null,
                     estadoDian, desde, hasta);
@@ -135,7 +135,8 @@ public class NotasElectronicasController {
                     row.put("documentoReferenciaTipo", d.getDocumentoReferenciaTipo());
                     row.put("documentoReferenciaId", d.getDocumentoReferenciaId());
                 }
-                row.put("documentoElectronicoId", d.getId());  // para reenvío en el futuro
+                row.put("documentoElectronicoId", d.getId());  // para reenvío / nota de ajuste
+                row.put("estado", d.getEstado());              // ACTIVO / ANULADO
                 out.add(row);
             }
         }

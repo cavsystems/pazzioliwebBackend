@@ -15,10 +15,15 @@ import java.util.List;
 public class DianDocumentoRequestDTO {
 
     // ── Tipo de documento ──
-    private String tipoDocumento;  // "01" = Factura, "91" = Nota Crédito, "92" = Nota Débito
+    /** "01" Factura · "91" Nota Crédito · "92" Nota Débito · "20" Tiquete POS ·
+     *  "05" Documento Soporte · "95" Nota de Ajuste al Documento Soporte. */
+    private String tipoDocumento;
     private String prefijo;
     private Integer consecutivo;
     private String resolucionDian;
+
+    /** Tipo de operación (ENC_21, Tabla 38). En DS: "10" Residente, "11" No Residente. */
+    private String tipoOperacion;
 
     // ── Resolución DIAN del comprobante (debe coincidir con la asignada) ──
     /** Clave técnica DIAN específica del comprobante (no la global de DianConfig). */
@@ -53,6 +58,26 @@ public class DianDocumentoRequestDTO {
 
     // ── Métodos de pago ──
     private List<MetodoPagoDTO> metodosPago;
+
+    // ══════════════════════════════════════════════════════════
+    //  Documento Soporte (tipo "05") y Nota de Ajuste ("95")
+    //  Anexo simplificado DS de Facturatech / Resolución 000167 de 2021.
+    // ══════════════════════════════════════════════════════════
+
+    /** IBS_1: fecha de la compra al no obligado a facturar. Si es null se usa fechaEmision. */
+    private LocalDate fechaCompra;
+
+    /** IBS_2 (Tabla 41): 1 = Por operación, 2 = Acumulado semanal. Default 1. */
+    private Integer formaGeneracionTransmision;
+
+    /** Retención en la fuente (renta) aplicada — se reporta como TIM/IMP con código 06. */
+    private BigDecimal retencionFuente;
+
+    /** Retención de IVA aplicada — se reporta como TIM/IMP con código 05. */
+    private BigDecimal retencionIva;
+
+    /** CDN_1: sección del Documento Soporte original que se corrige (nota de ajuste). Default 1. */
+    private Integer seccionCorregida;
 
     // ── Referencia a documento original (solo para NC/ND, null para FC/TPOS) ──
     private DocumentoReferenciaDTO documentoReferencia;
@@ -111,6 +136,10 @@ public class DianDocumentoRequestDTO {
         private String codigoPostal;
         private String correo;
         private String telefono;
+        /** Código país alfa-2 (Tabla 1). "CO" por defecto. Usado en PRO_15 del Documento Soporte. */
+        private String codigoPais;
+        /** Nombre del país (Tabla 1). "COLOMBIA" por defecto. Usado en PRO_21 del Documento Soporte. */
+        private String nombrePais;
         /** Responsabilidad fiscal del receptor (códigos DIAN). "R-99-PN" si no aplica. */
         private String responsabilidadFiscal;
         private String tipoContribuyente;

@@ -35,4 +35,12 @@ public interface ProductoVarianteService {
 
      Page<ProductoInventarioDTO> listarInventarioBasicoexcel( int activo,String estadoproduct,String productodes,Pageable pageable);
 
+    /**
+     * Resuelve en bloque los términos de una plantilla de importación de inventario.
+     * Devuelve, por cada término solicitado, TODAS las variantes que coinciden de forma
+     * exacta (normalmente una). El cliente decide qué hacer si hay más de una.
+     */
+    java.util.Map<String, java.util.List<com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO>>
+            resolverParaInventario(List<String> terminos, int estadova);
+
 }

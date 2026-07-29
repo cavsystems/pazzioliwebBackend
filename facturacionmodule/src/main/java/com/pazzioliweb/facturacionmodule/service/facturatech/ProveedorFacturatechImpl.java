@@ -61,6 +61,7 @@ public class ProveedorFacturatechImpl implements ProveedorFacturacionElectronica
             case "92" -> "Nota Débito";
             case "20" -> "Tiquete POS";
             case "05" -> "Documento Soporte";
+            case "95" -> "Nota de Ajuste al Documento Soporte";
             default -> "Factura Electrónica";
         };
         String prefijo = request.getPrefijo() != null ? request.getPrefijo() : "";
@@ -75,14 +76,14 @@ public class ProveedorFacturatechImpl implements ProveedorFacturacionElectronica
         response.setNumero(numeroDoc);
         response.setFechaValidacion(LocalDateTime.now());
 
-        // Tiquete POS y Documento Soporte usan Web Services separados de Facturatech
-        // (ws-pos / ws-dse) cuyo insumo no está en el material entregado.
-        if ("20".equals(tipoDoc) || "05".equals(tipoDoc)) {
+        // El Tiquete POS usa un Web Service aparte de Facturatech (ws-pos) cuyo insumo
+        // no está en el material entregado. El Documento Soporte (05) y su nota de
+        // ajuste (95) sí van por este mismo WS con el insumo DOCUMENTO_SOPORTE.
+        if ("20".equals(tipoDoc)) {
             response.setExitoso(false);
             response.setEstadoDian(ESTADO_RECHAZADA);
-            response.setMensajeDian(nombreDoc + " requiere el Web Service " +
-                    ("20".equals(tipoDoc) ? "POS (ws-pos.facturatech.co)" : "DSE (ws-dse.facturatech.co)") +
-                    " de Facturatech, aún no habilitado en el sistema. Contacte a soporte.");
+            response.setMensajeDian(nombreDoc + " requiere el Web Service POS de Facturatech, " +
+                    "aún no habilitado en el sistema. Contacte a soporte.");
             log.warn("[Facturatech] {}", response.getMensajeDian());
             return response;
         }

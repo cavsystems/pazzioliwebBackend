@@ -147,6 +147,54 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
         return varianteRepository.listarInventarioPorDescripciones(descripciones, estadova);
     }
 
+    /**
+     * Resolución masiva para importaciones de inventario por plantilla.
+     *
+     * UNA consulta para todos los términos; el indexado por clave se hace en memoria.
+     * Cada variante se indexa bajo todas sus claves (código de barras de variante y de
+     * producto, código contable, SKU, referencia y descripción), así que un término como
+     * el código contable de un producto con 3 variantes devuelve las 3 y el cliente puede
+     * avisar que la fila es ambigua en lugar de tomar una al azar.
+     */
+    @Override
+    public java.util.Map<String, List<com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO>>
+            resolverParaInventario(List<String> terminos, int estadova) {
+
+        java.util.Map<String, List<com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO>> salida =
+                new java.util.LinkedHashMap<>();
+        if (terminos == null || terminos.isEmpty()) return salida;
+
+        // Normalizar (trim + minúsculas) y deduplicar conservando el orden pedido
+        java.util.LinkedHashSet<String> claves = new java.util.LinkedHashSet<>();
+        for (String t : terminos) {
+            if (t == null) continue;
+            String k = t.trim().toLowerCase();
+            if (!k.isEmpty()) claves.add(k);
+        }
+        if (claves.isEmpty()) return salida;
+
+        List<com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO> filas =
+                varianteRepository.resolverParaInventario(claves, estadova);
+
+        for (com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO fila : filas) {
+            for (String candidata : new String[]{
+                    fila.getCodigobarras(), fila.getCodigobarrasProducto(), fila.getCodigoContable(),
+                    fila.getSku(), fila.getReferenciaVariantes(), fila.getReferencia(),
+                    fila.getDescripcion(), fila.getDescripcionProducto()}) {
+                if (candidata == null) continue;
+                String k = candidata.trim().toLowerCase();
+                if (k.isEmpty() || !claves.contains(k)) continue;
+                List<com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO> lista =
+                        salida.computeIfAbsent(k, x -> new java.util.ArrayList<>());
+                // La misma variante puede coincidir por varias claves del mismo término
+                boolean yaEsta = lista.stream().anyMatch(v ->
+                        java.util.Objects.equals(v.getProductoVarianteId(), fila.getProductoVarianteId()));
+                if (!yaEsta) lista.add(fila);
+            }
+        }
+        return salida;
+    }
+
     @Override
     public Page<ProductoVarianteConDetallesDTO> listarConDetallesPorProducto(Integer productoId, Pageable pageable){
         Page<ProductoVariante> variantes =

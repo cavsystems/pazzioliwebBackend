@@ -32,7 +32,9 @@ public enum TipoMovimientoComprobante {
     /** Tiquete POS Electrónico (DIAN) — documento equivalente para ventas sin identificar cliente */
     TPOS("Tiquete POS Electrónico"),
     /** Documento Soporte (DIAN) — compras a NO obligados a facturar */
-    DS("Documento Soporte");
+    DS("Documento Soporte"),
+    /** Nota de Ajuste al Documento Soporte (DIAN, tipo 95) — anula/corrige un DS */
+    NADS("Nota de Ajuste Documento Soporte");
 
     private final String descripcion;
 
@@ -54,7 +56,7 @@ public enum TipoMovimientoComprobante {
      * Tipos que NO requieren cajero (se vinculan a bodega o son auto-generados):
      *   CC, CR (compras) — la numeración de compra NO está atada al cajero, va por bodega/empresa
      *   EI, SI, TI (movimientos manuales de inventario)
-     *   NC, ND, TPOS, DS (documentos DIAN generados automáticamente)
+     *   NC, ND, TPOS, DS, NADS (documentos DIAN generados automáticamente)
      */
     public boolean requiereCajero() {
         switch (this) {

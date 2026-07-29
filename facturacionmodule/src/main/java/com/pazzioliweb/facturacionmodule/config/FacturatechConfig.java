@@ -51,6 +51,18 @@ public class FacturatechConfig {
     /** Descargar la representación gráfica (PDF) de Facturatech al autorizar. */
     private boolean descargarPdf = true;
 
+    /** Parámetros propios del Documento Soporte (tipo 05) y su nota de ajuste (95). */
+    private DocumentoSoporte documentoSoporte = new DocumentoSoporte();
+
+    @Data
+    public static class DocumentoSoporte {
+        /** ENC_21 (Tabla 38): "10" Residente, "11" No Residente. */
+        private String tipoOperacion = "10";
+
+        /** IBS_2 (Tabla 41): 1 = Por operación (default), 2 = Acumulado semanal. */
+        private int formaGeneracion = 1;
+    }
+
     @Data
     public static class Url {
         private String produccion = "https://ws.facturatech.co/v2/pro/index.php";
