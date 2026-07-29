@@ -1110,7 +1110,7 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
 
         try {
             // Paso 1: Validar periodo contable
-            ordenCompraWebSocketService.enviarProgreso(usuario, 1, "Validando periodo contable...", 20, null);
+            ordenCompraWebSocketService.enviarProgreso(usuario, 1, "Validando periodo contable...", 5, null);
             
             if (request.getFechainicial() != null && !request.getFechainicial().isEmpty()) {
                 try {
@@ -1120,12 +1120,27 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 } catch (java.time.format.DateTimeParseException ignore) {}
             }
 
-            // Paso 2: Crear/actualizar productos en catálogo
-            ordenCompraWebSocketService.enviarProgreso(usuario, 2, "Procesando productos...", 40, null);
+            // Paso 2: Iniciando procesamiento
+            ordenCompraWebSocketService.enviarProgreso(usuario, 2, "Iniciando procesamiento de orden...", 10, null);
+            
+            // Paso 3: Validando proveedor
+            ordenCompraWebSocketService.enviarProgreso(usuario, 3, "Validando proveedor...", 15, null);
+            
+            // Paso 4: Validando bodega
+            ordenCompraWebSocketService.enviarProgreso(usuario, 4, "Validando bodega...", 20, null);
+            
+            // Paso 5: Crear/actualizar productos en catálogo
+            ordenCompraWebSocketService.enviarProgreso(usuario, 5, "Procesando productos del catálogo...", 30, null);
             procesarProductosDesdeRequest(request.getOrden_compra().getProducts());
 
-            // Paso 3: Construir la orden SIN comprobante ni contabilidad
-            ordenCompraWebSocketService.enviarProgreso(usuario, 3, "Construyendo orden de compra...", 60, null);
+            // Paso 6: Iniciando construcción de orden
+            ordenCompraWebSocketService.enviarProgreso(usuario, 6, "Iniciando construcción de orden...", 35, null);
+            
+            // Paso 7: Construyendo estructura básica
+            ordenCompraWebSocketService.enviarProgreso(usuario, 7, "Construyendo estructura básica de orden...", 40, null);
+            
+            // Paso 8: Configurando la orden SIN comprobante ni contabilidad
+            ordenCompraWebSocketService.enviarProgreso(usuario, 8, "Configurando orden de compra...", 45, null);
             OrdenCompra orden = new OrdenCompra();
             orden.setEstado("PENDIENTE");
             orden.setUsuarioCreacion(obtenerUsuarioAutenticado());
@@ -1157,23 +1172,37 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             orden.setBodega(bodegasRepository.findByCodigo(request.getBodegaId())
                     .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
 
-            // Paso 4: Guardar para obtener el ID y generar número OC.
-            ordenCompraWebSocketService.enviarProgreso(usuario, 4, "Guardando orden de compra...", 80, null);
+            // Paso 9: Asignando número temporal
+            ordenCompraWebSocketService.enviarProgreso(usuario, 9, "Asignando número temporal...", 50, null);
+            
+            // Paso 10: Guardar para obtener el ID y generar número OC.
+            ordenCompraWebSocketService.enviarProgreso(usuario, 10, "Guardando orden en base de datos...", 55, null);
             // numero_orden es NOT NULL: se pone un placeholder antes del primer INSERT,
             // luego se asigna el número secuencial usando el ID generado.
             // numero_oc queda permanente; numero_orden se reemplazará con el comprobante al finalizar.
             orden.setNumeroOrden("OC-TEMP");
             OrdenCompra ordenGuardada = ordenCompraRepository.save(orden);
+            
+            // Paso 11: Generando número de orden
+            ordenCompraWebSocketService.enviarProgreso(usuario, 11, "Generando número de orden...", 60, ordenGuardada.getId());
             String numeroOc = "OC-" + String.format("%06d", ordenGuardada.getId());
             ordenGuardada.setNumeroOrden(numeroOc);
             ordenGuardada.setNumeroOc(numeroOc);
 
-            // Paso 5: Crear detalles
-            ordenCompraWebSocketService.enviarProgreso(usuario, 5, "Creando detalles de la orden...", 90, ordenGuardada.getId());
+            // Paso 12: Preparando detalles
+            ordenCompraWebSocketService.enviarProgreso(usuario, 12, "Preparando detalles de la orden...", 65, ordenGuardada.getId());
+            
+            // Paso 13: Crear detalles
+            ordenCompraWebSocketService.enviarProgreso(usuario, 13, "Creando detalles de la orden...", 70, ordenGuardada.getId());
             List<DetalleOrdenCompra> detalles = crearDetallesDesdeRequest(ordenGuardada, request.getOrden_compra().getProducts());
             ordenGuardada.setItems(detalles);
+            
+            // Paso 14: Guardando detalles
+            ordenCompraWebSocketService.enviarProgreso(usuario, 14, "Guardando detalles en base de datos...", 75, ordenGuardada.getId());
             ordenGuardada = ordenCompraRepository.save(ordenGuardada);
 
+            // Paso 15: Actualizando movimiento del proveedor
+            ordenCompraWebSocketService.enviarProgreso(usuario, 15, "Actualizando movimiento del proveedor...", 80, ordenGuardada.getId());
             // Actualizar último movimiento del proveedor
             try {
                 if (ordenGuardada.getProveedor() != null) {
@@ -1184,10 +1213,19 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 System.out.println("[UltimoMovimiento] Error actualizando proveedor: " + ex.getMessage());
             }
 
-            // Paso 6: Guardar métodos de pago — necesarios para determinar CC vs CR al hacer el ingreso
-            ordenCompraWebSocketService.enviarProgreso(usuario, 6, "Procesando métodos de pago...", 95, ordenGuardada.getId());
+            // Paso 16: Preparando métodos de pago
+            ordenCompraWebSocketService.enviarProgreso(usuario, 16, "Preparando métodos de pago...", 85, ordenGuardada.getId());
+            
+            // Paso 17: Guardar métodos de pago — necesarios para determinar CC vs CR al hacer el ingreso
+            ordenCompraWebSocketService.enviarProgreso(usuario, 17, "Procesando métodos de pago...", 90, ordenGuardada.getId());
             procesarMetodosPago(ordenGuardada, request);
 
+            // Paso 18: Finalizando proceso
+            ordenCompraWebSocketService.enviarProgreso(usuario, 18, "Finalizando proceso de orden...", 95, ordenGuardada.getId());
+            
+            // Paso 19: Preparando respuesta
+            ordenCompraWebSocketService.enviarProgreso(usuario, 19, "Preparando respuesta...", 98, ordenGuardada.getId());
+            
             // Completado
             ordenCompraWebSocketService.enviarCompletado(usuario, ordenGuardada.getId());
 

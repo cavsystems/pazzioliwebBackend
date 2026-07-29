@@ -64,7 +64,7 @@ public class LegalizacionServiceImpl implements LegalizacionService {
             RealizarOrdenRequestDTO realizarRequest = request.getOrdenCompraData();
 
             // Paso 1: Validar periodo contable
-            legalizacionWebSocketService.enviarProgreso(usuario, 1, "Validando periodo contable...", 16, null);
+            legalizacionWebSocketService.enviarProgreso(usuario, 1, "Validando periodo contable...", 10, null);
             
             // Validar periodo contable abierto (la fecha de la factura define el periodo de afectación),
             // y ANCLAR la fecha de emisión de la orden a la fecha de la factura, para que el asiento y
@@ -77,12 +77,27 @@ public class LegalizacionServiceImpl implements LegalizacionService {
                 }
             } catch (java.time.format.DateTimeParseException ignored) { /* dejar validar por realizarOrden */ }
 
-            // Paso 2: Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
-            legalizacionWebSocketService.enviarProgreso(usuario, 2, "Creando orden de compra...", 33, null);
+            // Paso 2: Iniciando creación de orden
+            legalizacionWebSocketService.enviarProgreso(usuario, 2, "Iniciando creación de orden de compra...", 20, null);
+            
+            // Paso 3: Procesando productos
+            legalizacionWebSocketService.enviarProgreso(usuario, 3, "Procesando productos de la orden...", 30, null);
+            
+            // Paso 4: Creando estructura de orden
+            legalizacionWebSocketService.enviarProgreso(usuario, 4, "Creando estructura de orden de compra...", 40, null);
+            
+            // Paso 5: Generando comprobante contable
+            legalizacionWebSocketService.enviarProgreso(usuario, 5, "Generando comprobante contable...", 50, null);
+            
+            // Paso 6: Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
+            legalizacionWebSocketService.enviarProgreso(usuario, 6, "Ejecutando orden de compra...", 60, null);
             OrdenCompraDTO ordenCreada = ordenCompraService.realizarOrden(realizarRequest);
 
-            // Paso 3: Marcar todos los items como 100% recibidos (es una compra directa, llega todo)
-            legalizacionWebSocketService.enviarProgreso(usuario, 3, "Procesando items recibidos...", 50, ordenCreada.getId());
+            // Paso 7: Validando items recibidos
+            legalizacionWebSocketService.enviarProgreso(usuario, 7, "Validando items recibidos...", 70, ordenCreada.getId());
+            
+            // Paso 8: Marcar todos los items como 100% recibidos (es una compra directa, llega todo)
+            legalizacionWebSocketService.enviarProgreso(usuario, 8, "Marcando items como recibidos...", 75, ordenCreada.getId());
             List<DetalleOrdenCompraDTO> itemsRecibidos = ordenCreada.getItems().stream()
                     .peek(e -> {
                         e.setCantidadRecibida(e.getCantidad());
@@ -90,15 +105,24 @@ public class LegalizacionServiceImpl implements LegalizacionService {
                     })
                     .collect(Collectors.toList());
 
-            // Paso 4: Ingresar la orden con las cantidades completas
-            legalizacionWebSocketService.enviarProgreso(usuario, 4, "Ingresando orden de compra al inventario...", 66, ordenCreada.getId());
+            // Paso 9: Preparando ingreso al inventario
+            legalizacionWebSocketService.enviarProgreso(usuario, 9, "Preparando ingreso al inventario...", 80, ordenCreada.getId());
+            
+            // Paso 10: Ingresar la orden con las cantidades completas
+            legalizacionWebSocketService.enviarProgreso(usuario, 10, "Ingresando orden de compra al inventario...", 85, ordenCreada.getId());
             ingresoOrdenCompraService.ingresarOrdenCompra(ordenCreada.getId(), itemsRecibidos, request.getNumeroFactura());
 
-            // Paso 5: Crear registro de legalización
-            legalizacionWebSocketService.enviarProgreso(usuario, 5, "Creando registro de legalización...", 83, ordenCreada.getId());
+            // Paso 11: Preparando registro de legalización
+            legalizacionWebSocketService.enviarProgreso(usuario, 11, "Preparando registro de legalización...", 90, ordenCreada.getId());
+            
+            // Paso 12: Crear registro de legalización
+            legalizacionWebSocketService.enviarProgreso(usuario, 12, "Guardando registro de legalización...", 95, ordenCreada.getId());
             crearLegalizacion(request, ordenCreada);
 
-            // Paso 6: Completado
+            // Paso 13: Finalizando proceso
+            legalizacionWebSocketService.enviarProgreso(usuario, 13, "Finalizando proceso de legalización...", 98, ordenCreada.getId());
+            
+            // Paso 14: Completado
             legalizacionWebSocketService.enviarCompletado(usuario, ordenCreada.getId());
 
             return ordenCreada;
