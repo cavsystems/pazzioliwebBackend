@@ -7,12 +7,15 @@ import org.springframework.data.jpa.repository.Query;
 
 import com.pazzioliweb.productosmodule.entity.Grupos;
 import com.pazzioliweb.productosmodule.entity.Lineas;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface GrupoRepositori extends JpaRepository<Grupos,Integer>  {
 	Page<Grupos>  findByDescripcionContainingIgnoreCase(String descripcion,Pageable pageable);
 
 	Optional<Grupos> findByDescripcion(String descripcion);
+	List<Grupos> findByDescripcionIn(Collection<String> descripciones);
 
 	/**
 	 * Devuelve el primer ID disponible (1 si no hay, o el menor hueco entre 1 y MAX).

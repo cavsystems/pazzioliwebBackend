@@ -35,6 +35,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -335,11 +336,15 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
             throw new OrdenCompraException("No se puede recibir una orden " + orden.getEstado());
         }
 
+        // Índice O(1) para evitar O(N²): antes usaba stream().filter() por cada ítem recibido.
+        Map<Long, DetalleOrdenCompra> itemsPorId = orden.getItems().stream()
+                .collect(Collectors.toMap(DetalleOrdenCompra::getId, Function.identity()));
+
         for (ItemRecibidoDTO itemRecibido : itemsRecibidos) {
-            DetalleOrdenCompra detalle = orden.getItems().stream()
-                    .filter(d -> d.getId().equals(itemRecibido.getDetalleId()))
-                    .findFirst()
-                    .orElseThrow(() -> new OrdenCompraException("Detalle de orden no encontrado: " + itemRecibido.getDetalleId()));
+            DetalleOrdenCompra detalle = itemsPorId.get(itemRecibido.getDetalleId());
+            if (detalle == null) {
+                throw new OrdenCompraException("Detalle de orden no encontrado: " + itemRecibido.getDetalleId());
+            }
 
             int cantidadPendiente = detalle.getCantidad() - detalle.getCantidadRecibida();
             if (itemRecibido.getCantidadRecibida() > cantidadPendiente) {
@@ -1029,17 +1034,19 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     }
 
     private void actualizarCostosYPrecios(OrdenCompra orden) {
+        // Batch: collect all received items and send ONE HTTP call instead of N.
+        // Solo se actualiza el COSTO al recibir. NO se pisa el precio de venta.
+        List<ProductoActualizarCrearDTO> batch = new ArrayList<>();
         for (DetalleOrdenCompra detalle : orden.getItems()) {
             if (detalle.getCantidadRecibida() > 0) {
-                ProductoActualizarCrearDTO productoDTO = new ProductoActualizarCrearDTO();
-                productoDTO.setCodigo(detalle.getCodigoProducto());
-                productoDTO.setCosto(detalle.getPrecioUnitario());
-
-                // Solo se actualiza el COSTO al recibir. NO se pisa el precio de venta: antes se
-                // forzaba costo × 1.3 (markup fijo del 30%), sobrescribiendo el precio configurado
-                // del producto. El precio de venta lo define el maestro de productos, no la compra.
-                productoService.actualizarOCrearProducto(productoDTO);
+                ProductoActualizarCrearDTO dto = new ProductoActualizarCrearDTO();
+                dto.setCodigo(detalle.getCodigoProducto());
+                dto.setCosto(detalle.getPrecioUnitario());
+                batch.add(dto);
             }
+        }
+        if (!batch.isEmpty()) {
+            productoService.actualizarOCrearProductoBatch(batch);
         }
     }
 
@@ -1429,14 +1436,20 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
 
     private boolean tienePagoCredito(List<FinalizarCompraDTO.MetodoPagoDTO> metodosPago) {
         if (metodosPago == null || metodosPago.isEmpty()) return false;
+        // Batch: una sola query para todos los IDs en vez de 1 query por método.
+        List<Integer> ids = metodosPago.stream()
+                .filter(mp -> mp != null && mp.getMetodoPagoId() != null)
+                .map(FinalizarCompraDTO.MetodoPagoDTO::getMetodoPagoId)
+                .distinct().toList();
+        if (ids.isEmpty()) return false;
+        Map<Integer, com.pazzioliweb.metodospagomodule.entity.MetodosPago> map = new HashMap<>();
+        metodosPagoRepository.findAllById(ids)
+                .forEach(m -> map.put(m.getMetodo_pago_id(), m));
         return metodosPago.stream().anyMatch(mp -> {
             if (mp == null || mp.getMetodoPagoId() == null) return false;
-            try {
-                com.pazzioliweb.metodospagomodule.entity.MetodosPago m =
-                        metodosPagoRepository.findById(mp.getMetodoPagoId()).orElse(null);
-                return m != null && m.getTipoNegociacion() != null
-                        && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
-            } catch (Exception e) { return false; }
+            com.pazzioliweb.metodospagomodule.entity.MetodosPago m = map.get(mp.getMetodoPagoId());
+            return m != null && m.getTipoNegociacion() != null
+                    && "Credito".equalsIgnoreCase(m.getTipoNegociacion().name());
         });
     }
 
@@ -1451,25 +1464,31 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         }
         orden.getMetodosPago().clear();
 
+        // Batch: una sola query para todos los IDs en vez de 1 findById por método.
+        List<Integer> ids = metodosPago.stream()
+                .filter(mp -> mp.getMetodoPagoId() != null)
+                .map(FinalizarCompraDTO.MetodoPagoDTO::getMetodoPagoId)
+                .distinct().toList();
+        Map<Integer, com.pazzioliweb.metodospagomodule.entity.MetodosPago> metodosMap = new HashMap<>();
+        if (!ids.isEmpty()) {
+            metodosPagoRepository.findAllById(ids)
+                    .forEach(m -> metodosMap.put(m.getMetodo_pago_id(), m));
+        }
+
         for (FinalizarCompraDTO.MetodoPagoDTO mpDto : metodosPago) {
             if (mpDto.getMetodoPagoId() == null || mpDto.getMonto() == null) continue;
             if (mpDto.getMonto().compareTo(BigDecimal.ZERO) <= 0) continue;
-            try {
-                com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo =
-                        metodosPagoRepository.findById(mpDto.getMetodoPagoId()).orElse(null);
-                if (metodo == null) continue;
-                OrdenCompraMetodoPago mp = new OrdenCompraMetodoPago();
-                mp.setOrdenCompra(orden);
-                mp.setMetodoPago(metodo);
-                mp.setMonto(mpDto.getMonto());
-                mp.setReferencia(mpDto.getReferencia());
-                orden.getMetodosPago().add(mp);
-                boolean esCredito = metodo.getTipoNegociacion() != null
-                        && "Credito".equalsIgnoreCase(metodo.getTipoNegociacion().name());
-                if (!esCredito) totalPagado = totalPagado.add(mpDto.getMonto());
-            } catch (Exception ex) {
-                System.out.println("[FinalizarIngreso] Error método de pago: " + ex.getMessage());
-            }
+            com.pazzioliweb.metodospagomodule.entity.MetodosPago metodo = metodosMap.get(mpDto.getMetodoPagoId());
+            if (metodo == null) continue;
+            OrdenCompraMetodoPago mp = new OrdenCompraMetodoPago();
+            mp.setOrdenCompra(orden);
+            mp.setMetodoPago(metodo);
+            mp.setMonto(mpDto.getMonto());
+            mp.setReferencia(mpDto.getReferencia());
+            orden.getMetodosPago().add(mp);
+            boolean esCredito = metodo.getTipoNegociacion() != null
+                    && "Credito".equalsIgnoreCase(metodo.getTipoNegociacion().name());
+            if (!esCredito) totalPagado = totalPagado.add(mpDto.getMonto());
         }
         ordenCompraRepository.save(orden);
         return totalPagado;

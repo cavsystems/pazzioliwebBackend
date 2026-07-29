@@ -167,10 +167,7 @@ public class FacturacionElectronicaService {
         factura.setXmlFirmado(dianResponse.getXmlFirmado());
         factura.setPdfBase64(dianResponse.getPdfBase64());
         factura.setFechaValidacionDian(dianResponse.getFechaValidacion());
-        factura.setEstadoDian(
-                "SIMULADA".equals(dianResponse.getEstadoDian()) ? Facturas.EstadoDian.SIMULADA
-                : dianResponse.isExitoso() ? Facturas.EstadoDian.AUTORIZADA
-                : Facturas.EstadoDian.RECHAZADA);
+        factura.setEstadoDian(mapearEstadoDian(dianResponse));
         factura.setMensajeDian(dianResponse.getMensajeDian());
         facturasRepository.save(factura);
 
@@ -212,15 +209,29 @@ public class FacturacionElectronicaService {
         Facturas factura = facturasRepository.findById(facturaId)
                 .orElseThrow(() -> new RuntimeException("Factura no encontrada: " + facturaId));
 
-        if (factura.getCufe() == null || factura.getCufe().isEmpty()) {
-            log.warn("⚠️ Factura {} no tiene CUFE asignado", facturaId);
-            throw new RuntimeException("La factura no tiene CUFE asignado");
+        DianDocumentoResponseDTO dianResponse;
+        if (factura.getPrefijo() != null && factura.getConsecutivo() != null) {
+            // Consulta por prefijo+folio (Facturatech identifica el documento así;
+            // además funciona cuando el documento quedó EN_PROCESO y aún no hay CUFE)
+            log.info("📨 Consultando proveedor por documento {}{}...", factura.getPrefijo(), factura.getConsecutivo());
+            dianResponse = proveedorDian.consultarEstadoDocumento(factura.getPrefijo(), factura.getConsecutivo());
+        } else if (factura.getCufe() != null && !factura.getCufe().isEmpty()) {
+            log.info("📨 Consultando proveedor con CUFE: {}...", factura.getCufe().substring(0, Math.min(30, factura.getCufe().length())));
+            dianResponse = proveedorDian.consultarEstado(factura.getCufe());
+        } else {
+            log.warn("⚠️ Factura {} no tiene CUFE ni prefijo/consecutivo asignado", facturaId);
+            throw new RuntimeException("La factura no tiene CUFE ni numeración para consultar");
         }
 
-        log.info("📨 Consultando DIAN con CUFE: {}...", factura.getCufe().substring(0, Math.min(30, factura.getCufe().length())));
-        DianDocumentoResponseDTO dianResponse = proveedorDian.consultarEstado(factura.getCufe());
         if (dianResponse.isExitoso()) {
             factura.setEstadoDian(Facturas.EstadoDian.AUTORIZADA);
+            // Completar datos que hayan quedado pendientes (documento firmado después del envío)
+            if (dianResponse.getCufe() != null && (factura.getCufe() == null || factura.getCufe().isEmpty())) {
+                factura.setCufe(dianResponse.getCufe());
+            }
+            if (dianResponse.getXmlFirmado() != null) factura.setXmlFirmado(dianResponse.getXmlFirmado());
+            if (dianResponse.getPdfBase64() != null) factura.setPdfBase64(dianResponse.getPdfBase64());
+            if (dianResponse.getQrData() != null) factura.setQrData(dianResponse.getQrData());
         }
         factura.setMensajeDian(dianResponse.getMensajeDian());
         factura.setFechaValidacionDian(dianResponse.getFechaValidacion());
@@ -287,9 +298,7 @@ public class FacturacionElectronicaService {
         factura.setXmlFirmado(dianResponse.getXmlFirmado());
         factura.setPdfBase64(dianResponse.getPdfBase64());
         factura.setFechaValidacionDian(dianResponse.getFechaValidacion());
-        factura.setEstadoDian(dianResponse.isExitoso()
-                ? Facturas.EstadoDian.AUTORIZADA
-                : Facturas.EstadoDian.RECHAZADA);
+        factura.setEstadoDian(mapearEstadoDian(dianResponse));
         factura.setMensajeDian(dianResponse.getMensajeDian());
         facturasRepository.save(factura);
 
@@ -451,9 +460,14 @@ public class FacturacionElectronicaService {
         receptor.setCorreo(cliente.getCorreo());
         if (cliente.getCiudad() != null) {
             receptor.setMunicipio(cliente.getCiudad().getMunicipio());
+            receptor.setCodigoMunicipio(codigoDaneMunicipio(
+                    cliente.getCiudad().getCodigoDepartamento(),
+                    cliente.getCiudad().getCodigoMunicipio()));
         }
         if (cliente.getDepartamento() != null) {
             receptor.setDepartamento(cliente.getDepartamento().getDepartamento());
+            receptor.setCodigoDepartamento(codigoDaneDepartamento(
+                    cliente.getDepartamento().getCodigoDepartamento()));
         }
         req.setReceptor(receptor);
 
@@ -524,6 +538,33 @@ public class FacturacionElectronicaService {
             case "TR", "TRANSFERENCIA" -> "47";
             default -> "ZZZ";
         };
+    }
+
+    /** Código DANE del departamento a 2 dígitos (Facturatech tabla 34). Ej: 5 → "05". */
+    private String codigoDaneDepartamento(int codigoDepartamento) {
+        return String.format("%02d", codigoDepartamento);
+    }
+
+    /**
+     * Código DANE del municipio a 5 dígitos (Facturatech tabla 35).
+     * En BD el municipio guarda el código corto (ej. depto 5, mpio 1 → "05001");
+     * si ya viene completo (≥ 4 dígitos) se normaliza a 5.
+     */
+    private String codigoDaneMunicipio(int codigoDepartamento, int codigoMunicipio) {
+        if (codigoMunicipio >= 1000) {
+            return String.format("%05d", codigoMunicipio);
+        }
+        return String.format("%02d%03d", codigoDepartamento, codigoMunicipio);
+    }
+
+    /**
+     * Mapea el estado que reporta el proveedor al enum de la factura.
+     * EN_PROCESO (Facturatech aún validando) se guarda como ENVIADA, no como rechazo.
+     */
+    private Facturas.EstadoDian mapearEstadoDian(DianDocumentoResponseDTO resp) {
+        if ("SIMULADA".equals(resp.getEstadoDian())) return Facturas.EstadoDian.SIMULADA;
+        if ("EN_PROCESO".equals(resp.getEstadoDian())) return Facturas.EstadoDian.ENVIADA;
+        return resp.isExitoso() ? Facturas.EstadoDian.AUTORIZADA : Facturas.EstadoDian.RECHAZADA;
     }
 
     private FacturaElectronicaResponseDTO mapToResponse(Facturas factura) {
@@ -920,9 +961,24 @@ public class FacturacionElectronicaService {
                 emisor.setNumeroIdentificacion(empresa.getNumeroidentificacion());
                 emisor.setDigitoVerificacion(empresa.getDigitoverificacion());
                 emisor.setRazonSocial(empresa.getRazonsocial() != null ? empresa.getRazonsocial() : empresa.getNombrecomercial());
+                emisor.setNombreComercial(empresa.getNombrecomercial());
+                emisor.setDireccion(empresa.getDireccion());
                 emisor.setTelefono(empresa.getCelularempresa());
                 emisor.setCorreo(empresa.getCorreoempresa());
                 emisor.setPais("CO");
+                emisor.setCodigoPostal(empresa.getCodigopostal());
+                // Ubicación con códigos DANE (Facturatech tablas 34/35)
+                if (empresa.getCodigomunicipio() != null) {
+                    emisor.setMunicipio(empresa.getCodigomunicipio().getMunicipio());
+                    emisor.setCodigoMunicipio(codigoDaneMunicipio(
+                            empresa.getCodigomunicipio().getCodigoDepartamento(),
+                            empresa.getCodigomunicipio().getCodigoMunicipio()));
+                }
+                if (empresa.getCodigodepartamento() != null) {
+                    emisor.setDepartamento(empresa.getCodigodepartamento().getDepartamento());
+                    emisor.setCodigoDepartamento(codigoDaneDepartamento(
+                            empresa.getCodigodepartamento().getCodigoDepartamento()));
+                }
                 // Datos fiscales DIAN (TaxLevelCode)
                 emisor.setResponsabilidadFiscal(empresa.getResponsabilidadFiscal());
                 emisor.setTipoContribuyente(empresa.getTipoContribuyente());

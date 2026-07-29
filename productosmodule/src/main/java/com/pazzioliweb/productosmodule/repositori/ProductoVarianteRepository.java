@@ -1,5 +1,6 @@
 package com.pazzioliweb.productosmodule.repositori;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -421,6 +422,7 @@ AND t.activo = :activo
 
 	Optional<ProductoVariante> findByProductoVarianteId(Long id);
 	Optional<ProductoVariante> findByCodigoBarras(String codigobarras);
+	List<ProductoVariante> findByCodigoBarrasIn(Collection<String> codigosBarras);
 	
 	@EntityGraph(attributePaths = {"producto"})
 	Optional<ProductoVariante> findByReferenciaVariantes(String referenciaVariantes);

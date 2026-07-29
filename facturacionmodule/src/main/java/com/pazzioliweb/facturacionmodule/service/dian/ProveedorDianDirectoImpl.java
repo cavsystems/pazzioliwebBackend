@@ -6,6 +6,7 @@ import com.pazzioliweb.facturacionmodule.dtos.DianDocumentoResponseDTO;
 import com.pazzioliweb.facturacionmodule.service.ProveedorFacturacionElectronica;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -25,9 +26,13 @@ import java.util.Base64;
  * 4. Comprime en ZIP, codifica en Base64
  * 5. Envía al Web Service DIAN (SendBillSync o SendTestSetAsync)
  * 6. Parsea la respuesta y retorna DianDocumentoResponseDTO
+ *
+ * NOTA: Desde la integración con FACTURATECH este proveedor queda inactivo
+ * por defecto. Para reactivarlo configurar `facturacion.proveedor=dian`.
  */
 @Service
 @Primary
+@ConditionalOnProperty(name = "facturacion.proveedor", havingValue = "dian")
 public class ProveedorDianDirectoImpl implements ProveedorFacturacionElectronica {
 
     private static final Logger log = LoggerFactory.getLogger(ProveedorDianDirectoImpl.class);

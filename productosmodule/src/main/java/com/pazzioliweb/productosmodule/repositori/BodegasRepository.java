@@ -1,5 +1,6 @@
 package com.pazzioliweb.productosmodule.repositori;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,7 @@ import com.pazzioliweb.usuariosbacken.dtos.UsuariobodegasidDTOS;
 @Repository
 public interface BodegasRepository extends JpaRepository<Bodegas, Integer>{
   Optional<Bodegas> findByCodigo(int codigo);
+  List<Bodegas> findByCodigoIn(Collection<Integer> codigos);
   Optional<Bodegas> findByNombre(String nombre);
   Optional<Bodegas> findByNombreIgnoreCase(String nombre);
   

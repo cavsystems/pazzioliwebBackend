@@ -13,7 +13,8 @@ public class DianDocumentoResponseDTO {
     private boolean exitoso;            // true si la DIAN autorizó
     private String numero;              // Número del documento (DS-1, TPOS-5, etc.)
     private String cufe;                // Código Único de Factura / Documento Soporte (CUDS)
-    private String estadoDian;          // AUTORIZADA, RECHAZADA, SIMULADA
+    private String estadoDian;          // AUTORIZADA, RECHAZADA, SIMULADA, EN_PROCESO
+    private String transaccionId;       // ID de transacción del proveedor (Facturatech)
     private String mensajeDian;         // Descripción de la respuesta
     private String qrData;             // Datos para generar QR
     private String xmlFirmado;          // XML UBL 2.1 firmado (base64 o texto)
