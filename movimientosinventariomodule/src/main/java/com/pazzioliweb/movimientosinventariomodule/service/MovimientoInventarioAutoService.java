@@ -23,8 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * Servicio compartido que crea automáticamente movimientos de inventario
@@ -46,6 +47,9 @@ import java.util.stream.Collectors;
 public class MovimientoInventarioAutoService {
 
     private static final Logger log = LoggerFactory.getLogger(MovimientoInventarioAutoService.class);
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     private final MovimientoInventarioRepository movimientoRepo;
     private final MovimientoInventarioDetalleRepository detalleRepo;
@@ -233,17 +237,17 @@ public class MovimientoInventarioAutoService {
     // ─────────────────────────────────────────────────────────────────────────
 
     private void crearMovimientoAuto(String origenTipo, String descripcion,
-                                     Long documentoOrigenId, String documentoTipo,
-                                     TipoMovimiento tipo, Integer bodegaCodigo,
-                                     LocalDate fecha, List<ItemMovimiento> items,
-                                     boolean costoUnitarioComoPromedio, Integer comprobanteId, Integer consecutivo) {
+                                      Long documentoOrigenId, String documentoTipo,
+                                      TipoMovimiento tipo, Integer bodegaCodigo,
+                                      LocalDate fecha, List<ItemMovimiento> items,
+                                      boolean costoUnitarioComoPromedio, Integer comprobanteId, Integer consecutivo) {
 
         if (items == null || items.isEmpty()) {
             log.warn("[MovInv-Auto] {} sin items, omitido.", descripcion);
             return;
         }
 
-        // Idempotencia (sin cambios, ya es 1 sola query)
+        // Idempotencia: si ya existe movimiento para este documento, no duplicar
         Optional<MovimientoInventario> existente =
                 movimientoRepo.findByDocumentoOrigenTipoAndDocumentoOrigenId(documentoTipo, documentoOrigenId);
         if (existente.isPresent()) {
@@ -255,78 +259,6 @@ public class MovimientoInventarioAutoService {
         Bodegas bodega = bodegaRepo.findById(bodegaCodigo)
                 .orElseThrow(() -> new IllegalArgumentException("Bodega no encontrada: " + bodegaCodigo));
 
-        // ── OPTIMIZACIÓN 1: filtrar items válidos ANTES de cualquier query, así no
-        // desperdiciamos lookups en items con cantidad<=0 (antes se filtraban dentro del for) ──
-        List<ItemMovimiento> itemsValidos = items.stream()
-                .filter(i -> i.cantidad > 0)
-                .toList();
-
-        if (itemsValidos.isEmpty()) {
-            log.warn("[MovInv-Auto] {} sin items con cantidad>0, omitido.", descripcion);
-            return;
-        }
-
-        // ── OPTIMIZACIÓN 2: resolver TODAS las variantes en 1-3 queries batch en vez de
-        // hasta 3 SELECTs por item (esto era el peor N+1: con 50 items podían ser 150 SELECTs) ──
-        // Requiere agregar al repo métodos "In": findByProducto_CodigoContableInAndReferenciaVariantesIn,
-        // findBySkuIn. Ver nota al final del mensaje sobre estos métodos nuevos.
-        Set<String> codigos = itemsValidos.stream().map(i -> i.codigoProducto).collect(Collectors.toSet());
-        Set<String> refs = itemsValidos.stream().map(i -> i.referenciaVariantes)
-                .filter(Objects::nonNull).collect(Collectors.toSet());
-
-        // Mapa código+ref -> variante (match principal por codigo_contable+referencia)
-        Map<String, ProductoVariante> porCodigoRef = varianteRepo
-                .findByProducto_CodigoContableInAndReferenciaVariantesIn(codigos, refs)
-                .stream()
-                .collect(Collectors.toMap(
-                        v -> v.getProducto().getCodigoContable() + "|" + v.getReferenciaVariantes(),
-                        v -> v, (a, b) -> a));
-
-        // Mapa SKU -> variante para los fallbacks (una sola query trae todos los SKUs candidatos)
-        Set<String> skusCandidatos = new HashSet<>();
-        skusCandidatos.addAll(codigos);
-        skusCandidatos.addAll(refs);
-        Map<String, ProductoVariante> porSku = varianteRepo.findBySkuIn(skusCandidatos).stream()
-                .collect(Collectors.toMap(ProductoVariante::getSku, v -> v, (a, b) -> a));
-
-        // Resolvemos cada item contra los mapas en memoria (0 queries adicionales)
-        Map<ItemMovimiento, ProductoVariante> variantePorItem = new HashMap<>();
-        for (ItemMovimiento item : itemsValidos) {
-            ProductoVariante v = porCodigoRef.get(item.codigoProducto + "|" + item.referenciaVariantes);
-            if (v == null) v = porSku.get(item.codigoProducto);
-            if (v == null && item.referenciaVariantes != null) v = porSku.get(item.referenciaVariantes);
-            if (v == null) {
-                log.warn("[MovInv-Auto] Variante no encontrada: codigo={} / ref={} — se omite",
-                        item.codigoProducto, item.referenciaVariantes);
-                continue;
-            }
-            variantePorItem.put(item, v);
-        }
-
-        if (variantePorItem.isEmpty()) {
-            log.warn("[MovInv-Auto] {} sin variantes resueltas, omitido.", descripcion);
-            return;
-        }
-
-        // ── OPTIMIZACIÓN 3: traer TODOS los últimos kardex y existencias de una vez
-        // en vez de 1 SELECT por item. Requiere método batch en KardexRepo que traiga,
-        // para una lista de varianteIds + bodega, el último registro por variante
-        // (ej. con window function ROW_NUMBER() OVER (PARTITION BY variante ORDER BY fecha_creacion DESC) = 1,
-        // o una query nativa equivalente). Ver nota al final. ──
-        List<Long> varianteIds = variantePorItem.values().stream()
-                .map(ProductoVariante::getProductoVarianteId).distinct().toList();
-
-        Map<Long, Kardex> ultimoKardexPorVariante = kardexRepo
-                .findUltimosPorVariantesYBodega(varianteIds, bodega.getCodigo())
-                .stream()
-                .collect(Collectors.toMap(k -> k.getProductoVariante().getProductoVarianteId(), k -> k));
-
-        Map<Long, Existencias> existenciasPorVariante = existenciasRepo
-                .findByProductoVariante_ProductoVarianteIdInAndBodega_Codigo(varianteIds, bodega.getCodigo())
-                .stream()
-                .collect(Collectors.toMap(e -> e.getProductoVariante().getProductoVarianteId(), e -> e));
-
-        // Cabecera (necesitamos el ID antes de crear los detalles/kardex por la FK)
         MovimientoInventario movimiento = new MovimientoInventario();
         movimiento.setTipo(tipo);
         movimiento.setFechaEmision(fecha != null ? fecha : LocalDate.now());
@@ -337,64 +269,165 @@ public class MovimientoInventarioAutoService {
         movimiento.setDocumentoOrigenId(documentoOrigenId);
         movimiento.setConsecutivo(consecutivo != null ? consecutivo : 0);
 
+        // Asignar comprobante si se proporcionó
         if (comprobanteId != null) {
             comprobanteRepo.findById(comprobanteId.longValue()).ifPresent(movimiento::setComprobante);
         }
 
+        // Persistir cabecera para tener ID
         MovimientoInventario movGuardado = movimientoRepo.save(movimiento);
 
         double totalMov = 0.0;
 
-        // ── OPTIMIZACIÓN 4: acumular detalles/kardex/existencias en listas y hacer
-        // saveAll() al final en vez de save() individual por item (menos round-trips,
-        // y JPA puede hacer batching real de INSERTs si tienes spring.jpa.properties.hibernate.jdbc.batch_size configurado) ──
-        List<MovimientoInventarioDetalle> detallesAGuardar = new ArrayList<>();
-        List<Kardex> kardexAGuardar = new ArrayList<>();
-        // saldoNuevo por variante para el upsert batch de existencias al final
-        Map<Long, java.math.BigDecimal> saldosFinales = new HashMap<>();
+        // ══════════════════════════════════════════════════════════════════════
+        //  PRECARGA EN BLOQUE — antes se hacían ~6 consultas POR ÍTEM (resolver
+        //  variante ×3, último kardex, existencias, saves con flush): con 3.500+
+        //  ítems eran ~20.000 operaciones y el movimiento tardaba ~9 minutos.
+        //  Ahora: 3 consultas masivas + resolución/saldos en memoria + saveAll.
+        // ══════════════════════════════════════════════════════════════════════
 
-        for (ItemMovimiento item : itemsValidos) {
-            ProductoVariante variante = variantePorItem.get(item);
-            if (variante == null) continue; // ya logueado arriba
+        // 1. Variantes por código contable y por SKU (2 consultas)
+        java.util.Set<String> codigosProducto = new java.util.HashSet<>();
+        java.util.Set<String> skus = new java.util.HashSet<>();
+        for (ItemMovimiento it : items) {
+            if (it.codigoProducto != null && !it.codigoProducto.isBlank()) {
+                codigosProducto.add(it.codigoProducto);
+                skus.add(it.codigoProducto);
+            }
+            if (it.referenciaVariantes != null && !it.referenciaVariantes.isBlank()) {
+                skus.add(it.referenciaVariantes);
+            }
+        }
+        java.util.Map<String, ProductoVariante> porCodigoYRef = new java.util.HashMap<>();
+        if (!codigosProducto.isEmpty()) {
+            for (ProductoVariante v : varianteRepo.findAllConProductoByCodigoContableIn(codigosProducto)) {
+                if (v.getReferenciaVariantes() != null) {
+                    porCodigoYRef.putIfAbsent(v.getProducto().getCodigoContable() + "||" + v.getReferenciaVariantes(), v);
+                }
+            }
+        }
+        java.util.Map<String, ProductoVariante> porSku = new java.util.HashMap<>();
+        if (!skus.isEmpty()) {
+            for (ProductoVariante v : varianteRepo.findAllBySkuIn(skus)) {
+                if (v.getSku() != null) porSku.putIfAbsent(v.getSku(), v);
+            }
+        }
 
+        // 2. Resolver la variante de cada ítem EN MEMORIA (misma cadena de fallback de siempre)
+        java.util.List<ItemMovimiento> itemsValidos = new java.util.ArrayList<>();
+        java.util.List<ProductoVariante> variantesDeItems = new java.util.ArrayList<>();
+        java.util.Set<Long> varianteIds = new java.util.HashSet<>();
+        for (ItemMovimiento it : items) {
+            if (it.cantidad <= 0) {
+                log.debug("[MovInv-Auto] Saltando item {} cantidad=0", it.codigoProducto);
+                continue;
+            }
+            ProductoVariante v = it.referenciaVariantes != null
+                    ? porCodigoYRef.get(it.codigoProducto + "||" + it.referenciaVariantes)
+                    : null;
+            if (v == null && it.codigoProducto != null) v = porSku.get(it.codigoProducto);       // Fallback 1: SKU
+            if (v == null && it.referenciaVariantes != null) v = porSku.get(it.referenciaVariantes); // Fallback 2: SKU por referencia
+            if (v == null) {
+                log.warn("[MovInv-Auto] Variante no encontrada: codigo={} / ref={} — se omite",
+                        it.codigoProducto, it.referenciaVariantes);
+                continue;
+            }
+            itemsValidos.add(it);
+            variantesDeItems.add(v);
+            varianteIds.add(v.getProductoVarianteId());
+        }
+
+        // 3. Saldos/promedios base: último kardex por variante y existencias (2 consultas)
+        java.util.Map<Long, Kardex> ultimoKardexPorVariante = new java.util.HashMap<>();
+        java.util.Map<Long, Double> existenciaPorVariante = new java.util.HashMap<>();
+        if (!varianteIds.isEmpty()) {
+            for (Kardex k : kardexRepo.findUltimosPorVarianteYBodega(bodega.getCodigo(), varianteIds)) {
+                ultimoKardexPorVariante.put(k.getProductoVariante().getProductoVarianteId(), k);
+            }
+            for (Existencias e : existenciasRepo.findByBodega_CodigoAndProductoVariante_ProductoVarianteIdIn(
+                    bodega.getCodigo(), varianteIds)) {
+                existenciaPorVariante.put(e.getProductoVariante().getProductoVarianteId(),
+                        e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0);
+            }
+        }
+
+        // Estado corrido por variante (permite que la MISMA variante aparezca en varios
+        // ítems del movimiento encadenando saldo/promedio, igual que el flujo anterior)
+        java.util.Map<Long, double[]> estadoVariante = new java.util.HashMap<>(); // [saldo, promedio, totalCosto]
+        java.util.List<MovimientoInventarioDetalle> detallesNuevos = new java.util.ArrayList<>();
+        java.util.List<Kardex> kardexNuevos = new java.util.ArrayList<>();
+
+        for (int idx = 0; idx < itemsValidos.size(); idx++) {
+            ItemMovimiento item = itemsValidos.get(idx);
+            ProductoVariante variante = variantesDeItems.get(idx);
+
+            // Detalle
             double entrada = tipo == TipoMovimiento.ENTRADA ? item.cantidad : 0.0;
             double salida  = tipo == TipoMovimiento.SALIDA  ? item.cantidad : 0.0;
-
+            MovimientoInventarioDetalle det = new MovimientoInventarioDetalle();
+            det.setMovimiento(movGuardado);
+            det.setProductoVariante(variante);
+            det.setCantidad(item.cantidad);
+            det.setCostoUnitario(item.costoUnitario);     // SIN IVA (base kardex)
+            det.setCostoPromedio(item.costoUnitario);     // se recalcula abajo en kardex si es entrada
+            // totalDetalle = total con IVA si vino, sino el calculado neto
             double totalLineaDisp = item.totalLineaConIva > 0
                     ? item.totalLineaConIva
                     : item.cantidad * item.costoUnitario;
+            det.setTotalDetalle(totalLineaDisp);
 
-            Kardex ultimo = ultimoKardexPorVariante.get(variante.getProductoVarianteId());
-            double saldoAnterior;
-            double promedioAnterior;
-            double saldototal;
-
-            if (ultimo != null) {
-                saldoAnterior = ultimo.getSaldo();
-                promedioAnterior = ultimo.getCostoPromedio() != null ? ultimo.getCostoPromedio() : 0.0;
-                saldototal = ultimo.getTotalCosto();
-            } else {
-                Existencias exist = existenciasPorVariante.get(variante.getProductoVarianteId());
-                saldoAnterior = (exist != null && exist.getExistencia() != null)
-                        ? exist.getExistencia().doubleValue() : 0.0;
-                promedioAnterior = 0.0;
-                saldototal = 0.0;
+            if (tipo == TipoMovimiento.ENTRADA) {
+                det.setBodegaDestino(bodega);
+            } else if (tipo == TipoMovimiento.SALIDA) {
+                det.setBodegaOrigen(bodega);
             }
 
+            // Kardex: saldo y costo promedio anterior desde el estado en memoria
+            // (precargado en bloque; si la variante ya apareció en este movimiento,
+            // encadena sobre el saldo/promedio recalculado del ítem anterior).
+            Long varianteId = variante.getProductoVarianteId();
+            double[] estado = estadoVariante.get(varianteId);
+            if (estado == null) {
+                Kardex ultimo = ultimoKardexPorVariante.get(varianteId);
+                if (ultimo != null) {
+                    estado = new double[]{
+                            ultimo.getSaldo() != null ? ultimo.getSaldo() : 0.0,
+                            ultimo.getCostoPromedio() != null ? ultimo.getCostoPromedio() : 0.0,
+                            ultimo.getTotalCosto() != null ? ultimo.getTotalCosto() : 0.0};
+                } else {
+                    // Sin kardex previo: partir del stock actual de la tabla existencias
+                    // (no de 0: preserva saldos iniciales cargados sin kardex).
+                    estado = new double[]{existenciaPorVariante.getOrDefault(varianteId, 0.0), 0.0, 0.0};
+                }
+            }
+            double saldoAnterior = estado[0];
+            double promedioAnterior = estado[1];
+            Double saldototal = estado[2];
+
+
             double saldoNuevo = saldoAnterior + entrada - salida;
+
             double promedioNuevo = promedioAnterior;
 
+            // Para SALIDAS, valorar al costo promedio vigente. EXCEPTO devolución de compra ("DC")
+            // y reversas de anulación ("-ANUL"), que deben salir/entrar al costo EXACTO que pasa el
+            // llamador (para que el kardex coincida con el asiento contable de la nota débito/reversa).
             double costoUnitarioFinal = item.costoUnitario;
             boolean respetaCostoLlamador = "DC".equals(documentoTipo)
                     || (documentoTipo != null && documentoTipo.endsWith("-ANUL"));
             if (salida > 0 && promedioAnterior > 0 && !respetaCostoLlamador) {
                 costoUnitarioFinal = promedioAnterior;
             }
+            // Para ENTRADAS por devolución (DV): si el llamador NO pasó un costo válido (≤0), se
+            // recurre al promedio vigente del kardex. Si pasó un costo válido (el costo promedio
+            // del producto, el MISMO que usa el asiento de reversa de COGS), se respeta para que
+            // la valorización del kardex y el saldo del mayor (cuenta 1435) coincidan exactamente.
             if (entrada > 0 && "DV".equals(documentoTipo) && item.costoUnitario <= 0 && promedioAnterior > 0) {
                 costoUnitarioFinal = promedioAnterior;
             }
 
             if (entrada > 0) {
+                // Costo promedio ponderado en toda entrada (NIIF Sec.13 / NIC 2)
                 double costoTotalAnterior = saldoAnterior * promedioAnterior;
                 double costoTotalActual = entrada * item.costoUnitario;
                 double totalUnidades = saldoAnterior + entrada;
@@ -403,32 +436,23 @@ public class MovimientoInventarioAutoService {
                         : item.costoUnitario;
                 promedioNuevo = Math.round(promedioNuevo * 100.0) / 100.0;
             }
+            // Para devoluciones: mantener promedio anterior (la mercancía vuelve al mismo costo)
             if (entrada > 0 && "DV".equals(documentoTipo) && promedioAnterior > 0) {
                 promedioNuevo = promedioAnterior;
             }
+
+            // Si la variante todavía no tenía promedio (compra inicial), guardamos costoUnitario
             if (promedioNuevo <= 0) promedioNuevo = item.costoUnitario;
+            // Redondear a 2 decimales para evitar errores de punto flotante
             promedioNuevo = Math.round(promedioNuevo * 100.0) / 100.0;
 
-            // ── OPTIMIZACIÓN 5: setear costoPromedio UNA sola vez antes de armar el detalle,
-            // así eliminamos el segundo detalleRepo.save(detGuardado) que era un UPDATE extra
-            // repetido para el mismo registro que ya se iba a guardar en el saveAll ──
-            MovimientoInventarioDetalle det = new MovimientoInventarioDetalle();
-            det.setMovimiento(movGuardado);
-            det.setProductoVariante(variante);
-            det.setCantidad(item.cantidad);
-            det.setCostoUnitario(item.costoUnitario);
-            det.setCostoPromedio(promedioNuevo); // ya calculado, sin necesidad de update posterior
-            det.setTotalDetalle(totalLineaDisp);
-            if (tipo == TipoMovimiento.ENTRADA) {
-                det.setBodegaDestino(bodega);
-            } else if (tipo == TipoMovimiento.SALIDA) {
-                det.setBodegaOrigen(bodega);
-            }
-            detallesAGuardar.add(det);
+            // El costo promedio del detalle queda definitivo ANTES de guardar
+            // (antes se guardaba el detalle y se volvía a guardar para actualizarlo)
+            det.setCostoPromedio(promedioNuevo);
 
             Kardex kardex = new Kardex();
             kardex.setMovimiento(movGuardado);
-            kardex.setDetalle(det); // referencia en memoria; se persiste via cascade o tras saveAll de detalles
+            kardex.setDetalle(det);
             kardex.setProductoVariante(variante);
             kardex.setBodega(bodega);
             kardex.setFechaEmision(movGuardado.getFechaEmision());
@@ -438,39 +462,71 @@ public class MovimientoInventarioAutoService {
             kardex.setSaldo(saldoNuevo);
             kardex.setCostoUnitario(costoUnitarioFinal);
             kardex.setCostoPromedio(promedioNuevo);
+            // Total costo: para salidas usar el promedio, para entradas usar el nuevo saldo * nuevo promedio
             double totalCostoLinea = (entrada > 0)
-                    ? (entrada * costoUnitarioFinal) + saldototal
-                    : saldototal - (salida * costoUnitarioFinal);
+                    ?   (entrada * costoUnitarioFinal) + saldototal
+                    :  saldototal - (salida * costoUnitarioFinal) ;
             kardex.setTotalCosto(totalCostoLinea);
             kardex.setTipo(tipo);
             kardex.setEstado(EstadoMovimiento.ACTIVO);
             kardex.setObservaciones(descripcion);
-            kardexAGuardar.add(kardex);
 
-            // Actualizamos el "último kardex en memoria" de esta variante por si hay
-            // varios items de la MISMA variante en el mismo movimiento (evita que el
-            // segundo item lea un saldo desactualizado del batch inicial)
-            saldosFinales.put(variante.getProductoVarianteId(), java.math.BigDecimal.valueOf(saldoNuevo));
+            detallesNuevos.add(det);
+            kardexNuevos.add(kardex);
 
+            // Estado corrido de la variante para el próximo ítem del mismo movimiento
+            estadoVariante.put(varianteId, new double[]{saldoNuevo, promedioNuevo, totalCostoLinea});
+
+            // Total del movimiento prefiere el total de línea con IVA si el caller lo proveyó
+            // (así el header del historial muestra lo mismo que el documento origen).
             totalMov += (item.totalLineaConIva > 0) ? item.totalLineaConIva : totalCostoLinea;
         }
 
-        // ── OPTIMIZACIÓN 4 (cont.): 2 saveAll en vez de N saves individuales ──
-        detalleRepo.saveAll(detallesAGuardar);
-        kardexRepo.saveAll(kardexAGuardar);
+        // ── Persistencia EN BLOQUE ──
+        // Detalles primero (el kardex referencia el detalle); luego el kardex.
+        detalleRepo.saveAll(detallesNuevos);
+        kardexRepo.saveAll(kardexNuevos);
 
-        // ── OPTIMIZACIÓN 6: 1 upsert por variante afectada (ya no había forma fácil de
-        // batchear el upsert nativo salvo iterar, pero ahora es solo 1 vuelta por variante
-        // única en vez de potencialmente repetirse sin necesidad) ──
-        for (Map.Entry<Long, java.math.BigDecimal> entry : saldosFinales.entrySet()) {
-            existenciasRepo.upsertSaldo(entry.getKey(), bodega.getCodigo(), entry.getValue());
+        // Sincronizar y limpiar el contexto de persistencia ANTES de los upserts nativos:
+        // con miles de entidades en sesión, cada consulta nativa disparaba un dirty-check
+        // completo (O(n²)) y el upsert fila a fila se volvía la parte más lenta.
+        entityManager.flush();
+        entityManager.clear();
+
+        // Actualizar tabla existencias para mantener sincronización con Kardex.
+        // UPSERT atómico MULTI-FILA por lotes, con el saldo FINAL por variante
+        // (deduplicado: si la variante apareció en varios ítems se escribe una vez).
+        // El viejo SELECT→INSERT chocaba con el UNIQUE (variante, bodega) si otra
+        // transacción creaba la fila después del snapshot (rollback-only del documento);
+        // y el upsert de a una fila eran 3.500+ sentencias individuales.
+        java.util.List<java.util.Map.Entry<Long, double[]>> saldosFinales =
+                new java.util.ArrayList<>(estadoVariante.entrySet());
+        final int LOTE_UPSERT = 500;
+        for (int i = 0; i < saldosFinales.size(); i += LOTE_UPSERT) {
+            java.util.List<java.util.Map.Entry<Long, double[]>> lote =
+                    saldosFinales.subList(i, Math.min(i + LOTE_UPSERT, saldosFinales.size()));
+            StringBuilder sql = new StringBuilder(
+                    "INSERT INTO existencias (producto_variantes_id, bodega_id, existencia) VALUES ");
+            for (int j = 0; j < lote.size(); j++) {
+                if (j > 0) sql.append(',');
+                sql.append("(?,?,?)");
+            }
+            sql.append(" ON DUPLICATE KEY UPDATE existencia = VALUES(existencia)");
+            jakarta.persistence.Query q = entityManager.createNativeQuery(sql.toString());
+            int p = 1;
+            for (java.util.Map.Entry<Long, double[]> e : lote) {
+                q.setParameter(p++, e.getKey());
+                q.setParameter(p++, bodega.getCodigo());
+                q.setParameter(p++, java.math.BigDecimal.valueOf(e.getValue()[0]));
+            }
+            q.executeUpdate();
         }
 
         movGuardado.setTotal(totalMov);
         movimientoRepo.save(movGuardado);
 
-        log.info("[MovInv-Auto] {} → movimiento #{} con {} items, total={}",
-                descripcion, movGuardado.getMovimientoId(), detallesAGuardar.size(), totalMov);
+        log.info("[MovInv-Auto] {} → movimiento #{} con {} items ({} kardex), total={}",
+                descripcion, movGuardado.getMovimientoId(), items.size(), kardexNuevos.size(), totalMov);
     }
 
     /** Helper utilitario para crear lista de items rápido. */

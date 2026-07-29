@@ -18,6 +18,23 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
 
         Optional<Kardex> findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(ProductoVariante variante, Bodegas bodega);
 
+        /**
+         * Último kardex de CADA variante en una bodega, EN BLOQUE (para movimientos
+         * masivos: reemplaza el findTop... por ítem). Usa max(kardexId) como "último":
+         * el id autoincremental sigue el orden de inserción (= fechaCreacion).
+         */
+        @Query("""
+            SELECT k FROM Kardex k
+            WHERE k.bodega.codigo = :bodegaCodigo
+              AND k.kardexId IN (
+                  SELECT MAX(k2.kardexId) FROM Kardex k2
+                  WHERE k2.bodega.codigo = :bodegaCodigo
+                    AND k2.productoVariante.productoVarianteId IN :varianteIds
+                  GROUP BY k2.productoVariante.productoVarianteId)
+            """)
+        List<Kardex> findUltimosPorVarianteYBodega(@Param("bodegaCodigo") Integer bodegaCodigo,
+                                                   @Param("varianteIds") java.util.Collection<Long> varianteIds);
+
         List<Kardex> findByBodega(Bodegas bodega);
 
         @Query(value = "SELECT * FROM kardex k " +

@@ -30,6 +30,17 @@ public interface ProductoVarianteRepository extends JpaRepository<ProductoVarian
 	Optional<ProductoVariante> findBySku(String sku);
 
 	Optional<ProductoVariante> findByProductoAndPredeterminada(Productos producto, Boolean predeterminada);
+
+	// ── Lecturas EN BLOQUE para movimientos de inventario masivos ──
+	// Evitan el patrón de 1-3 consultas por ítem del kardex (con 3000+ ítems eran
+	// ~10.000 consultas): se trae todo de una vez y se resuelve en memoria.
+	@Query("SELECT v FROM ProductoVariante v JOIN FETCH v.producto p WHERE p.codigoContable IN :codigos")
+	java.util.List<ProductoVariante> findAllConProductoByCodigoContableIn(@Param("codigos") java.util.Collection<String> codigos);
+
+	java.util.List<ProductoVariante> findAllBySkuIn(java.util.Collection<String> skus);
+
+	/** Todas las variantes de un producto (para reutilizar la única existente en importaciones). */
+	java.util.List<ProductoVariante> findByProducto_ProductoId(Integer productoId);
 	
 	@EntityGraph(attributePaths = { "producto" })
 	@Query("SELECT p FROM ProductoVariante p")

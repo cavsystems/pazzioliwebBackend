@@ -19,8 +19,6 @@ public interface ExistenciasRepository extends JpaRepository<Existencias, Intege
 
 	Optional<Existencias> findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(Long varianteId, Integer bodegaId);
 
-	List<Existencias> findByProductoVariante_ProductoVarianteIdInAndBodega_Codigo(List<Long> varianteIds, Integer bodegaCodigo);
-
 	/**
 	 * Upsert atómico del saldo (sincronización kardex → existencias). El patrón
 	 * SELECT-luego-INSERT fallaba con "Duplicate entry ... uq_existencias_producto_bodega"
@@ -39,6 +37,10 @@ public interface ExistenciasRepository extends JpaRepository<Existencias, Intege
 	                 @Param("saldo") java.math.BigDecimal saldo);
 
 	Page<Existencias> findByBodega_Codigo(Integer bodegaId, Pageable pageable);
+
+	/** Existencias de varias variantes en una bodega, EN BLOQUE (kardex masivo). */
+	java.util.List<Existencias> findByBodega_CodigoAndProductoVariante_ProductoVarianteIdIn(
+			Integer bodegaId, java.util.Collection<Long> varianteIds);
 
 	@Query(
 			value = """
@@ -84,9 +86,7 @@ public interface ExistenciasRepository extends JpaRepository<Existencias, Intege
 	)
 	List<ExistenciasBodegaDTO> listadoExistenciasNombreBodegaVariante(@Param("varianteId")  Long varianteId);
 
-	/**
-	 * ── OPTIMIZACIÓN: carga existencias de múltiples variantes en batch para evitar N+1 queries ──
-	 */
+	/** Versión EN BLOQUE: existencias con nombre de bodega de MUCHAS variantes en una consulta. */
 	@Query(
 			value = """
 		        SELECT
@@ -105,5 +105,5 @@ public interface ExistenciasRepository extends JpaRepository<Existencias, Intege
 		        """,
 			nativeQuery = true
 	)
-	List<ExistenciasBodegaDTO> listadoExistenciasNombreBodegaVariantesBatch(@Param("varianteIds") List<Long> varianteIds);
+	List<ExistenciasBodegaDTO> listadoExistenciasNombreBodegaVariantes(@Param("varianteIds") java.util.Collection<Long> varianteIds);
 }
