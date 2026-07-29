@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.pazzioliweb.productosmodule.dtos.LineaProductosDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoInventarioDTO;
+import com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoVarianteConDetallesDTO;
 import com.pazzioliweb.productosmodule.dtos.TotalInventarioDTO;
 import com.pazzioliweb.productosmodule.entity.Productos;
@@ -36,6 +37,86 @@ public interface ProductoVarianteRepository extends JpaRepository<ProductoVarian
 	java.util.List<ProductoVariante> findAllConProductoByCodigoContableIn(@Param("codigos") java.util.Collection<String> codigos);
 
 	java.util.List<ProductoVariante> findAllBySkuIn(java.util.Collection<String> skus);
+
+	/**
+	 * Resolución EXACTA y masiva de variantes para importaciones de inventario por plantilla.
+	 *
+	 * Una sola consulta para TODOS los términos del Excel (código de barras de variante o de
+	 * producto, código contable, SKU, referencia de variante o descripción). Reemplaza el
+	 * patrón anterior del frontend —una petición HTTP con LIKE '%término%' por cada fila y
+	 * "me quedo con el primer resultado"—, que con plantillas grandes hacía miles de
+	 * peticiones y podía asignar la variante equivocada cuando varias descripciones se
+	 * parecían. El match es exacto (TRIM + minúsculas) y el cliente decide qué hacer cuando
+	 * un término resuelve a más de una variante.
+	 */
+	@Query(
+			value = """
+			SELECT * FROM (
+			    SELECT
+			        pv.producto_variantes_id AS productoVarianteId,
+			        pv.activo AS activo,
+			        pv.codigo_barras AS codigobarras,
+			        pv.sku AS sku,
+			        pv.referencia_variantes AS referenciaVariantes,
+			        p.codigo_barras AS codigobarrasProducto,
+			        p.producto_id AS productoId,
+			        p.referencia AS referencia,
+			        p.estado AS estado,
+			        p.grupo_id AS grupoid,
+			        p.linea_id AS lineaid,
+			        p.maneja_variantes AS manejavariante,
+			        p.tipo_producto_id AS tipoproductid,
+			        p.impuesto_id AS impuestoid,
+			        p.codigo_contable AS codigoContable,
+			        tp.nombre AS tipoProducto,
+			        IF(
+			          pv.predeterminada = 0,
+			          CONCAT(p.descripcion, '-', pv.referencia_variantes),
+			          p.descripcion
+			        ) AS descripcion,
+			        p.descripcion AS descripcionProducto,
+			        COALESCE(ex.totalExistencia, 0) AS cantidadGlobal,
+			        0 AS totalGlobalInventario,
+			        p.costo AS costo,
+			        u.sigla AS unidadMedida,
+			        l.descripcion AS linea,
+			        g.descripcion AS grupo,
+			        COALESCE(i.tarifa, 0) AS tarifa,
+			        p.fecha_ultima_compra AS fechaUltimaCompra,
+			        p.fecha_ultima_venta AS fechaUltimaVenta,
+			        COALESCE(pv.imagen, p.imagen) AS imagen
+			    FROM producto_variantes pv
+			    JOIN productos p ON p.producto_id = pv.producto_id
+			    LEFT JOIN tipo_producto tp ON tp.tipo_producto_id = p.tipo_producto_id
+			    LEFT JOIN impuestos i ON i.codigo = p.impuesto_id
+			    LEFT JOIN unidades_medida_producto ump ON ump.producto_id = p.producto_id
+			    LEFT JOIN unidades_medida u ON u.unidad_medida_id = ump.unidad_medida_id
+			    LEFT JOIN lineas l ON l.linea_id = p.linea_id
+			    LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
+			    LEFT JOIN (
+			        SELECT e.producto_variantes_id AS varianteId, SUM(e.existencia) AS totalExistencia
+			        FROM existencias e
+			        GROUP BY e.producto_variantes_id
+			    ) ex ON ex.varianteId = pv.producto_variantes_id
+			) t
+			WHERE t.estado = 'ACTIVO'
+			  AND t.activo = :activo
+			  AND (
+			        LOWER(TRIM(t.codigobarras))          IN (:terminos)
+			     OR LOWER(TRIM(t.codigobarrasProducto))  IN (:terminos)
+			     OR LOWER(TRIM(t.codigoContable))        IN (:terminos)
+			     OR LOWER(TRIM(t.sku))                   IN (:terminos)
+			     OR LOWER(TRIM(t.referenciaVariantes))   IN (:terminos)
+			     OR LOWER(TRIM(t.referencia))            IN (:terminos)
+			     OR LOWER(TRIM(t.descripcion))           IN (:terminos)
+			     OR LOWER(TRIM(t.descripcionProducto))   IN (:terminos)
+			  )
+			""",
+			nativeQuery = true
+	)
+	java.util.List<ProductoInventarioResolverDTO> resolverParaInventario(
+			@Param("terminos") java.util.Collection<String> terminos,
+			@Param("activo") int activo);
 
 	/** Todas las variantes de un producto (para reutilizar la única existente en importaciones). */
 	java.util.List<ProductoVariante> findByProducto_ProductoId(Integer productoId);

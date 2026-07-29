@@ -2,6 +2,7 @@ package com.pazzioliweb.productosmodule.controller;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.pazzioliweb.commonbacken.dtos.response.PaginationResponse;
 import com.pazzioliweb.productosmodule.dtos.ProductoInventarioDTO;
+import com.pazzioliweb.productosmodule.dtos.ProductoInventarioResolverDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoVarianteConDetallesDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoVarianteCreateDTO;
 import com.pazzioliweb.productosmodule.dtos.ProductoVarianteResponseDTO;
@@ -219,6 +221,22 @@ public class ProductoVarianteController {
     ){
         List<ProductoInventarioDTO> resultado = varianteService.listarInventarioBasicoPorDescripciones(descripciones, estadova, estadoproducto);
         return ResponseEntity.ok(resultado);
+    }
+
+    /**
+     * Resolución masiva de productos para la importación de inventario por plantilla.
+     *
+     * Recibe la lista de términos del Excel (código de barras de variante o producto,
+     * código contable, SKU, referencia o descripción) y devuelve un mapa
+     * término → variantes que coinciden EXACTAMENTE. Es POST porque una plantilla
+     * grande manda miles de términos (no caben en la URL).
+     */
+    @PostMapping("/resolver-inventario")
+    public ResponseEntity<Map<String, List<ProductoInventarioResolverDTO>>> resolverParaInventario(
+            @RequestBody List<String> terminos,
+            @RequestParam(defaultValue = "1") int estadova
+    ) {
+        return ResponseEntity.ok(varianteService.resolverParaInventario(terminos, estadova));
     }
 
     @GetMapping("/detalles-codigos/{codigos}")

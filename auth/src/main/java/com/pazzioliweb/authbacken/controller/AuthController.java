@@ -67,6 +67,20 @@ public class AuthController {
     @Autowired
     private EmpresaRepositori empresaRepositori;
 
+    /**
+     * Schema DUEÑO de la plataforma (el del proveedor, no de una empresa cliente).
+     * Es el único tenant exento de la validación de empresa/licencia. Antes estaba
+     * escrito como literal "cavsystems" en tres comparaciones distintas: si el
+     * schema maestro cambiara, la validación empezaba a rechazar el login propio.
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.tenant.master:cavsystems}")
+    private String tenantMaestro;
+
+    /** ¿El tenant es el schema dueño de la plataforma (no una empresa cliente)? */
+    private boolean esTenantMaestro(String db) {
+        return db != null && db.equalsIgnoreCase(tenantMaestro);
+    }
+
     @Autowired
     public AuthController(UsuarioRepository usuarioRepository, SessionRepository sessionRepositorio, JwUtilJava jwtUtil, HttpServletResponse servletResponse) {
         this.usuarioRepository = usuarioRepository;
@@ -99,7 +113,7 @@ public class AuthController {
                 
                 if (contrasenaValida) {
                     // ✅ Validar estado de la empresa y licencia
-                    if(!request.db.equals("cavsystems")){
+                    if(!esTenantMaestro(request.db)){
                         Map<String, Object> validacionEmpresa = validarEmpresa(request.db);
                         if (!(boolean) validacionEmpresa.get("valido")) {
                             response.put("success", false);
@@ -192,7 +206,7 @@ public class AuthController {
             if (contrasenaValida) {
                 // ✅ Validar estado de la empresa y licencia
                 System.out.println("db actual es esta"+request.db+request.usuario);
-                if(!request.db.equals("cavsystems")){
+                if(!esTenantMaestro(request.db)){
                     Map<String, Object> validacionEmpresa = validarEmpresa(request.db);
                     if (!(boolean) validacionEmpresa.get("valido")) {
                         response.put("success", false);
@@ -377,7 +391,7 @@ public class AuthController {
             }
 
             String dbName = datos.getDbName();
-            if (dbName != null && !dbName.equals("cavsystems")) {
+            if (dbName != null && !esTenantMaestro(dbName)) {
                 Map<String, Object> validacionEmpresa = validarEmpresa(dbName);
                 if (!(boolean) validacionEmpresa.get("valido")) {
                     return ResponseEntity.ok(false);
