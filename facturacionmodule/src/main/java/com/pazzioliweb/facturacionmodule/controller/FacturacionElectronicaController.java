@@ -132,5 +132,20 @@ public class FacturacionElectronicaController {
         return ResponseEntity.ok(facturacionService.generarDocumentoSoporte(
                 id, nom, base, iva, total, concepto, tipoCompra, retFte, retIva, retIca));
     }
+
+    /**
+     * Emite la Nota de Ajuste (tipo 95) que anula o corrige un Documento Soporte.
+     * POST /api/facturacion-electronica/documento-soporte/{id}/nota-ajuste
+     * Body: { codigoCorreccion, razon }  — codigoCorreccion Tabla 42 (2 = anulación)
+     */
+    @PostMapping("/documento-soporte/{id}/nota-ajuste")
+    public ResponseEntity<com.pazzioliweb.facturacionmodule.dtos.DianDocumentoResponseDTO> generarNotaAjusteDS(
+            @PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> b = body != null ? body : Map.of();
+        Integer codigo = b.get("codigoCorreccion") != null
+                ? ((Number) b.get("codigoCorreccion")).intValue() : 2;
+        String razon = b.get("razon") != null ? b.get("razon").toString() : null;
+        return ResponseEntity.ok(facturacionService.generarNotaAjusteDocumentoSoporte(id, codigo, razon));
+    }
 }
 

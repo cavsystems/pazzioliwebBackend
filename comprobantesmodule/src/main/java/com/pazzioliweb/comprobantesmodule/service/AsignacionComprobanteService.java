@@ -39,7 +39,8 @@ public class AsignacionComprobanteService {
                     TipoMovimientoComprobante.NC,
                     TipoMovimientoComprobante.ND,
                     TipoMovimientoComprobante.TPOS,
-                    TipoMovimientoComprobante.DS
+                    TipoMovimientoComprobante.DS,
+                    TipoMovimientoComprobante.NADS
             );
 
     private final ComprobanteContableRepository repo;

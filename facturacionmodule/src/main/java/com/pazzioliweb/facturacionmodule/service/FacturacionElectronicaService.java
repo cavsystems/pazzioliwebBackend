@@ -801,31 +801,36 @@ public class FacturacionElectronicaService {
         req.setPrefijo(rDs.getComprobante().getPrefijo());
         req.setConsecutivo(rDs.getConsecutivo());
         com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable compDs = rDs.getComprobante();
-        if (compDs.getResolucionDian() != null) {
-            req.setResolucionDian(compDs.getResolucionDian());
-            req.setClaveTecnicaDian(compDs.getClaveTecnicaDian());
-            req.setFechaInicioResolucion(compDs.getFechaInicioResolucion());
-            req.setFechaFinResolucion(compDs.getFechaFinResolucion());
-            req.setConsecutivoDesde(compDs.getConsecutivoDesde());
-            req.setConsecutivoHasta(compDs.getConsecutivoHasta());
-        }
+        aplicarResolucionDs(req, compDs, "Documento Soporte");
         req.setFechaEmision(LocalDate.now());
+        // IBS_1/IBS_2: fecha de compra y forma de generación. "Por operación" (1) exige
+        // que la fecha de compra sea la misma de emisión del documento.
+        req.setFechaCompra(LocalDate.now());
         req.setFormaPago("1");
 
-        // Emisor = MI empresa (igual que en FE)
+        // Adquiriente (nodo ADQ) = MI empresa: en el DS es ella quien expide el documento
         req.setEmisor(armarEmisorDesdeEmpresa());
 
-        // Receptor = proveedor NO obligado a facturar
-        DianDocumentoRequestDTO.ReceptorDTO rec = new DianDocumentoRequestDTO.ReceptorDTO();
-        rec.setTipoIdentificacion("13");  // 13 = CC (típico de persona natural)
-        rec.setNumeroIdentificacion(proveedorIdentificacion);
-        rec.setNombre(proveedorNombre);
-        req.setReceptor(rec);
+        // Proveedor no obligado a facturar (nodo PRO)
+        req.setReceptor(armarProveedorDs(proveedorIdentificacion, proveedorNombre));
 
         req.setBaseGravable(base != null ? base : BigDecimal.ZERO);
         req.setTotalIva(iva != null ? iva : BigDecimal.ZERO);
         req.setTotalFactura(total != null ? total : BigDecimal.ZERO);
         req.setTotalDescuento(BigDecimal.ZERO);
+
+        // Retenciones practicadas: se informan como TIM/IMP (06 ReteRenta, 05 ReteIVA).
+        // La Tabla 11 del anexo DS no contempla ReteICA, así que no viaja en el XML.
+        BigDecimal rf = retencionFuente != null ? retencionFuente : BigDecimal.ZERO;
+        BigDecimal ri = retencionIva != null ? retencionIva : BigDecimal.ZERO;
+        BigDecimal rc = retencionIca != null ? retencionIca : BigDecimal.ZERO;
+        req.setRetencionFuente(rf);
+        req.setRetencionIva(ri);
+        if (rc.compareTo(BigDecimal.ZERO) > 0) {
+            log.warn("[DS] ReteICA de ${} se registra en contabilidad pero no se reporta en el " +
+                    "documento soporte: el anexo DIAN sólo admite los tributos 01 (IVA), " +
+                    "05 (ReteIVA) y 06 (ReteRenta)", rc);
+        }
 
         // Una línea con el concepto
         java.util.List<DianDocumentoRequestDTO.LineaDTO> lineas = new ArrayList<>();
@@ -841,14 +846,15 @@ public class FacturacionElectronicaService {
         lineas.add(l);
         req.setLineas(lineas);
 
-        int consec = req.getConsecutivo();
+        // Número legal del documento = prefijo + consecutivo (igual al ENC_6 enviado a la DIAN)
+        String numeroDs = req.getPrefijo() + req.getConsecutivo();
         DianDocumentoResponseDTO resp = proveedorDian.enviarFactura(req);
 
         // Persistir
         try {
             DocumentoElectronico doc = new DocumentoElectronico();
             doc.setTipo("DS");
-            doc.setNumero("DS-" + consec);
+            doc.setNumero(numeroDs);
             doc.setCufe(resp.getCufe());
             doc.setFechaEmision(req.getFechaEmision());
             doc.setTerceroIdentificacion(proveedorIdentificacion);
@@ -864,9 +870,6 @@ public class FacturacionElectronicaService {
             doc.setFechaValidacionDian(resp.getFechaValidacion());
             // Tipo de compra y retenciones
             doc.setTipoCompra(tipoCompra != null ? tipoCompra : "SERVICIOS");
-            BigDecimal rf = retencionFuente != null ? retencionFuente : BigDecimal.ZERO;
-            BigDecimal ri = retencionIva != null ? retencionIva : BigDecimal.ZERO;
-            BigDecimal rc = retencionIca != null ? retencionIca : BigDecimal.ZERO;
             BigDecimal totalRet = rf.add(ri).add(rc);
             doc.setRetencionFuente(rf);
             doc.setRetencionIva(ri);
@@ -887,8 +890,210 @@ public class FacturacionElectronicaService {
         }
 
         // Incluir el número DS en la respuesta para mostrarlo en el frontend
-        resp.setNumero("DS-" + consec);
+        resp.setNumero(numeroDs);
         return resp;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Nota de Ajuste al Documento Soporte (tipo 95)
+    //  Es el único mecanismo para anular o corregir un DS ya autorizado.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Emite una Nota de Ajuste (tipo 95) que anula o corrige un Documento Soporte.
+     * Los nodos PRO/ADQ/TOT/ITE deben ser idénticos a los del DS referenciado, por lo
+     * que se reconstruyen desde el documento guardado.
+     *
+     * @param codigoCorreccion Tabla 42: 1=Devolución parcial, 2=Anulación (default),
+     *                         3=Rebaja o descuento, 4=Ajuste de precio, 5=Otros.
+     */
+    @Transactional
+    public DianDocumentoResponseDTO generarNotaAjusteDocumentoSoporte(Long documentoSoporteId,
+                                                                       Integer codigoCorreccion,
+                                                                       String razon) {
+        log.info("══════ Generando Nota de Ajuste al Documento Soporte ═══════");
+
+        DocumentoElectronico ds = documentoElectronicoRepository.findById(documentoSoporteId)
+                .orElseThrow(() -> new RuntimeException("Documento soporte no encontrado: " + documentoSoporteId));
+        if (!"DS".equals(ds.getTipo())) {
+            throw new IllegalStateException("El documento " + ds.getNumero() + " no es un Documento Soporte (tipo "
+                    + ds.getTipo() + "); use la nota crédito electrónica para facturas de venta.");
+        }
+        if (ds.getCufe() == null || ds.getCufe().isBlank() || ds.getCufe().startsWith("SIMULADO-")) {
+            throw new IllegalStateException("El documento soporte " + ds.getNumero() +
+                    " no tiene CUDS autorizado por la DIAN: no se puede referenciar en una nota de ajuste " +
+                    "(nodo REF_4 obligatorio).");
+        }
+
+        int concepto = codigoCorreccion != null ? codigoCorreccion : 2;
+
+        DianDocumentoRequestDTO req = new DianDocumentoRequestDTO();
+        req.setTipoDocumento("95");
+
+        // Numeración propia: la nota de ajuste tiene su propio prefijo y resolución.
+        com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado rNa =
+                asignacionComprobante.asignarSinCajero(
+                        com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.NADS);
+        req.setPrefijo(rNa.getComprobante().getPrefijo());
+        req.setConsecutivo(rNa.getConsecutivo());
+        aplicarResolucionDs(req, rNa.getComprobante(), "Nota de Ajuste al Documento Soporte");
+
+        req.setFechaEmision(LocalDate.now());
+        req.setFormaPago("1");
+        req.setCodigoConcepto(concepto);
+        req.setRazonConcepto(razon);
+
+        req.setEmisor(armarEmisorDesdeEmpresa());
+        req.setReceptor(armarProveedorDs(ds.getTerceroIdentificacion(), ds.getTerceroNombre()));
+
+        // Totales idénticos al DS anulado
+        req.setBaseGravable(ds.getBaseGravable() != null ? ds.getBaseGravable() : BigDecimal.ZERO);
+        req.setTotalIva(ds.getIva() != null ? ds.getIva() : BigDecimal.ZERO);
+        req.setTotalFactura(ds.getTotal() != null ? ds.getTotal() : BigDecimal.ZERO);
+        req.setTotalDescuento(BigDecimal.ZERO);
+
+        java.util.List<DianDocumentoRequestDTO.LineaDTO> lineas = new ArrayList<>();
+        DianDocumentoRequestDTO.LineaDTO l = new DianDocumentoRequestDTO.LineaDTO();
+        l.setNumero(1);
+        l.setCodigoProducto("DS");
+        l.setDescripcion(ds.getConcepto() != null ? ds.getConcepto() : "Compra a no facturador");
+        l.setCantidad(1);
+        l.setPrecioUnitario(req.getBaseGravable());
+        l.setDescuento(BigDecimal.ZERO);
+        l.setValorIva(req.getTotalIva());
+        l.setTotalLinea(req.getTotalFactura());
+        lineas.add(l);
+        req.setLineas(lineas);
+
+        // REF: documento soporte referenciado (REF_4 = CUDS, no CUFE)
+        DianDocumentoRequestDTO.DocumentoReferenciaDTO ref = new DianDocumentoRequestDTO.DocumentoReferenciaDTO();
+        ref.setNumeroDocumento(ds.getNumero());
+        ref.setCufeOriginal(ds.getCufe());
+        ref.setFechaEmisionOriginal(ds.getFechaEmision());
+        ref.setTipoDocumentoOriginal("05");
+        req.setDocumentoReferencia(ref);
+
+        String numeroNa = req.getPrefijo() + req.getConsecutivo();
+        DianDocumentoResponseDTO resp = proveedorDian.enviarFactura(req);
+
+        try {
+            DocumentoElectronico na = new DocumentoElectronico();
+            na.setTipo("NADS");
+            na.setNumero(numeroNa);
+            na.setCufe(resp.getCufe());
+            na.setFechaEmision(req.getFechaEmision());
+            na.setTerceroIdentificacion(ds.getTerceroIdentificacion());
+            na.setTerceroNombre(ds.getTerceroNombre());
+            na.setDocumentoReferenciaId(ds.getId());
+            na.setDocumentoReferenciaTipo("DS");
+            na.setBaseGravable(req.getBaseGravable());
+            na.setIva(req.getTotalIva());
+            na.setTotal(req.getTotalFactura());
+            na.setConcepto(razon);
+            na.setCodigoConceptoDian(concepto);
+            na.setEstadoDian(resp.getEstadoDian());
+            na.setMensajeDian(resp.getMensajeDian());
+            na.setQrData(resp.getQrData());
+            na.setXmlFirmado(resp.getXmlFirmado());
+            na.setFechaValidacionDian(resp.getFechaValidacion());
+            documentoElectronicoRepository.save(na);
+
+            // Si la nota anula el DS (concepto 2), marcarlo como anulado
+            if (concepto == 2 && resp.isExitoso()) {
+                ds.setEstado("ANULADO");
+                documentoElectronicoRepository.save(ds);
+            }
+            log.info("Nota de ajuste al DS persistida: {} → anula/corrige {}", numeroNa, ds.getNumero());
+        } catch (Exception ex) {
+            log.warn("[NADS] Error persistiendo (no crítico): {}", ex.getMessage());
+        }
+
+        resp.setNumero(numeroNa);
+        return resp;
+    }
+
+    /**
+     * Copia al request la resolución DIAN del comprobante (nodo DRF, obligatorio en el DS)
+     * y falla con un mensaje claro si no está configurada — Facturatech devuelve 409 si el
+     * DRF no coincide con la resolución registrada en su plataforma.
+     */
+    private void aplicarResolucionDs(DianDocumentoRequestDTO req,
+                                      com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable comp,
+                                      String nombreDoc) {
+        if (comp.getResolucionDian() == null || comp.getResolucionDian().isBlank()
+                || comp.getFechaInicioResolucion() == null || comp.getFechaFinResolucion() == null
+                || comp.getConsecutivoDesde() == null || comp.getConsecutivoHasta() == null) {
+            throw new IllegalStateException("El comprobante '" + comp.getPrefijo() + "' (" + nombreDoc +
+                    ") no tiene la resolución DIAN completa. Configure número de autorización, " +
+                    "fechas de vigencia y rango de numeración en Contabilidad → Comprobantes: " +
+                    "el nodo DRF es obligatorio y Facturatech rechaza el documento sin él.");
+        }
+        req.setResolucionDian(comp.getResolucionDian());
+        req.setClaveTecnicaDian(comp.getClaveTecnicaDian());
+        req.setFechaInicioResolucion(comp.getFechaInicioResolucion());
+        req.setFechaFinResolucion(comp.getFechaFinResolucion());
+        req.setConsecutivoDesde(comp.getConsecutivoDesde());
+        req.setConsecutivoHasta(comp.getConsecutivoHasta());
+    }
+
+    /**
+     * Construye el nodo PRO del Documento Soporte: el proveedor NO obligado a facturar.
+     * PRO_10/11/13/19/23 (dirección, departamento, municipio y sus códigos DANE) son
+     * obligatorios para operaciones con residentes, así que se toman del tercero registrado.
+     */
+    private DianDocumentoRequestDTO.ReceptorDTO armarProveedorDs(String identificacion, String nombre) {
+        DianDocumentoRequestDTO.ReceptorDTO p = new DianDocumentoRequestDTO.ReceptorDTO();
+        p.setNumeroIdentificacion(identificacion);
+        p.setNombre(nombre);
+        p.setTipoIdentificacion("13"); // 13 = CC, típico de persona natural no obligada
+        p.setCodigoPais("CO");
+        p.setNombrePais("COLOMBIA");
+        p.setResponsabilidadFiscal("R-99-PN"); // no obligado a facturar
+        p.setResponsableIva(false);
+
+        Terceros t = identificacion != null && !identificacion.isBlank()
+                ? tercerosRepository.findByIdentificacion(identificacion).orElse(null)
+                : null;
+        if (t == null) {
+            log.warn("[DS] El proveedor {} no está registrado en terceros: el documento soporte " +
+                    "irá sin dirección ni municipio (PRO_10/11/13/19/23) y será rechazado", identificacion);
+            return p;
+        }
+
+        if (t.getTipoIdentificacion() != null) {
+            p.setTipoIdentificacion(String.valueOf(t.getTipoIdentificacion().getCodigoTipoIdentificacion()));
+        }
+        String razon = t.getRazonSocial() != null && !t.getRazonSocial().isBlank()
+                ? t.getRazonSocial()
+                : String.join(" ", Arrays.stream(new String[]{
+                        t.getNombre1(), t.getNombre2(), t.getApellido1(), t.getApellido2()})
+                        .filter(s -> s != null && !s.isBlank()).toList());
+        if (!razon.isBlank()) {
+            p.setNombre(razon);
+        }
+        p.setDigitoVerificacion(t.getDv());
+        p.setDireccion(t.getDireccion());
+        p.setCorreo(t.getCorreo());
+        p.setCodigoPostal(t.getCodigoPostal());
+        if (t.getCiudad() != null) {
+            p.setMunicipio(t.getCiudad().getMunicipio());
+            p.setCodigoMunicipio(codigoDaneMunicipio(
+                    t.getCiudad().getCodigoDepartamento(), t.getCiudad().getCodigoMunicipio()));
+        }
+        if (t.getDepartamento() != null) {
+            p.setDepartamento(t.getDepartamento().getDepartamento());
+            p.setCodigoDepartamento(codigoDaneDepartamento(t.getDepartamento().getCodigoDepartamento()));
+        }
+        if (t.getTipoPersona() != null) {
+            // "Juridica" / "Natural" → PRO_1 (Tabla 20)
+            p.setTipoContribuyente(t.getTipoPersona().getNombre());
+        }
+        if (t.getRegimen() != null) {
+            // Régimen 47 (simple) → O-47; el resto no es un código válido de TAC_1
+            // en el anexo DS, así que el generador cae a R-99-PN.
+            p.setResponsabilidadFiscal("O-" + t.getRegimen().getCodigoRegimen());
+        }
+        return p;
     }
 
     /** Construye el request base con datos del emisor + receptor desde una venta. */
