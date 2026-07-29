@@ -38,6 +38,10 @@ public interface ExistenciasRepository extends JpaRepository<Existencias, Intege
 
 	Page<Existencias> findByBodega_Codigo(Integer bodegaId, Pageable pageable);
 
+	/** Existencias de varias variantes en una bodega, EN BLOQUE (kardex masivo). */
+	java.util.List<Existencias> findByBodega_CodigoAndProductoVariante_ProductoVarianteIdIn(
+			Integer bodegaId, java.util.Collection<Long> varianteIds);
+
 	@Query(
 			value = """
   		        SELECT
@@ -81,4 +85,25 @@ public interface ExistenciasRepository extends JpaRepository<Existencias, Intege
 			nativeQuery = true
 	)
 	List<ExistenciasBodegaDTO> listadoExistenciasNombreBodegaVariante(@Param("varianteId")  Long varianteId);
+
+	/** Versión EN BLOQUE: existencias con nombre de bodega de MUCHAS variantes en una consulta. */
+	@Query(
+			value = """
+		        SELECT
+		  			e.existencia_id as existenciaId,
+		  		    e.producto_variantes_id as productoVarianteId,
+		  		    e.bodega_id as bodegaId,
+		  		    e.existencia,
+		  		    e.stock_min as stockMin,
+		  		    e.stock_max as stockMax,
+		  		    e.ubicacion,
+		  		    e.fecha_ultimo_movimiento as fechaUltimoMovimiento,
+		  		    b.nombre as bodega
+		        FROM existencias e
+		        JOIN bodegas b ON b.codigo = e.bodega_id
+		        WHERE e.producto_variantes_id IN :varianteIds
+		        """,
+			nativeQuery = true
+	)
+	List<ExistenciasBodegaDTO> listadoExistenciasNombreBodegaVariantes(@Param("varianteIds") java.util.Collection<Long> varianteIds);
 }

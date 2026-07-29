@@ -599,6 +599,36 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                 lineas.add(creditoLinea);
             }
 
+            // ── Cuadre por redondeo (ajuste al peso) ──
+            // Los métodos de pago y retenciones van en pesos ENTEROS, pero la base/IVA
+            // pueden traer decimales de punto flotante (p. ej. IVA 83.083.247,88). En
+            // compras grandes la diferencia supera la tolerancia de $0,02 y el asiento se
+            // descartaba como "fallido": la compra quedaba SIN contabilizar (caso CC-9,
+            // diferencia $0,12 con 3.563 ítems). Si la diferencia es menor a $1, se ajusta
+            // contra la línea de mayor valor del lado que quedó corto.
+            BigDecimal totDeb = lineas.stream().map(l -> l.debito != null ? l.debito : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal totCre = lineas.stream().map(l -> l.credito != null ? l.credito : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal diffRedondeo = totCre.subtract(totDeb); // >0: faltan débitos · <0: faltan créditos
+            if (diffRedondeo.signum() != 0 && diffRedondeo.abs().compareTo(BigDecimal.ONE) < 0) {
+                boolean ajustarDebito = diffRedondeo.signum() > 0;
+                AsientoContableService.LineaDTO mayor = null;
+                for (AsientoContableService.LineaDTO l : lineas) {
+                    BigDecimal v = ajustarDebito ? l.debito : l.credito;
+                    BigDecimal vMayor = mayor == null ? null : (ajustarDebito ? mayor.debito : mayor.credito);
+                    if (v != null && v.signum() > 0 && (vMayor == null || v.compareTo(vMayor) > 0)) {
+                        mayor = l;
+                    }
+                }
+                if (mayor != null) {
+                    if (ajustarDebito) mayor.debito = mayor.debito.add(diffRedondeo);
+                    else mayor.credito = mayor.credito.add(diffRedondeo.abs());
+                    System.out.println("[AsientoCompra] Ajuste por redondeo de $" + diffRedondeo.abs()
+                            + " aplicado a la línea '" + mayor.descripcion + "' para cuadrar el asiento.");
+                }
+            }
+
             String tipo = orden.getComprobante() != null
                     ? orden.getComprobante().getTipoMovimiento().name()
                     : "CC";
@@ -642,10 +672,14 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     }
 
     private void procesarProductosDesdeRequest(List<RealizarOrdenRequestDTO.ProductoRequestPayloadDTO> products) {
+        // EN LOTE, no producto por producto: con importaciones de plantilla grandes
+        // (3000+ productos) una llamada Feign por producto tardaba minutos y colgaba
+        // la compra directa/legalización. ProductoService parte la lista en lotes.
+        List<ProductoActualizarCrearDTO> dtos = new ArrayList<>(products.size());
         for (RealizarOrdenRequestDTO.ProductoRequestPayloadDTO product : products) {
-            ProductoActualizarCrearDTO productoDTO = mapToProductoActualizarCrearDTO(product);
-            productoService.actualizarOCrearProducto(productoDTO);
+            dtos.add(mapToProductoActualizarCrearDTO(product));
         }
+        productoService.actualizarOCrearProductos(dtos);
     }
 
     private ProductoActualizarCrearDTO mapToProductoActualizarCrearDTO(RealizarOrdenRequestDTO.ProductoRequestPayloadDTO product) {

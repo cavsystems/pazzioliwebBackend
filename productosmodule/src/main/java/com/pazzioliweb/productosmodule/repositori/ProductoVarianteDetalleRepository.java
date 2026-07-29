@@ -26,4 +26,8 @@ public interface ProductoVarianteDetalleRepository extends JpaRepository<Product
 	@EntityGraph(attributePaths = { "caracteristica", "caracteristica.tipo" })
 	List<ProductoVarianteDetalle> findByProductoVariante_ProductoVarianteId(Long varianteId);
 
+	/** Versión EN BLOQUE: detalles (características) de MUCHAS variantes en una consulta. */
+	@EntityGraph(attributePaths = { "caracteristica", "caracteristica.tipo" })
+	List<ProductoVarianteDetalle> findByProductoVariante_ProductoVarianteIdIn(java.util.Collection<Long> varianteIds);
+
 }

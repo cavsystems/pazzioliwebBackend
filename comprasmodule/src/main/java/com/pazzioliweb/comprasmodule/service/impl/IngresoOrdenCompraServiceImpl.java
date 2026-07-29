@@ -182,6 +182,20 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
         log.info("══════ INGRESO COMPLETADO: {} ══════", orden.getNumeroOrden());
     }
 
+    @Override
+    @Transactional
+    public void regenerarMovimientoInventario(Long ordenId) {
+        OrdenCompra orden = ordenCompraRepository.findById(ordenId)
+                .orElseThrow(() -> new OrdenCompraException("Orden de compra no encontrada: " + ordenId));
+        if (!"RECIBIDA".equals(orden.getEstado()) && !"RECIBIDA_PARCIAL".equals(orden.getEstado())) {
+            throw new OrdenCompraException("Solo se puede regenerar el inventario de una orden RECIBIDA. Estado actual: "
+                    + orden.getEstado());
+        }
+        log.info("══════ REGENERANDO movimiento de inventario para {} ══════", orden.getNumeroOrden());
+        // Idempotente: crearMovimientoAuto no duplica si ya existe movimiento para el documento
+        generarMovimientoInventarioCompra(orden);
+    }
+
     /**
      * Registra un MovimientoInventario tipo ENTRADA con cada detalle ingresado.
      * Genera Kardex para tener trazabilidad por producto/bodega.

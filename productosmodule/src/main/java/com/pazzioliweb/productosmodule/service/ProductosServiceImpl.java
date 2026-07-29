@@ -306,7 +306,23 @@ public class ProductosServiceImpl implements ProductosService{
 
         try {
 
-            System.out.println("Tenant actual: " + TenantContext.getCurrentTenant());
+            System.out.println("Tenant actual: " + TenantContext.getCurrentTenant()
+                    + " — actualizarOCrearProducto lote de " + dtos.size() + " producto(s)");
+
+            // ── Cachés por lote ──
+            // En importaciones masivas (plantilla de 3000+ productos) casi todos los
+            // productos comparten grupo/línea/impuesto/tipo/unidad: resolverlos con una
+            // consulta POR PRODUCTO multiplicaba las queries (~6 × N). Se resuelven una
+            // vez por valor distinto dentro del lote.
+            java.util.Map<String, Grupos> cacheGrupos = new java.util.HashMap<>();
+            java.util.Map<String, Lineas> cacheLineas = new java.util.HashMap<>();
+            java.util.Map<Integer, Impuestos> cacheImpuestos = new java.util.HashMap<>();
+            java.util.Map<String, TipoProducto> cacheTipos = new java.util.HashMap<>();
+            java.util.Map<String, UnidadesMedida> cacheUnidades = new java.util.HashMap<>();
+            java.util.Map<Integer, Bodegas> cacheBodegas = new java.util.HashMap<>();
+            java.util.Map<Integer, com.pazzioliweb.productosmodule.entity.Precios> cachePrecios = new java.util.HashMap<>();
+            Usuario usuarioDefault = usuarioRepository.findById(1).orElse(null);
+
         for (ProductoActualizarCrearDTO dto : dtos) {
         // Find or create product
 
@@ -328,43 +344,44 @@ public class ProductosServiceImpl implements ProductosService{
                 .anyMatch(a -> "descripcion".equalsIgnoreCase(a.getNombre())));
         producto.setManejaVariantes(dto.getVariantes() != null && !dto.getVariantes().isEmpty() && !tieneAtributoDescripcion);
 
-        // Set relations
-        Grupos grupo = grupoRepository.findByDescripcion(dto.getGrupo())
-                .orElseGet(() -> {
-                    Grupos nuevoGrupo = new Grupos();
-                    nuevoGrupo.setId(grupoRepository.findPrimerHueco());
-                    nuevoGrupo.setDescripcion(dto.getGrupo());
-                    return grupoRepository.save(nuevoGrupo);
-                });
+        // Set relations (resueltas vía caché del lote)
+        Grupos grupo = cacheGrupos.computeIfAbsent(dto.getGrupo(), g ->
+                grupoRepository.findByDescripcion(g)
+                        .orElseGet(() -> {
+                            Grupos nuevoGrupo = new Grupos();
+                            nuevoGrupo.setId(grupoRepository.findPrimerHueco());
+                            nuevoGrupo.setDescripcion(g);
+                            return grupoRepository.save(nuevoGrupo);
+                        }));
         producto.setGrupo(grupo);
 
-        Lineas linea = lineaRepository.findByDescripcion(dto.getLinea())
-                .orElseGet(() -> {
-                    Lineas nuevaLinea = new Lineas();
-                    nuevaLinea.setId(lineaRepository.findPrimerHueco());
-                    nuevaLinea.setDescripcion(dto.getLinea());
-                    return lineaRepository.save(nuevaLinea);
-                });
+        Lineas linea = cacheLineas.computeIfAbsent(dto.getLinea(), l ->
+                lineaRepository.findByDescripcion(l)
+                        .orElseGet(() -> {
+                            Lineas nuevaLinea = new Lineas();
+                            nuevaLinea.setId(lineaRepository.findPrimerHueco());
+                            nuevaLinea.setDescripcion(l);
+                            return lineaRepository.save(nuevaLinea);
+                        }));
         producto.setLinea(linea);
 
-        Impuestos impuesto = impuestoRepository.findByTarifa(dto.getImpuesto())
-                .orElseThrow(() -> new EntityNotFoundException("Impuesto no encontrado: " + dto.getImpuesto()));
+        Impuestos impuesto = cacheImpuestos.computeIfAbsent(dto.getImpuesto(), t -> impuestoRepository.findByTarifa(t)
+                .orElseThrow(() -> new EntityNotFoundException("Impuesto no encontrado: " + t)));
         producto.setImpuestos(impuesto);
 
-        TipoProducto tipoProducto = tipoProductoRepository.findByNombre(dto.getTipoProducto())
-                .orElseThrow(() -> new EntityNotFoundException("TipoProducto no encontrado: " + dto.getTipoProducto()));
+        TipoProducto tipoProducto = cacheTipos.computeIfAbsent(dto.getTipoProducto(), n -> tipoProductoRepository.findByNombre(n)
+                .orElseThrow(() -> new EntityNotFoundException("TipoProducto no encontrado: " + n)));
         producto.setTipoProducto(tipoProducto);
 
         // Assume default usuario, perhaps system
-        Usuario usuario = usuarioRepository.findById(1).orElse(null); // Default
-        producto.setUsuario(usuario);
+        producto.setUsuario(usuarioDefault);
 
         producto = productosRepository.save(producto);
-            System.out.println("Producto actulizado");
         // Handle unidad medida
         if (dto.getUnidadMedida() != null) {
-            UnidadesMedida unidadesMedida = unidadesMedidaRepository.findBySigla(dto.getUnidadMedida())
-                    .orElseThrow(() -> new EntityNotFoundException("UnidadMedida no encontrada: " + dto.getUnidadMedida()));
+            UnidadesMedida unidadesMedida = cacheUnidades.computeIfAbsent(dto.getUnidadMedida(), s ->
+                    unidadesMedidaRepository.findBySigla(s)
+                            .orElseThrow(() -> new EntityNotFoundException("UnidadMedida no encontrada: " + s)));
             UnidadesMedidaProducto ump = new UnidadesMedidaProducto();
             UnidadesMedidaProductoId umpId = new UnidadesMedidaProductoId();
             umpId.setProductoId(producto.getProductoId());
@@ -378,10 +395,53 @@ public class ProductosServiceImpl implements ProductosService{
         // Handle variants
         if (dto.getVariantes() != null && !dto.getVariantes().isEmpty()) {
             for (ProductoActualizarCrearDTO.VarianteDTO varianteDto : dto.getVariantes()) {
-                System.out.println("Producto actulizado VARIANTES" +varianteDto.getCodigoBarraVariante());
-                ProductoVariante variante = productoVarianteRepository.findByCodigoBarras(varianteDto.getCodigoBarraVariante())
-                        .orElse(new ProductoVariante());
-                // ¿Es una variante nueva o una ya existente que encontramos por código de barras?
+                // Código de barras VÁLIDO = no nulo, no vacío y distinto de "0" (las plantillas
+                // de importación llegan con "0" cuando el producto no tiene código de barras).
+                String codBarraVar = varianteDto.getCodigoBarraVariante() != null
+                        ? varianteDto.getCodigoBarraVariante().trim() : "";
+                boolean codBarraValido = !codBarraVar.isEmpty() && !"0".equals(codBarraVar);
+
+                ProductoVariante variante = null;
+                if (codBarraValido) {
+                    variante = productoVarianteRepository.findByCodigoBarras(codBarraVar).orElse(null);
+                    // NUNCA reasignar la variante de OTRO producto. Con códigos vacíos/"0"
+                    // repetidos, la búsqueda global encontraba la variante del producto anterior
+                    // del lote y se la "robaba": una importación de 3000+ productos terminaba con
+                    // UNA sola variante (la del último) y 3000 productos sin variantes ni kardex.
+                    if (variante != null && variante.getProducto() != null
+                            && variante.getProducto().getProductoId() != null
+                            && !variante.getProducto().getProductoId().equals(producto.getProductoId())) {
+                        variante = null;
+                    }
+                } else if (varianteDto.getReferenciaVariantes() != null && !varianteDto.getReferenciaVariantes().isBlank()) {
+                    // Sin código de barras: resolver DENTRO del mismo producto por referencia
+                    variante = productoVarianteRepository
+                            .findByProducto_CodigoContableAndReferenciaVariantes(
+                                    producto.getCodigoContable(), varianteDto.getReferenciaVariantes())
+                            .orElse(null);
+                }
+                // Producto de UNA sola variante en el DTO que no se resolvió arriba:
+                // reutilizar la única variante existente del producto (predeterminada o no),
+                // siempre que no tenga OTRO código de barras distinto. Evita crear variantes
+                // duplicadas del mismo producto (caso TUR014: la variante existente no estaba
+                // marcada como predeterminada y una reimportación con código de barras nuevo
+                // creaba una segunda variante con la misma referencia → el kardex reventaba
+                // con "query did not return a unique result").
+                if (variante == null && dto.getVariantes().size() == 1 && producto.getProductoId() != null) {
+                    java.util.List<ProductoVariante> delProducto =
+                            productoVarianteRepository.findByProducto_ProductoId(producto.getProductoId());
+                    if (delProducto.size() == 1) {
+                        ProductoVariante unica = delProducto.get(0);
+                        boolean sinCodigo = unica.getCodigoBarras() == null || unica.getCodigoBarras().isBlank();
+                        if (sinCodigo || !codBarraValido || codBarraVar.equals(unica.getCodigoBarras())) {
+                            variante = unica;
+                        }
+                    }
+                }
+                if (variante == null) {
+                    variante = new ProductoVariante();
+                }
+                // ¿Es una variante nueva o una ya existente?
                 boolean esNueva = variante.getProductoVarianteId() == null;
 
                 variante.setProducto(producto);
@@ -392,14 +452,18 @@ public class ProductosServiceImpl implements ProductosService{
                 if (varianteDto.getSku() != null) {
                     variante.setSku(varianteDto.getSku());
                 } else if (esNueva) {
-                    variante.setSku(varianteDto.getCodigoBarraVariante());
+                    // Sin código de barras válido, el SKU es el código contable: así el kardex
+                    // resuelve la variante por su fallback findBySku(codigoProducto).
+                    variante.setSku(codBarraValido ? codBarraVar : dto.getCodigo());
                 }
-                variante.setCodigoBarras(varianteDto.getCodigoBarraVariante());
+                variante.setCodigoBarras(codBarraValido ? codBarraVar : null);
                 // Referencia: idem, no pisar la referencia existente con el código de barras.
                 if (varianteDto.getReferenciaVariantes() != null) {
                     variante.setReferenciaVariantes(varianteDto.getReferenciaVariantes());
                 } else if (esNueva) {
-                    variante.setReferenciaVariantes(varianteDto.getCodigoBarraVariante());
+                    variante.setReferenciaVariantes(codBarraValido ? codBarraVar
+                            : (dto.getReferencia() != null && !dto.getReferencia().isBlank()
+                                ? dto.getReferencia() : dto.getCodigo()));
                 }
                 variante.setActivo(true);
                 // Predeterminada: honrar el flag del DTO; si no viene, conservar el valor actual.
@@ -408,7 +472,8 @@ public class ProductosServiceImpl implements ProductosService{
                 if (varianteDto.getPredeterminada() != null) {
                     variante.setPredeterminada(varianteDto.getPredeterminada());
                 } else if (esNueva) {
-                    variante.setPredeterminada(false);
+                    // Producto de una sola variante sin código de barras = su variante por defecto
+                    variante.setPredeterminada(!codBarraValido && dto.getVariantes().size() == 1);
                 }
 
                 variante = productoVarianteRepository.save(variante);
@@ -417,12 +482,12 @@ public class ProductosServiceImpl implements ProductosService{
                 if (varianteDto.getExistencias() != null && !varianteDto.getExistencias().isEmpty()) {
                     // Asume que el bodegaId es el mismo en todas las existencias (la destino)
                     Integer bodegaDestinoId = varianteDto.getExistencias().get(0).getBodegaId();
-                    Bodegas bodegaDestino = bodegasRepository.findByCodigo(bodegaDestinoId)
-                            .orElseThrow(() -> new EntityNotFoundException("Bodega destino no encontrada: " + bodegaDestinoId));
+                    Bodegas bodegaDestino = cacheBodegas.computeIfAbsent(bodegaDestinoId, b ->
+                            bodegasRepository.findByCodigo(b)
+                                    .orElseThrow(() -> new EntityNotFoundException("Bodega destino no encontrada: " + b)));
 
                     Existencias existencia = existenciasRepository.findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(variante.getProductoVarianteId(), bodegaDestino.getCodigo())
                             .orElse(new Existencias());
-                    System.out.println("Producto actulizado VARIANTES procesada existencia"+variante.getProductoVarianteId()+bodegaDestino.getCodigo());
                     existencia.setBodega(bodegaDestino);
                     existencia.setProductoVariante(variante);
                     // No setear existencia aquí, ya que la mercancía no ha llegado peros si se crea el registro en
@@ -450,8 +515,9 @@ public class ProductosServiceImpl implements ProductosService{
                 // Handle precios
                 if (varianteDto.getPrecios() != null && !varianteDto.getPrecios().isEmpty()) {
                     for (ProductoActualizarCrearDTO.PrecioDTO precioDto : varianteDto.getPrecios()) {
-                        com.pazzioliweb.productosmodule.entity.Precios precio = preciosRepository.findById(precioDto.getIdTipoPrecio())
-                                .orElseThrow(() -> new EntityNotFoundException("Precio no encontrado: " + precioDto.getIdTipoPrecio()));
+                        com.pazzioliweb.productosmodule.entity.Precios precio = cachePrecios.computeIfAbsent(precioDto.getIdTipoPrecio(), id ->
+                                preciosRepository.findById(id)
+                                        .orElseThrow(() -> new EntityNotFoundException("Precio no encontrado: " + id)));
 
                         Optional<PreciosProductoVariante> existente =
                                 preciosProductoVarianteRepository.findByProductoVariante_ProductoVarianteIdAndPrecio_PrecioId(
@@ -571,9 +637,118 @@ public class ProductosServiceImpl implements ProductosService{
     @Override
     public List<ProductoConVariantesDTO> listarTodosProductosConVariantesYCaracteristicas() {
         List<Productos> productos = productosRepository.findAllWithVariantes();
-        return productos.stream()
-                .map(this::convertirAProductoConVariantesDTO)
+
+        // ── Precarga EN BLOQUE ──
+        // Antes se hacían ~4 consultas POR producto/variante (unidad de medida,
+        // características, existencias y precios): con 3.500 productos eran ~14.000
+        // consultas y la vista de productos tardaba minutos en cargar. Ahora todo
+        // se trae en 4 consultas masivas y se arma en memoria.
+        List<Long> varianteIds = productos.stream()
+                .flatMap(p -> p.getVariantes().stream())
+                .map(ProductoVariante::getProductoVarianteId)
                 .collect(Collectors.toList());
+        List<Integer> productoIds = productos.stream()
+                .map(Productos::getProductoId)
+                .collect(Collectors.toList());
+
+        java.util.Map<Long, List<ProductoVarianteDetalle>> detallesPorVariante = varianteIds.isEmpty()
+                ? java.util.Collections.emptyMap()
+                : productoVarianteDetalleRepository.findByProductoVariante_ProductoVarianteIdIn(varianteIds).stream()
+                        .collect(Collectors.groupingBy(d -> d.getProductoVariante().getProductoVarianteId()));
+
+        java.util.Map<Long, List<com.pazzioliweb.productosmodule.dtos.ExistenciasBodegaDTO>> existenciasPorVariante = varianteIds.isEmpty()
+                ? java.util.Collections.emptyMap()
+                : existenciasRepository.listadoExistenciasNombreBodegaVariantes(varianteIds).stream()
+                        .collect(Collectors.groupingBy(e -> e.getProductoVarianteId().longValue()));
+
+        java.util.Map<Long, List<com.pazzioliweb.productosmodule.dtos.PreciosProductoVarianteDTO>> preciosPorVariante = varianteIds.isEmpty()
+                ? java.util.Collections.emptyMap()
+                : preciosProductoVarianteRepository.preciosProductoVarianteMultiple(
+                                varianteIds.stream().map(Long::intValue).collect(Collectors.toList()),
+                                org.springframework.data.domain.Pageable.unpaged())
+                        .getContent().stream()
+                        .collect(Collectors.groupingBy(p -> p.getProductoVarianteId().longValue()));
+
+        java.util.Map<Integer, String> unidadPorProducto = new java.util.HashMap<>();
+        if (!productoIds.isEmpty()) {
+            for (UnidadesMedidaProducto ump : unidadesMedidaProductoRepository.findByProducto_ProductoIdIn(productoIds)) {
+                if (ump.getUnidadMedida() != null && ump.getUnidadMedida().getSigla() != null) {
+                    unidadPorProducto.putIfAbsent(ump.getProducto().getProductoId(), ump.getUnidadMedida().getSigla());
+                }
+            }
+        }
+
+        return productos.stream()
+                .map(p -> convertirAProductoConVariantesDTO(p, detallesPorVariante, existenciasPorVariante,
+                        preciosPorVariante, unidadPorProducto))
+                .collect(Collectors.toList());
+    }
+
+    /** Conversión con datos PRE-CARGADOS en bloque (sin consultas por producto/variante). */
+    private ProductoConVariantesDTO convertirAProductoConVariantesDTO(
+            Productos producto,
+            java.util.Map<Long, List<ProductoVarianteDetalle>> detallesPorVariante,
+            java.util.Map<Long, List<com.pazzioliweb.productosmodule.dtos.ExistenciasBodegaDTO>> existenciasPorVariante,
+            java.util.Map<Long, List<com.pazzioliweb.productosmodule.dtos.PreciosProductoVarianteDTO>> preciosPorVariante,
+            java.util.Map<Integer, String> unidadPorProducto) {
+        ProductoConVariantesDTO dto = new ProductoConVariantesDTO();
+        dto.setProductoId(producto.getProductoId());
+        dto.setCodigoContable(producto.getCodigoContable());
+        dto.setCodigoBarras(producto.getCodigoBarras());
+        dto.setReferencia(producto.getReferencia());
+        dto.setDescripcion(producto.getDescripcion());
+        dto.setCosto(producto.getCosto());
+        dto.setEstado(producto.getEstado());
+        dto.setImagen(producto.getImagen());
+        dto.setManejaVariantes(producto.getManejaVariantes());
+        dto.setGrupo(producto.getGrupo() != null ? producto.getGrupo().getDescripcion() : null);
+        dto.setLinea(producto.getLinea() != null ? producto.getLinea().getDescripcion() : null);
+        dto.setImpuesto(producto.getImpuestos() != null ? String.valueOf(producto.getImpuestos().getTarifa()) : null);
+        dto.setTipoProducto(producto.getTipoProducto() != null ? producto.getTipoProducto().getNombre() : null);
+        dto.setUnidadMedida(unidadPorProducto.get(producto.getProductoId()));
+        dto.setVariantes(producto.getVariantes().stream()
+                .map(v -> convertirAVarianteDTO(v, detallesPorVariante, existenciasPorVariante, preciosPorVariante))
+                .collect(Collectors.toList()));
+        return dto;
+    }
+
+    /** Conversión de variante con datos PRE-CARGADOS (sin consultas por variante). */
+    private VarianteDTO convertirAVarianteDTO(
+            ProductoVariante variante,
+            java.util.Map<Long, List<ProductoVarianteDetalle>> detallesPorVariante,
+            java.util.Map<Long, List<com.pazzioliweb.productosmodule.dtos.ExistenciasBodegaDTO>> existenciasPorVariante,
+            java.util.Map<Long, List<com.pazzioliweb.productosmodule.dtos.PreciosProductoVarianteDTO>> preciosPorVariante) {
+        VarianteDTO dto = new VarianteDTO();
+        dto.setProductoVarianteId(variante.getProductoVarianteId());
+        dto.setSku(variante.getSku());
+        dto.setReferenciaVariantes(variante.getReferenciaVariantes());
+        dto.setCodigoBarras(variante.getCodigoBarras());
+        dto.setPrecio(variante.getPrecio());
+        dto.setActivo(variante.getActivo());
+        dto.setPredeterminada(variante.getPredeterminada());
+        dto.setImagen(variante.getImagen());
+        dto.setUltimaFechaVenta(variante.getUltimaFechaVenta());
+
+        Long id = variante.getProductoVarianteId();
+        dto.setCaracteristicas(detallesPorVariante.getOrDefault(id, java.util.Collections.emptyList()).stream()
+                .map(detalle -> {
+                    CaracteristicaDetalleDTO caracteristicaDTO = new CaracteristicaDetalleDTO();
+                    if (detalle.getCaracteristica() != null) {
+                        caracteristicaDTO.setCaracteristicaId(detalle.getCaracteristica().getCaracteristicaId());
+                        caracteristicaDTO.setNombre(detalle.getCaracteristica().getNombre());
+                        if (detalle.getCaracteristica().getTipo() != null) {
+                            TipoCaracteristicaDTO tipoDTO = new TipoCaracteristicaDTO();
+                            tipoDTO.setTipoCaracteristicaId(detalle.getCaracteristica().getTipo().getTipoCaracteristicaId());
+                            tipoDTO.setNombre(detalle.getCaracteristica().getTipo().getNombre());
+                            caracteristicaDTO.setTipo(tipoDTO);
+                        }
+                    }
+                    return caracteristicaDTO;
+                })
+                .collect(Collectors.toList()));
+        dto.setExistencias(existenciasPorVariante.getOrDefault(id, java.util.Collections.emptyList()));
+        dto.setPrecios(preciosPorVariante.getOrDefault(id, java.util.Collections.emptyList()));
+        return dto;
     }
 
     @Override

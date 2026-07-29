@@ -37,6 +37,22 @@ public class OrdenCompraController {
     private com.pazzioliweb.commonbacken.services.WhatsappService whatsappService;
 
     @Autowired
+    private com.pazzioliweb.comprasmodule.service.IngresoOrdenCompraService ingresoOrdenCompraService;
+
+    /**
+     * Regenera el movimiento de inventario + kardex de una orden RECIBIDA cuyo
+     * movimiento no quedó registrado (p. ej. la transacción del kardex falló
+     * después del ingreso). Idempotente: si ya existe, no duplica.
+     */
+    @PostMapping("/{id}/regenerar-inventario")
+    public ResponseEntity<java.util.Map<String, Object>> regenerarInventario(@PathVariable("id") Long ordenId) {
+        ingresoOrdenCompraService.regenerarMovimientoInventario(ordenId);
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("mensaje", "Movimiento de inventario regenerado (o ya existía) para la orden " + ordenId);
+        return ResponseEntity.ok(resp);
+    }
+
+    @Autowired
     public OrdenCompraController(OrdenCompraService ordenCompraService,
                                   CuentaPorPagarService cuentaPorPagarService,
                                   EmailOrdenCompraService emailService) {

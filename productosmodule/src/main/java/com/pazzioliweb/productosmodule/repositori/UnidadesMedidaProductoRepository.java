@@ -15,5 +15,9 @@ public interface UnidadesMedidaProductoRepository extends JpaRepository<Unidades
 	
 	List<UnidadesMedidaProducto> findByProducto_ProductoId(Integer productoId);
 
+	/** Versión EN BLOQUE: unidades de medida de MUCHOS productos en una consulta. */
+	@org.springframework.data.jpa.repository.EntityGraph(attributePaths = { "unidadMedida" })
+	List<UnidadesMedidaProducto> findByProducto_ProductoIdIn(java.util.Collection<Integer> productoIds);
+
 	void deleteByProducto_ProductoId(Integer productoId);
 }
