@@ -225,7 +225,8 @@ public class DevolucionRegistradaListener {
         DianDocumentoRequestDTO.ReceptorDTO receptor = new DianDocumentoRequestDTO.ReceptorDTO();
         if (cliente != null) {
             if (cliente.getTipoIdentificacion() != null) {
-                receptor.setTipoIdentificacion(String.valueOf(cliente.getTipoIdentificacion().getCodigo()));
+                // Código DIAN (13=CC, 31=NIT...), NO el PK interno de la tabla tipoidentificacion
+                receptor.setTipoIdentificacion(String.valueOf(cliente.getTipoIdentificacion().getCodigoTipoIdentificacion()));
             }
             receptor.setNumeroIdentificacion(cliente.getIdentificacion());
             receptor.setDigitoVerificacion(cliente.getDv());

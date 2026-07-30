@@ -7,12 +7,14 @@ D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\service\MisReportesService.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\HistoricoProductoDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CarteraAgingDTO.java
+D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CarteraVendedorDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\CertificadoRetencionDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\RentabilidadProductoDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ValorizacionInventarioDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorPeriodoDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\VentasPorVendedorDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\repository\ReportesRepository.java
+D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ClientePorVendedorDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ComprasVsVentasDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\InventarioCompletoDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\reportesmodule\src\main\java\com\pazzioliweb\reportesmodule\dtos\ProductoStockBajoDTO.java

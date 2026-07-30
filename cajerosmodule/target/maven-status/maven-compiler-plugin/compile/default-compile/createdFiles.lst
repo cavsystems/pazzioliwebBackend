@@ -1,4 +1,5 @@
 com\pazzioliweb\cajerosmodule\repositori\DetalleCajeroRepository.class
+com\pazzioliweb\cajerosmodule\service\EmailCuadreCajaService.class
 com\pazzioliweb\cajerosmodule\dtos\DetalleCajeroDTO.class
 com\pazzioliweb\cajerosmodule\entity\Cajero.class
 com\pazzioliweb\cajerosmodule\entity\DetalleCajero$EstadoDetalleCajero.class

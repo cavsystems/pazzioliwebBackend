@@ -20,10 +20,17 @@ public interface ReportesService {
     List<VentasPorPeriodoDTO> getVentasPorHora(LocalDate inicio, LocalDate fin);
 
     /** Top N productos más vendidos */
-    List<ProductoMasVendidoDTO> getTopProductos(LocalDate inicio, LocalDate fin, int topN);
+    List<ProductoMasVendidoDTO> getTopProductos(LocalDate inicio, LocalDate fin, int topN,
+                                                 Integer lineaId, Integer grupoId);
 
     /** Ventas agrupadas por vendedor */
     List<VentasPorVendedorDTO> getVentasPorVendedor(LocalDate inicio, LocalDate fin);
+
+    /** Drill-down: clientes a los que un vendedor les vendió en el periodo. */
+    List<ClientePorVendedorDTO> getClientesPorVendedor(Integer vendedorId, LocalDate inicio, LocalDate fin);
+
+    /** Estado de cartera por vendedor con antigüedad 30/60/90/+90. */
+    List<CarteraVendedorDTO> getCarteraPorVendedor();
 
     /** Ventas agrupadas por cajero */
     List<VentasPorCajeroDTO> getVentasPorCajero(LocalDate inicio, LocalDate fin);
@@ -43,8 +50,9 @@ public interface ReportesService {
     /** Compras agrupadas por proveedor */
     List<ComprasPorProveedorDTO> getComprasPorProveedor(LocalDate inicio, LocalDate fin, int topN);
 
-    /** Comparativa compras vs ventas por mes */
-    List<ComprasVsVentasDTO> getComprasVsVentas(LocalDate inicio, LocalDate fin);
+    /** Comparativa compras vs ventas por mes. lineaId/grupoId en null = sin filtro. */
+    List<ComprasVsVentasDTO> getComprasVsVentas(LocalDate inicio, LocalDate fin,
+                                                Integer lineaId, Integer grupoId);
 
     /** Productos con stock bajo — listado detallado */
     List<ProductoStockBajoDTO> getProductosStockBajo(int limite);
@@ -53,16 +61,18 @@ public interface ReportesService {
     List<MovimientoCajaTipoDTO> getMovimientosCajaPorTipo(LocalDate inicio, LocalDate fin);
 
     /** Rentabilidad por producto (margen de ganancia) */
-    List<RentabilidadProductoDTO> getRentabilidadProductos(LocalDate inicio, LocalDate fin, int topN);
+    List<RentabilidadProductoDTO> getRentabilidadProductos(LocalDate inicio, LocalDate fin, int topN,
+                                                            Integer lineaId, Integer grupoId);
 
     /** Ventas por día de la semana */
     List<VentasPorPeriodoDTO> getVentasPorDiaSemana(LocalDate inicio, LocalDate fin);
 
     // ── Reportes nuevos ───────────────────────────────────────────
 
-    /** Comparativo periodo actual vs periodo anterior. */
+    /** Comparativo periodo actual vs periodo anterior. lineaId/grupoId en null = sin filtro. */
     ComparativoPeriodosDTO getComparativoPeriodos(LocalDate actualInicio, LocalDate actualFin,
-                                                  LocalDate anteriorInicio, LocalDate anteriorFin);
+                                                  LocalDate anteriorInicio, LocalDate anteriorFin,
+                                                  Integer lineaId, Integer grupoId);
 
     /** Lista unificada de documentos anulados (ventas + recibos + egresos). */
     List<AnulacionDTO> getAnulaciones(LocalDate inicio, LocalDate fin);
