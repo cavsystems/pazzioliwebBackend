@@ -661,7 +661,7 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
     @Query(value = """
             SELECT 
                 DAYOFWEEK(v.fecha_emision) AS diaSemana,
-                CASE DAYOFWEEK(v.fecha_emision)
+                MAX(CASE DAYOFWEEK(v.fecha_emision)
                     WHEN 1 THEN 'Domingo'
                     WHEN 2 THEN 'Lunes'
                     WHEN 3 THEN 'Martes'
@@ -669,7 +669,7 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
                     WHEN 5 THEN 'Jueves'
                     WHEN 6 THEN 'Viernes'
                     WHEN 7 THEN 'Sábado'
-                END AS nombreDia,
+                END) AS nombreDia,
                 COALESCE(SUM(v.total_venta), 0) AS total,
                 COUNT(v.id) AS cantidad
             FROM ventas v
