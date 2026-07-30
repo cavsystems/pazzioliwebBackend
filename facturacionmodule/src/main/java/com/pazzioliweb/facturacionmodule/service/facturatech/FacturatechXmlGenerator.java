@@ -468,6 +468,12 @@ public class FacturatechXmlGenerator {
         tag(xml, "ENC_4", "UBL 2.1");
         tag(xml, "ENC_5", "DIAN 2.1");
         tag(xml, "ENC_6", nvl(req.getPrefijo()) + (req.getConsecutivo() != null ? req.getConsecutivo() : ""));
+        // ENC_7/ENC_8: fecha y hora de emisión en zona horaria de Colombia (-05:00).
+        // El insumo base de certificación C1 los incluye; sin ellos Facturatech puede
+        // tomar la fecha de firma y descuadrar contra la fecha del documento.
+        LocalDate fechaEmi = req.getFechaEmision() != null ? req.getFechaEmision() : LocalDate.now(ZONA_CO);
+        tag(xml, "ENC_7", fechaEmi.toString());
+        tag(xml, "ENC_8", LocalTime.now(ZONA_CO).format(HORA_DS) + "-05:00");
         tag(xml, "ENC_9", tipoFactura);
         tag(xml, "ENC_10", COP);
         tag(xml, "ENC_15", String.valueOf(numItems));

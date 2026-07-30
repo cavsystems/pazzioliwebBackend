@@ -92,6 +92,30 @@ public class FacturasController {
 	    return ResponseEntity.ok(facturas);
 	}
 	
+	/**
+	 * Resumen de la factura electrónica de una venta — lo que necesita el POS para
+	 * imprimir la tirilla con el bloque DIAN (número, CUFE, QR, estado y resolución).
+	 * 404 si la venta aún no tiene factura.
+	 */
+	@GetMapping("/por-venta/{ventaId}")
+	public ResponseEntity<java.util.Map<String, Object>> porVenta(@PathVariable Long ventaId) {
+		return facturaService.buscarPorVentaId(ventaId)
+				.<ResponseEntity<java.util.Map<String, Object>>>map(f -> {
+					java.util.Map<String, Object> out = new java.util.HashMap<>();
+					out.put("facturaId", f.getFacturaId());
+					out.put("numeroFactura", f.getNumeroFactura());
+					out.put("prefijo", f.getPrefijo());
+					out.put("consecutivo", f.getConsecutivo());
+					out.put("cufe", f.getCufe());
+					out.put("qrData", f.getQrData());
+					out.put("estadoDian", f.getEstadoDian() != null ? f.getEstadoDian().name() : null);
+					out.put("mensajeDian", f.getMensajeDian());
+					out.put("fechaValidacionDian", f.getFechaValidacionDian());
+					return ResponseEntity.ok(out);
+				})
+				.orElse(ResponseEntity.notFound().build());
+	}
+
 	@GetMapping("/{id}")
     public ResponseEntity<Facturas> obtener(@PathVariable Integer id) {
         return facturaService.buscarPorId(id)

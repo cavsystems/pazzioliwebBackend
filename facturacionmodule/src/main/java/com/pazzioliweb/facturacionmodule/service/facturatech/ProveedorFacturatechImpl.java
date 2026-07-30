@@ -88,6 +88,26 @@ public class ProveedorFacturatechImpl implements ProveedorFacturacionElectronica
             return response;
         }
 
+        // ── SET de pruebas C1: el WS demo solo acepta documentos del NIT demo de
+        // Facturatech (ENC_2 / EMI_2 / EMI_22). Se sobreescribe la identificación del
+        // emisor SOLO en el XML; la factura guardada en BD conserva los datos reales.
+        if (config.getSetPruebas().isHabilitado()) {
+            if (request.getEmisor() == null) {
+                request.setEmisor(new DianDocumentoRequestDTO.EmisorDTO());
+            }
+            DianDocumentoRequestDTO.EmisorDTO e = request.getEmisor();
+            e.setNumeroIdentificacion(config.getSetPruebas().getNit());
+            e.setDigitoVerificacion(config.getSetPruebas().getDv());
+            e.setTipoIdentificacion("31");
+            if (config.getSetPruebas().getRazonSocial() != null && !config.getSetPruebas().getRazonSocial().isBlank()) {
+                e.setRazonSocial(config.getSetPruebas().getRazonSocial());
+                e.setNombreComercial(config.getSetPruebas().getRazonSocial());
+            }
+            log.warn("⚠️ SET DE PRUEBAS C1 ACTIVO: el documento se emite con el NIT demo {} ({}). " +
+                    "Desactive facturatech.set-pruebas.habilitado en producción.",
+                    config.getSetPruebas().getNit(), config.getSetPruebas().getRazonSocial());
+        }
+
         // Modo simulación si no hay credenciales configuradas (equivalente al modo sin certificado)
         if (!config.credencialesConfiguradas()) {
             log.warn("⚠️ MODO SIMULACIÓN: faltan credenciales Facturatech (facturatech.usuario / facturatech.password)");

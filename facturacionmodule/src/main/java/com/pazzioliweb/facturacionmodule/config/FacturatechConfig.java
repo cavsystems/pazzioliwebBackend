@@ -54,6 +54,25 @@ public class FacturatechConfig {
     /** Parámetros propios del Documento Soporte (tipo 05) y su nota de ajuste (95). */
     private DocumentoSoporte documentoSoporte = new DocumentoSoporte();
 
+    /**
+     * SET de pruebas C1 de Facturatech: los documentos deben emitirse con el NIT
+     * DEMO del proveedor (901143311, Ftech Solutions SAS), no con el de la empresa.
+     * Con habilitado=true se sobreescribe la identificación del emisor en el XML.
+     * DESACTIVAR al pasar a credenciales C2/C3 o a producción.
+     */
+    private SetPruebas setPruebas = new SetPruebas();
+
+    @Data
+    public static class SetPruebas {
+        private boolean habilitado = false;
+        /** NIT demo entregado en las credenciales del SET de pruebas. */
+        private String nit = "901143311";
+        /** Dígito de verificación del NIT demo. */
+        private String dv = "8";
+        /** Razón social del NIT demo (Ftech Solutions SAS). */
+        private String razonSocial = "Ftech Solutions SAS";
+    }
+
     @Data
     public static class DocumentoSoporte {
         /** ENC_21 (Tabla 38): "10" Residente, "11" No Residente. */

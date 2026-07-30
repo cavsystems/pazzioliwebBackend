@@ -49,19 +49,22 @@ public class DevolucionRegistradaListener {
     private final EmpresaRepositori empresaRepositori;
     private final ProveedorFacturacionElectronica proveedorDian;
     private final DianConfig dianConfig;
+    private final com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante;
 
     public DevolucionRegistradaListener(DevolucionRepository devolucionRepository,
                                          FacturasRepository facturasRepository,
                                          ComprobanteContableRepository comprobantesRepository,
                                          EmpresaRepositori empresaRepositori,
                                          ProveedorFacturacionElectronica proveedorDian,
-                                         DianConfig dianConfig) {
+                                         DianConfig dianConfig,
+                                         com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante) {
         this.devolucionRepository = devolucionRepository;
         this.facturasRepository = facturasRepository;
         this.comprobantesRepository = comprobantesRepository;
         this.empresaRepositori = empresaRepositori;
         this.proveedorDian = proveedorDian;
         this.dianConfig = dianConfig;
+        this.asignacionComprobante = asignacionComprobante;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -92,26 +95,19 @@ public class DevolucionRegistradaListener {
             }
             Facturas facturaOriginal = facturaOpt.get();
 
-            // Resolver comprobante NC: primero buscar por cajero (si hay), si no, el primero activo
-            List<ComprobanteContable> compsNC = comprobantesRepository.findByTipo(TipoMovimientoComprobante.NC);
-            Optional<ComprobanteContable> compOpt = compsNC.stream()
-                    .filter(c -> Boolean.TRUE.equals(c.getActivo()))
-                    .filter(c -> {
-                        if (event.getCajeroId() == null) return true;
-                        java.util.Set<Integer> ids = c.getCajeroIds();
-                        return ids != null && ids.contains(event.getCajeroId());
-                    })
-                    .findFirst();
-            if (compOpt.isEmpty()) {
-                // Fallback: cualquier NC activo (incluso sin cajero asignado o LEGACY)
-                compOpt = compsNC.stream().filter(c -> Boolean.TRUE.equals(c.getActivo())).findFirst();
-            }
-            if (compOpt.isEmpty()) {
-                log.warn("No hay comprobante activo tipo NC. Configúrelo en pantalla Comprobantes Contables. Se omite NC.");
+            // Numeración de la NC con AsignacionComprobanteService: lock pesimista sobre el
+            // comprobante (dos devoluciones concurrentes ya no duplican folio) y validación
+            // de resolución vigente/rango (28301..28400 en el SET C1). Antes se hacía un
+            // read-modify-write manual sin lock y sin verificar consecutivoHasta.
+            com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado rNC;
+            try {
+                rNC = asignacionComprobante.asignarSinCajero(TipoMovimientoComprobante.NC);
+            } catch (RuntimeException ex) {
+                log.warn("No se pudo asignar numeración NC ({}). Se omite la Nota Crédito electrónica.", ex.getMessage());
                 return;
             }
-            ComprobanteContable compNC = compOpt.get();
-            int siguiente = compNC.getSiguienteConsecutivo() != null ? compNC.getSiguienteConsecutivo() : 1;
+            ComprobanteContable compNC = rNC.getComprobante();
+            int siguiente = rNC.getConsecutivo();
 
             // Armar request DIAN para NC
             DianDocumentoRequestDTO req = armarRequestNC(devolucion, venta, facturaOriginal,
@@ -133,17 +129,15 @@ public class DevolucionRegistradaListener {
 
             DianDocumentoResponseDTO resp = proveedorDian.enviarFactura(req);
 
-            // Persistir resultado en la devolución
-            devolucion.setNumeroNc(compNC.getPrefijo() + "-" + siguiente);
+            // Persistir resultado en la devolución. El número guardado es el LEGAL
+            // (prefijo+folio sin guion, igual al ENC_6 enviado a la DIAN) para que las
+            // re-consultas por prefijo+folio y la conciliación coincidan con el documento.
+            devolucion.setNumeroNc(compNC.getPrefijo() + siguiente);
             devolucion.setCufeNc(resp.getCufe());
             devolucion.setEstadoDianNc(resp.getEstadoDian());
             devolucion.setMensajeDianNc(resp.getMensajeDian());
             devolucion.setQrDataNc(resp.getQrData());
             devolucionRepository.save(devolucion);
-
-            // Avanzar consecutivo del comprobante
-            compNC.setSiguienteConsecutivo(siguiente + 1);
-            comprobantesRepository.save(compNC);
 
             log.info("✅ Nota Crédito generada: {} - Estado DIAN: {} - CUDE: {}",
                     devolucion.getNumeroNc(), resp.getEstadoDian(),
