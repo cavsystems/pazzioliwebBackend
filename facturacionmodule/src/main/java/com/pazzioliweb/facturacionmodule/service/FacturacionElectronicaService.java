@@ -52,6 +52,7 @@ public class FacturacionElectronicaService {
     @Autowired private AsientoContableService asientoService;
     @Autowired private ConfiguracionContableService configContable;
     @Autowired private com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante;
+    @Autowired private com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository comprobanteContableRepository;
 
     @Autowired
     public FacturacionElectronicaService(FacturasRepository facturasRepository,
@@ -102,6 +103,12 @@ public class FacturacionElectronicaService {
             log.error("❌ Venta no está COMPLETADA. Estado actual: {}", venta.getEstado());
             throw new RuntimeException("Solo se pueden facturar ventas COMPLETADAS. Estado actual: " + venta.getEstado());
         }
+        if (venta.getCliente() == null) {
+            // Antes esto moría con NullPointerException dentro de crearFacturaDesdeVenta
+            // y el listener lo tragaba: la venta quedaba sin factura sin explicación.
+            throw new RuntimeException("La venta " + venta.getNumeroVenta() +
+                    " no tiene cliente asociado: no se puede generar la factura electrónica.");
+        }
 
         // 2. Validar que no exista ya una factura para esta venta
         log.info("🔍 Paso 2: Verificando si ya existe factura para venta {}...", request.getVentaId());
@@ -113,11 +120,46 @@ public class FacturacionElectronicaService {
         }
         log.info("✅ No existe factura previa para esta venta");
 
-        // 3. Obtener siguiente consecutivo
-        log.info("🔢 Paso 3: Obteniendo siguiente consecutivo para comprobante {}...", request.getComprobanteId());
-        Integer siguienteConsecutivo = obtenerSiguienteConsecutivo(request.getComprobanteId());
-        String prefijo = dianConfig.getResolucion().getPrefijo() != null
-                ? dianConfig.getResolucion().getPrefijo() : "FE";
+        // 3. Obtener siguiente consecutivo — SIEMPRE sobre la serie del comprobante de la
+        // venta (FC/VC), que es el mismo con el que se guarda la factura y se reporta el
+        // DRF. Antes se usaba request.getComprobanteId(): si el caller mandaba otro id,
+        // el MAX se calculaba sobre la serie equivocada y podía duplicar folio.
+        com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable compVenta = venta.getComprobante();
+        Integer comprobanteIdSerie = compVenta != null && compVenta.getId() != null
+                ? compVenta.getId().intValue()
+                : request.getComprobanteId();
+
+        // Lock pesimista sobre el comprobante: serializa la asignación de folio entre
+        // ventas concurrentes (dos cajas cerrando a la vez leían el mismo MAX y emitían
+        // dos facturas con el mismo folio → rechazo 409 de Facturatech en la segunda).
+        // El lock se libera al commit de esta transacción.
+        if (compVenta != null && compVenta.getId() != null) {
+            comprobanteContableRepository.findByIdForUpdate(compVenta.getId());
+        }
+
+        log.info("🔢 Paso 3: Obteniendo siguiente consecutivo para comprobante {}...", comprobanteIdSerie);
+        Integer siguienteConsecutivo = obtenerSiguienteConsecutivo(comprobanteIdSerie);
+
+        // ── Numeración dentro del rango de la resolución del comprobante ──
+        // El folio (ENC_6) debe caer dentro del rango autorizado (DRF_5..DRF_6);
+        // Facturatech rechaza con 409 si queda por fuera. Si el comprobante define
+        // rango, se arranca en consecutivoDesde y se corta al agotar consecutivoHasta.
+        if (compVenta != null && compVenta.getConsecutivoDesde() != null
+                && siguienteConsecutivo < compVenta.getConsecutivoDesde()) {
+            siguienteConsecutivo = compVenta.getConsecutivoDesde();
+        }
+        if (compVenta != null && compVenta.getConsecutivoHasta() != null
+                && siguienteConsecutivo > compVenta.getConsecutivoHasta()) {
+            throw new RuntimeException("La numeración autorizada del comprobante " + compVenta.getPrefijo() +
+                    " está agotada (rango hasta " + compVenta.getConsecutivoHasta() +
+                    "). Configure una nueva resolución DIAN.");
+        }
+
+        // Prefijo: el del comprobante de la venta (coherente con el DRF que se reporta);
+        // dian.resolucion.prefijo queda como fallback para ventas sin comprobante.
+        String prefijo = (compVenta != null && compVenta.getPrefijo() != null && !compVenta.getPrefijo().isBlank())
+                ? compVenta.getPrefijo()
+                : (dianConfig.getResolucion().getPrefijo() != null ? dianConfig.getResolucion().getPrefijo() : "FE");
         String numeroFactura = prefijo + siguienteConsecutivo;
         log.info("✅ Consecutivo: {} → Número factura: {}", siguienteConsecutivo, numeroFactura);
 
@@ -407,7 +449,19 @@ public class FacturacionElectronicaService {
         req.setConsecutivo(factura.getConsecutivo());
         req.setFechaEmision(factura.getFechaEmision());
         req.setFechaVencimiento(factura.getFechaVencimiento());
-        req.setFormaPago("1"); // Contado
+        // Forma de pago (MEP_2): 1=Contado, 2=Crédito. Una venta con comprobante VC
+        // es a crédito y debe reportarse así (antes siempre viajaba "1" Contado).
+        boolean esCredito = venta != null && venta.getComprobante() != null
+                && venta.getComprobante().getTipoMovimiento() == com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.VC;
+        req.setFormaPago(esCredito ? "2" : "1");
+        if (esCredito && factura.getFechaVencimiento() != null
+                && !factura.getFechaVencimiento().isAfter(factura.getFechaEmision())
+                && venta.getCliente() != null && venta.getCliente().getPlazo() != null
+                && venta.getCliente().getPlazo() > 0) {
+            // MEP_3 (fecha de pago) es obligatorio en crédito: si la factura quedó con
+            // vencimiento = emisión, se calcula con el plazo del cliente.
+            req.setFechaVencimiento(factura.getFechaEmision().plusDays(venta.getCliente().getPlazo()));
+        }
         req.setPlazo(factura.getPlazo());
 
         // ── Resolución DIAN: priorizar la del ComprobanteContable usado por la venta ──
@@ -481,16 +535,22 @@ public class FacturacionElectronicaService {
             linea.setCodigoProducto(detalle.getCodigoProducto());
             linea.setDescripcion(detalle.getDescripcionProducto());
             linea.setCantidad(detalle.getCantidad());
-            linea.setPrecioUnitario(detalle.getPrecioUnitario());
-            linea.setDescuento(detalle.getDescuento());
-            linea.setValorIva(detalle.getIva());
+            // Los detalles pueden traer descuento/iva/precio NULL desde BD (mismo guard
+            // que construirRequestDianBase): sin esto un solo detalle null tumbaba toda
+            // la facturación de la venta con un NPE que el listener tragaba en silencio.
+            BigDecimal precioUnit = detalle.getPrecioUnitario() != null ? detalle.getPrecioUnitario() : BigDecimal.ZERO;
+            BigDecimal descLinea = detalle.getDescuento() != null ? detalle.getDescuento() : BigDecimal.ZERO;
+            BigDecimal ivaLinea = detalle.getIva() != null ? detalle.getIva() : BigDecimal.ZERO;
+            linea.setPrecioUnitario(precioUnit);
+            linea.setDescuento(descLinea);
+            linea.setValorIva(ivaLinea);
 
             // Calcular porcentaje de IVA
-            BigDecimal baseLinea = detalle.getPrecioUnitario()
-                    .multiply(BigDecimal.valueOf(detalle.getCantidad()))
-                    .subtract(detalle.getDescuento());
-            if (baseLinea.compareTo(BigDecimal.ZERO) > 0 && detalle.getIva().compareTo(BigDecimal.ZERO) > 0) {
-                linea.setPorcentajeIva(detalle.getIva()
+            BigDecimal baseLinea = precioUnit
+                    .multiply(BigDecimal.valueOf(detalle.getCantidad() != null ? detalle.getCantidad() : 0))
+                    .subtract(descLinea);
+            if (baseLinea.compareTo(BigDecimal.ZERO) > 0 && ivaLinea.compareTo(BigDecimal.ZERO) > 0) {
+                linea.setPorcentajeIva(ivaLinea
                         .multiply(BigDecimal.valueOf(100))
                         .divide(baseLinea, 2, RoundingMode.HALF_UP));
             } else {

@@ -59,6 +59,11 @@ public class FacturasService {
         return facturaRepository.listadoFacturasConDetalles(fechaInicio, fechaFin);
     }
     
+    /** Factura electrónica generada para una venta (para imprimir CUFE/QR en el POS). */
+    public Optional<Facturas> buscarPorVentaId(Long ventaId) {
+        return facturaRepository.findByVentaId(ventaId);
+    }
+
     public Optional<Facturas> buscarPorId(Integer id) {
         return facturaRepository.findById(id);
     }
