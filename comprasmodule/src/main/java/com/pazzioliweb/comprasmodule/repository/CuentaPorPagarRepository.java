@@ -45,4 +45,10 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
     @Query("UPDATE CuentaPorPagar c SET c.estado = 'VENCIDA' " +
            "WHERE c.fechaVencimiento < :hoy AND c.saldo > 0 AND c.estado IN ('PENDIENTE', 'PARCIAL')")
     int marcarVencidas(@Param("hoy") LocalDate hoy);
+
+    @Modifying
+    @Query("UPDATE CuentaPorPagar c SET c.numeroFacturaProveedor = :numeroFacturaProveedor " +
+           "WHERE c.numeroFactura = :numeroFactura")
+    int actualizarNumeroFacturaProveedorBatch(@Param("numeroFactura") String numeroFactura,
+                                            @Param("numeroFacturaProveedor") String numeroFacturaProveedor);
 }

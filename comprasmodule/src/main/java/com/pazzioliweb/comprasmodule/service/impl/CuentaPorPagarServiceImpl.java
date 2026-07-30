@@ -109,11 +109,8 @@ public class CuentaPorPagarServiceImpl implements CuentaPorPagarService {
     @Override
     @Transactional
     public void actualizarNumeroFacturaProveedor(String numeroFactura, String numeroFacturaProveedor) {
-        List<CuentaPorPagar> cuentas = cuentaPorPagarRepository.findByNumeroFactura(numeroFactura);
-        for (CuentaPorPagar cuenta : cuentas) {
-            cuenta.setNumeroFacturaProveedor(numeroFacturaProveedor);
-            cuentaPorPagarRepository.save(cuenta);
-        }
+        // Optimización: UPDATE batch en lugar de loop con saves individuales
+        cuentaPorPagarRepository.actualizarNumeroFacturaProveedorBatch(numeroFactura, numeroFacturaProveedor);
     }
 
     private CuentaPorPagarDTO toDTO(CuentaPorPagar cuenta) {

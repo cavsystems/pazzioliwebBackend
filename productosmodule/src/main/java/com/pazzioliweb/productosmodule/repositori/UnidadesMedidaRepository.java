@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.Query;
 
 import com.pazzioliweb.productosmodule.entity.Lineas;
 import com.pazzioliweb.productosmodule.entity.UnidadesMedida;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface UnidadesMedidaRepository extends JpaRepository<UnidadesMedida, Integer>{
@@ -14,6 +16,7 @@ public interface UnidadesMedidaRepository extends JpaRepository<UnidadesMedida, 
 	Page<UnidadesMedida>  findByDescripcionContainingIgnoreCase(String descripcion,Pageable pageable);
 
 	Optional<UnidadesMedida> findBySigla(String sigla);
+	List<UnidadesMedida> findBySiglaIn(Collection<String> siglas);
 
 	/** Primer hueco disponible para reusar códigos eliminados. */
 	@Query(value =

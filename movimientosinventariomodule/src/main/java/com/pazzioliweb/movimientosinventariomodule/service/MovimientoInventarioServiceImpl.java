@@ -177,27 +177,52 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
         TipoMovimiento tipo = movimiento.getTipo();
         List<MovimientoInventarioDetalle> detalles = new ArrayList<>();
 
+        // ── OPTIMIZACIÓN: cargar variantes y bodegas en batch para evitar N+1 queries ──
+        List<Long> varianteIds = createDto.getDetalles().stream()
+                .map(MovimientoInventarioDetalleCreateDto::getProductoVarianteId)
+                .distinct().toList();
+        List<ProductoVariante> variantes = productoVarianteRepository.findAllById(varianteIds);
+        java.util.Map<Long, ProductoVariante> variantesMap = variantes.stream()
+                .collect(java.util.stream.Collectors.toMap(ProductoVariante::getProductoVarianteId, v -> v));
+
+        List<Integer> bodegaIds = new java.util.ArrayList<>();
+        for (MovimientoInventarioDetalleCreateDto dto : createDto.getDetalles()) {
+            if (dto.getBodegaOrigenId() != null) bodegaIds.add(dto.getBodegaOrigenId());
+            if (dto.getBodegaDestinoId() != null) bodegaIds.add(dto.getBodegaDestinoId());
+        }
+        java.util.Map<Integer, Bodegas> bodegasMap = new java.util.HashMap<>();
+        if (!bodegaIds.isEmpty()) {
+            List<Integer> distinctBodegaIds = bodegaIds.stream().distinct().toList();
+            List<Bodegas> bodegas = bodegasRepository.findAllById(distinctBodegaIds);
+            bodegasMap = bodegas.stream()
+                    .collect(java.util.stream.Collectors.toMap(Bodegas::getCodigo, b -> b));
+        }
+
+        List<MovimientoInventarioDetalle> detallesAGuardar = new ArrayList<>();
+
         for (MovimientoInventarioDetalleCreateDto detalleDto : createDto.getDetalles()) {
 
-            // Resolver variante
-            ProductoVariante variante = productoVarianteRepository
-                    .findById(detalleDto.getProductoVarianteId())
-                    .orElseThrow(() -> new EntityNotFoundException(
-                            "ProductoVariante no encontrado: " + detalleDto.getProductoVarianteId()));
+            // Resolver variante (desde mapa en memoria)
+            ProductoVariante variante = variantesMap.get(detalleDto.getProductoVarianteId());
+            if (variante == null) {
+                throw new EntityNotFoundException("ProductoVariante no encontrado: " + detalleDto.getProductoVarianteId());
+            }
 
-            // Resolver bodegas
+            // Resolver bodegas (desde mapa en memoria)
             Bodegas bodegaOrigen = null;
             Bodegas bodegaDestino = null;
 
             if (detalleDto.getBodegaOrigenId() != null) {
-                bodegaOrigen = bodegasRepository.findById(detalleDto.getBodegaOrigenId())
-                        .orElseThrow(() -> new EntityNotFoundException(
-                                "Bodega origen no encontrada: " + detalleDto.getBodegaOrigenId()));
+                bodegaOrigen = bodegasMap.get(detalleDto.getBodegaOrigenId());
+                if (bodegaOrigen == null) {
+                    throw new EntityNotFoundException("Bodega origen no encontrada: " + detalleDto.getBodegaOrigenId());
+                }
             }
             if (detalleDto.getBodegaDestinoId() != null) {
-                bodegaDestino = bodegasRepository.findById(detalleDto.getBodegaDestinoId())
-                        .orElseThrow(() -> new EntityNotFoundException(
-                                "Bodega destino no encontrada: " + detalleDto.getBodegaDestinoId()));
+                bodegaDestino = bodegasMap.get(detalleDto.getBodegaDestinoId());
+                if (bodegaDestino == null) {
+                    throw new EntityNotFoundException("Bodega destino no encontrada: " + detalleDto.getBodegaDestinoId());
+                }
             }
 
             double costoUnitario = detalleDto.getCostoUnitario() != null ? detalleDto.getCostoUnitario() : 0.0;
@@ -211,7 +236,7 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             detalle.setCostoUnitario(costoUnitario);
             detalle.setCostoPromedio(costoUnitario);
             detalle.setTotalDetalle(totalDetalle);
-            detalleRepository.save(detalle);
+            detallesAGuardar.add(detalle);
 
             // Kardex: SALIDA o TRASLADO → registrar salida en bodega origen
             if (bodegaOrigen != null && (tipo == TipoMovimiento.SALIDA || tipo == TipoMovimiento.TRASLADO)) {
@@ -244,6 +269,9 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
 
             detalles.add(detalle);
         }
+
+        // ── OPTIMIZACIÓN: saveAll batch en lugar de saves individuales ──
+        detalleRepository.saveAll(detallesAGuardar);
 
         // Actualizar total del movimiento
         double total = detalles.stream().mapToDouble(MovimientoInventarioDetalle::getTotalDetalle).sum();

@@ -54,6 +54,19 @@ public interface OrdenCompraRepository extends JpaRepository<OrdenCompra, Long> 
     @Query("SELECT o FROM OrdenCompra o LEFT JOIN FETCH o.items WHERE o.numeroOrden = :numeroOrden")
     Optional<OrdenCompra> findByNumeroOrdenWithItems(@Param("numeroOrden") String numeroOrden);
 
+    @Query("SELECT o FROM OrdenCompra o " +
+           "LEFT JOIN FETCH o.items " +
+           "LEFT JOIN FETCH o.bodega " +
+           "LEFT JOIN FETCH o.proveedor " +
+           "LEFT JOIN FETCH o.comprobante " +
+           "WHERE o.id = :id")
+    Optional<OrdenCompra> findByIdWithRelations(@Param("id") Long id);
+
+    @Query("SELECT o FROM OrdenCompra o " +
+           "LEFT JOIN FETCH o.metodosPago " +
+           "WHERE o.id = :id")
+    Optional<OrdenCompra> findByIdWithMetodosPago(@Param("id") Long id);
+
     @Query("SELECT COALESCE(SUM(o.totalOrdenCompra), 0) FROM OrdenCompra o WHERE " +
             "o.bodega.codigo = :bodegaId AND o.fechaEmision BETWEEN :fechaInicio AND :fechaFin")
     Double sumTotalByPeriodo(

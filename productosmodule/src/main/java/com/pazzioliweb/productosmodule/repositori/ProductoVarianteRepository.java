@@ -1,7 +1,9 @@
 package com.pazzioliweb.productosmodule.repositori;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -506,8 +508,13 @@ AND t.activo = :activo
 
 	Optional<ProductoVariante> findByProducto_CodigoContableAndReferenciaVariantes(String codigoContable, String referenciaVariantes);
 
+	List<ProductoVariante> findByProducto_CodigoContableInAndReferenciaVariantesIn(Set<String> codigoContables, Set<String> referenciasVariantes);
+
+	List<ProductoVariante> findBySkuIn(Set<String> skus);
+
 	Optional<ProductoVariante> findByProductoVarianteId(Long id);
 	Optional<ProductoVariante> findByCodigoBarras(String codigobarras);
+	List<ProductoVariante> findByCodigoBarrasIn(Collection<String> codigosBarras);
 	
 	@EntityGraph(attributePaths = {"producto"})
 	Optional<ProductoVariante> findByReferenciaVariantes(String referenciaVariantes);

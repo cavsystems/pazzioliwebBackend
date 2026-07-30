@@ -1,5 +1,6 @@
 package com.pazzioliweb.productosmodule.repositori;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +23,7 @@ public interface ProductosRepository extends JpaRepository<Productos, Integer>{
 	boolean existsByCodigoBarras(String codigoBarras);
 	
 	Optional<Productos> findByCodigoContable(String codigo);
+	List<Productos> findByCodigoContableIn(Collection<String> codigos);
 	
 	@EntityGraph(attributePaths = {
 		    "grupo",

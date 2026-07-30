@@ -48,6 +48,18 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
     @Override
     @Transactional
     public List<PreciosProductoVarianteResponseDTO> crear(List<PreciosProductoVarianteCreateDTO> dtos) {
+        // ── OPTIMIZACIÓN: cargar variantes y precios en batch para evitar N+1 queries ──
+        List<Long> varianteIds = dtos.stream().map(PreciosProductoVarianteCreateDTO::getProductoVarianteId).distinct().toList();
+        List<ProductoVariante> variantes = productoVarianteRepository.findAllById(varianteIds);
+        java.util.Map<Long, ProductoVariante> variantesMap = variantes.stream()
+                .collect(java.util.stream.Collectors.toMap(ProductoVariante::getProductoVarianteId, v -> v));
+
+        List<Integer> precioIds = dtos.stream().map(PreciosProductoVarianteCreateDTO::getPrecioId).distinct().toList();
+        List<Precios> precios = preciosRepository.findAllById(precioIds);
+        java.util.Map<Integer, Precios> preciosMap = precios.stream()
+                .collect(java.util.stream.Collectors.toMap(Precios::getPrecioId, p -> p));
+
+        List<PreciosProductoVariante> entidadesAGuardar = new ArrayList<>();
         List<PreciosProductoVarianteResponseDTO> respuestas = new ArrayList<>();
 
         for (PreciosProductoVarianteCreateDTO dto : dtos) {
@@ -72,23 +84,28 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
                 entity.setPredeterminada(dto.getPredeterminada());
                 entity.setFechaModificacion(LocalDateTime.now());
                 System.out.println("Actualizando existente - predeterminada seteada: " + entity.getPredeterminada());
+                entidadesAGuardar.add(entity);
             } else {
                 // Si no existe, creamos
-                ProductoVariante pv = productoVarianteRepository.findById(dto.getProductoVarianteId())
-                        .orElseThrow(() -> new RuntimeException("ProductoVariante no encontrado"));
+                ProductoVariante pv = variantesMap.get(dto.getProductoVarianteId());
+                if (pv == null) {
+                    throw new RuntimeException("ProductoVariante no encontrado: " + dto.getProductoVarianteId());
+                }
 
-                Precios precio = preciosRepository.findById(dto.getPrecioId())
-                        .orElseThrow(() -> new RuntimeException("Precio no encontrado"));
+                Precios precio = preciosMap.get(dto.getPrecioId());
+                if (precio == null) {
+                    throw new RuntimeException("Precio no encontrado: " + dto.getPrecioId());
+                }
 
                 entity = mapper.toEntity(dto, pv, precio);
                 System.out.println("Creando nueva entidad - predeterminada: " + entity.getPredeterminada());
+                entidadesAGuardar.add(entity);
             }
-
-            repository.save(entity);
-            respuestas.add(mapper.toResponse(entity));
         }
 
-        return respuestas;
+        // ── OPTIMIZACIÓN: saveAll batch en lugar de saves individuales ──
+        List<PreciosProductoVariante> guardadas = repository.saveAll(entidadesAGuardar);
+        return guardadas.stream().map(mapper::toResponse).toList();
     }
 
     @Override
@@ -105,8 +122,20 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
     @Override
     @Transactional
     public List<PreciosProductoVarianteResponseDTO> actualizar(List<PreciosProductoVarianteUpdateDTO> dtos) {
+        // ── OPTIMIZACIÓN: cargar precios en batch para evitar N+1 queries ──
+        List<Integer> precioIds = dtos.stream()
+                .map(PreciosProductoVarianteUpdateDTO::getPrecioId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        List<Precios> precios = new ArrayList<>();
+        if (!precioIds.isEmpty()) {
+            precios = preciosRepository.findAllById(precioIds);
+        }
+        java.util.Map<Integer, Precios> preciosMap = precios.stream()
+                .collect(java.util.stream.Collectors.toMap(Precios::getPrecioId, p -> p));
 
-	    List<PreciosProductoVarianteResponseDTO> respuestas = new ArrayList<>();
+        List<PreciosProductoVariante> entidadesAGuardar = new ArrayList<>();
 
 	    for (PreciosProductoVarianteUpdateDTO dto : dtos) {
              System.out.println(dto.getPreciosProductoId());
@@ -114,8 +143,10 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
 	                .orElseThrow(() -> new EntityNotFoundException("PrecioProductoVariante no encontrado"));
 
 	        if (dto.getPrecioId() != null) {
-	            Precios precio = preciosRepository.findById(dto.getPrecioId())
-	                    .orElseThrow(() -> new EntityNotFoundException("Precio no encontrado"));
+	            Precios precio = preciosMap.get(dto.getPrecioId());
+	            if (precio == null) {
+	                throw new EntityNotFoundException("Precio no encontrado: " + dto.getPrecioId());
+	            }
 	            entidad.setPrecio(precio);
 	        }
 
@@ -125,13 +156,12 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
 	        if (dto.getPredeterminada() != null) entidad.setPredeterminada(dto.getPredeterminada());
 
 	        entidad.setFechaModificacion(LocalDateTime.now());
-
-	        repository.save(entidad);
-
-	        respuestas.add(mapper.toResponse(entidad));
+	        entidadesAGuardar.add(entidad);
 	    }
 
-	    return respuestas;
+        // ── OPTIMIZACIÓN: saveAll batch en lugar de saves individuales ──
+        List<PreciosProductoVariante> guardadas = repository.saveAll(entidadesAGuardar);
+	    return guardadas.stream().map(mapper::toResponse).toList();
 	}
 
     @Override

@@ -8,6 +8,7 @@ import com.pazzioliweb.comprasmodule.mapper.OrdenCompraMapper;
 import com.pazzioliweb.comprasmodule.repository.LegalizacionRepository;
 import com.pazzioliweb.comprasmodule.repository.OrdenCompraRepository;
 import com.pazzioliweb.comprasmodule.service.*;
+import com.pazzioliweb.comprasmodule.service.LegalizacionWebSocketService;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
 import com.pazzioliweb.tercerosmodule.repositori.TercerosRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,7 @@ public class LegalizacionServiceImpl implements LegalizacionService {
     private final OrdenCompraService ordenCompraService;
     private final IngresoOrdenCompraService ingresoOrdenCompraService;
     private final LegalizacionRepository legalizacionRepository;
+    private final LegalizacionWebSocketService legalizacionWebSocketService;
     @Autowired
     private OrdenCompraMapper detallemaper;
 
@@ -43,21 +45,27 @@ public class LegalizacionServiceImpl implements LegalizacionService {
   private TercerosRepository terrepo;
     @Autowired
     private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
-    public LegalizacionServiceImpl(ProductoService productoService, ProductoClient productoClient, CuentaPorPagarService cuentaPorPagarService, OrdenCompraService ordenCompraService, IngresoOrdenCompraService ingresoOrdenCompraService, LegalizacionRepository legalizacionRepository) {
+    public LegalizacionServiceImpl(ProductoService productoService, ProductoClient productoClient, CuentaPorPagarService cuentaPorPagarService, OrdenCompraService ordenCompraService, IngresoOrdenCompraService ingresoOrdenCompraService, LegalizacionRepository legalizacionRepository, LegalizacionWebSocketService legalizacionWebSocketService) {
         this.productoService = productoService;
         this.productoClient = productoClient;
         this.cuentaPorPagarService = cuentaPorPagarService;
         this.ordenCompraService = ordenCompraService;
         this.ingresoOrdenCompraService = ingresoOrdenCompraService;
         this.legalizacionRepository = legalizacionRepository;
+        this.legalizacionWebSocketService = legalizacionWebSocketService;
     }
 
     @Override
     @Transactional
     public   OrdenCompraDTO  legalizarCompra(LegalizacionRequestDTO request) {
+        String usuario = obtenerUsuarioAutenticado();
 
+        try {
             RealizarOrdenRequestDTO realizarRequest = request.getOrdenCompraData();
 
+            // Paso 1: Validar periodo contable
+            legalizacionWebSocketService.enviarProgreso(usuario, 1, "Validando periodo contable...", 10, null);
+            
             // Validar periodo contable abierto (la fecha de la factura define el periodo de afectación),
             // y ANCLAR la fecha de emisión de la orden a la fecha de la factura, para que el asiento y
             // el kardex (que se fechan con fechaEmision) caigan en el mismo periodo validado.
@@ -69,10 +77,27 @@ public class LegalizacionServiceImpl implements LegalizacionService {
                 }
             } catch (java.time.format.DateTimeParseException ignored) { /* dejar validar por realizarOrden */ }
 
-            // 1. Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
+            // Paso 2: Iniciando creación de orden
+            legalizacionWebSocketService.enviarProgreso(usuario, 2, "Iniciando creación de orden de compra...", 20, null);
+            
+            // Paso 3: Procesando productos
+            legalizacionWebSocketService.enviarProgreso(usuario, 3, "Procesando productos de la orden...", 30, null);
+            
+            // Paso 4: Creando estructura de orden
+            legalizacionWebSocketService.enviarProgreso(usuario, 4, "Creando estructura de orden de compra...", 40, null);
+            
+            // Paso 5: Generando comprobante contable
+            legalizacionWebSocketService.enviarProgreso(usuario, 5, "Generando comprobante contable...", 50, null);
+            
+            // Paso 6: Realizar la orden de compra (crea comprobante, asiento, CxP si aplica)
+            legalizacionWebSocketService.enviarProgreso(usuario, 6, "Ejecutando orden de compra...", 60, null);
             OrdenCompraDTO ordenCreada = ordenCompraService.realizarOrden(realizarRequest);
 
-            // 2. Marcar todos los items como 100% recibidos (es una compra directa, llega todo)
+            // Paso 7: Validando items recibidos
+            legalizacionWebSocketService.enviarProgreso(usuario, 7, "Validando items recibidos...", 70, ordenCreada.getId());
+            
+            // Paso 8: Marcar todos los items como 100% recibidos (es una compra directa, llega todo)
+            legalizacionWebSocketService.enviarProgreso(usuario, 8, "Marcando items como recibidos...", 75, ordenCreada.getId());
             List<DetalleOrdenCompraDTO> itemsRecibidos = ordenCreada.getItems().stream()
                     .peek(e -> {
                         e.setCantidadRecibida(e.getCantidad());
@@ -80,13 +105,31 @@ public class LegalizacionServiceImpl implements LegalizacionService {
                     })
                     .collect(Collectors.toList());
 
-            // 3. Ingresar la orden con las cantidades completas
+            // Paso 9: Preparando ingreso al inventario
+            legalizacionWebSocketService.enviarProgreso(usuario, 9, "Preparando ingreso al inventario...", 80, ordenCreada.getId());
+            
+            // Paso 10: Ingresar la orden con las cantidades completas
+            legalizacionWebSocketService.enviarProgreso(usuario, 10, "Ingresando orden de compra al inventario...", 85, ordenCreada.getId());
             ingresoOrdenCompraService.ingresarOrdenCompra(ordenCreada.getId(), itemsRecibidos, request.getNumeroFactura());
 
-            // 3. Crear registro de legalización
+            // Paso 11: Preparando registro de legalización
+            legalizacionWebSocketService.enviarProgreso(usuario, 11, "Preparando registro de legalización...", 90, ordenCreada.getId());
+            
+            // Paso 12: Crear registro de legalización
+            legalizacionWebSocketService.enviarProgreso(usuario, 12, "Guardando registro de legalización...", 95, ordenCreada.getId());
             crearLegalizacion(request, ordenCreada);
 
-return ordenCreada;
+            // Paso 13: Finalizando proceso
+            legalizacionWebSocketService.enviarProgreso(usuario, 13, "Finalizando proceso de legalización...", 98, ordenCreada.getId());
+            
+            // Paso 14: Completado
+            legalizacionWebSocketService.enviarCompletado(usuario, ordenCreada.getId());
+
+            return ordenCreada;
+        } catch (Exception ex) {
+            legalizacionWebSocketService.enviarError(usuario, "Error en legalización: " + ex.getMessage(), null);
+            throw ex;
+        }
     }
 
     private void crearLegalizacion(LegalizacionRequestDTO request, OrdenCompraDTO ordenCreada) {
@@ -155,7 +198,7 @@ return ordenCreada;
     }
     @Transactional
     public List<LegalizacionDTO> obtenerTodasLasLegalizaciones() {
-        List<Legalizacion> legalizaciones = legalizacionRepository.findAll();
+        List<com.pazzioliweb.comprasmodule.entity.Legalizacion> legalizaciones = legalizacionRepository.findAllWithRelations();
 
         return legalizaciones.stream().map(this::mapToDTO).collect(Collectors.toList());
     }
@@ -163,7 +206,7 @@ return ordenCreada;
     @Override
     @Transactional(readOnly = true)
     public List<LegalizacionDTO> obtenerLegalizacionesPorProveedor(Long proveedorId) {
-        return legalizacionRepository.findByProveedorId(proveedorId, Pageable.unpaged())
+        return legalizacionRepository.findByProveedorIdWithRelations(proveedorId, Pageable.unpaged())
                 .getContent()
                 .stream()
                 .map(this::mapToDTO)
@@ -173,10 +216,10 @@ return ordenCreada;
     private LegalizacionDTO mapToDTO(Legalizacion legalizacion) {
         LegalizacionDTO dto = new LegalizacionDTO();
 
-        Terceros tercero = terrepo.findByTerceroId(legalizacion.getProveedorId().intValue())
-                .orElse(null);
-        OrdenCompra ord = ordenCompraRepository.findById(legalizacion.getOrdenCompra().getId())
-                .orElseThrow(() -> new RuntimeException("Orden de compra no encontrada: " + legalizacion.getOrdenCompra().getId()));
+        Terceros tercero = legalizacion.getOrdenCompra() != null 
+                ? legalizacion.getOrdenCompra().getProveedor() 
+                : null;
+        OrdenCompra ord = legalizacion.getOrdenCompra();
 
         DateTimeFormatter formato = DateTimeFormatter.ofPattern("MM/dd/yyyy");
         dto.setFechainicial(ord.getFechaCreacion() != null ? ord.getFechaCreacion().format(formato) : null);

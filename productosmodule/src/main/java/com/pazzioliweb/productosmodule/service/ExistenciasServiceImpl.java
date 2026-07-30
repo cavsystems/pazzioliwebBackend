@@ -45,25 +45,39 @@ public class ExistenciasServiceImpl implements ExistenciasService{
     @Transactional
     public List<ExistenciasResponseDTO> crear(List<ExistenciasCreateDTO> dtos) {
 
-        List<ExistenciasResponseDTO> respuestas = new ArrayList<>();
+        // ── OPTIMIZACIÓN: cargar variantes y bodegas en batch para evitar N+1 queries ──
+        List<Long> varianteIds = dtos.stream().map(ExistenciasCreateDTO::getProductoVarianteId).distinct().toList();
+        List<com.pazzioliweb.productosmodule.entity.ProductoVariante> variantes = varianteRepo.findAllById(varianteIds);
+        java.util.Map<Long, com.pazzioliweb.productosmodule.entity.ProductoVariante> variantesMap = variantes.stream()
+                .collect(java.util.stream.Collectors.toMap(com.pazzioliweb.productosmodule.entity.ProductoVariante::getProductoVarianteId, v -> v));
+
+        List<Integer> bodegaIds = dtos.stream().map(ExistenciasCreateDTO::getBodegaId).distinct().toList();
+        List<com.pazzioliweb.productosmodule.entity.Bodegas> bodegas = bodegasRepo.findAllById(bodegaIds);
+        java.util.Map<Integer, com.pazzioliweb.productosmodule.entity.Bodegas> bodegasMap = bodegas.stream()
+                .collect(java.util.stream.Collectors.toMap(com.pazzioliweb.productosmodule.entity.Bodegas::getCodigo, b -> b));
+
+        List<Existencias> existenciasAGuardar = new ArrayList<>();
 
         for (ExistenciasCreateDTO dto : dtos) {
+            com.pazzioliweb.productosmodule.entity.ProductoVariante variante = variantesMap.get(dto.getProductoVarianteId());
+            if (variante == null) {
+                throw new EntityNotFoundException("Variante no existe: " + dto.getProductoVarianteId());
+            }
 
-            var variante = varianteRepo.findById(dto.getProductoVarianteId())
-                    .orElseThrow(() -> new EntityNotFoundException("Variante no existe"));
-
-            var bodega = bodegasRepo.findById(dto.getBodegaId())
-                    .orElseThrow(() -> new EntityNotFoundException("Bodega no existe"));
+            com.pazzioliweb.productosmodule.entity.Bodegas bodega = bodegasMap.get(dto.getBodegaId());
+            if (bodega == null) {
+                throw new EntityNotFoundException("Bodega no existe: " + dto.getBodegaId());
+            }
 
             Existencias nueva = mapper.toEntity(dto, variante, bodega);
             nueva.setFechaUltimoMovimiento(LocalDateTime.now());
-
-            nueva = repo.save(nueva);
-
-            respuestas.add(mapper.toResponseDto(nueva));
+            existenciasAGuardar.add(nueva);
         }
 
-        return respuestas;
+        // ── OPTIMIZACIÓN: saveAll batch en lugar de saves individuales ──
+        List<Existencias> guardadas = repo.saveAll(existenciasAGuardar);
+
+        return guardadas.stream().map(mapper::toResponseDto).toList();
     }
 
     @Override

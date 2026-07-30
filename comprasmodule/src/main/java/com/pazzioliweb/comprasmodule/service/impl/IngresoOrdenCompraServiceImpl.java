@@ -28,6 +28,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -92,8 +94,12 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
         log.info("══════ INGRESO DE ORDEN DE COMPRA ID={} ══════", ordenId);
         log.info("Detalles recibidos del frontend: {}", detallesRecibidos != null ? detallesRecibidos.size() : 0);
 
-        OrdenCompra orden = ordenCompraRepository.findById(ordenId)
+        // Cargar orden con items y relaciones principales (evita MultipleBagFetchException)
+        OrdenCompra orden = ordenCompraRepository.findByIdWithRelations(ordenId)
                 .orElseThrow(() -> new OrdenCompraException("Orden de compra no encontrada"));
+
+        // Cargar metodosPago en query separada (Hibernate no permite JOIN FETCH de múltiples bags)
+        ordenCompraRepository.findByIdWithMetodosPago(ordenId).ifPresent(o -> orden.setMetodosPago(o.getMetodosPago()));
 
         log.info("Orden encontrada: {} - Estado: {} - Items: {}",
                 orden.getNumeroOrden(), orden.getEstado(),
@@ -105,26 +111,33 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
 
         // Paso 1: actualizar las cantidades recibidas en los detalles de la orden
         if (detallesRecibidos != null) {
+
+            // Índice O(1) por id, construido una sola vez
+            //indexar los items en un Map una sola vez, fuera del loop.
+            Map<Long, DetalleOrdenCompra> itemsPorId = orden.getItems().stream()
+                    .collect(Collectors.toMap(DetalleOrdenCompra::getId, Function.identity()));
+
             for (DetalleOrdenCompraDTO dto : detallesRecibidos) {
                 if (dto.getId() == null) {
                     log.warn("⚠️ DTO recibido sin id: producto={}, cantidad={} — se omite",
                             dto.getCodigoProducto(), dto.getCantidadRecibida());
                     continue;
                 }
-                DetalleOrdenCompra detalle = orden.getItems().stream()
-                        .filter(d -> d.getId().equals(dto.getId()))
-                        .findFirst()
-                        .orElseThrow(() -> new OrdenCompraException("Detalle de orden no encontrado: " + dto.getId()));
 
-                Integer cantRecibida = dto.getCantidadRecibida() != null ? dto.getCantidadRecibida() : 0;
-                detalle.setCantidadRecibida(cantRecibida);
+                DetalleOrdenCompra detalle = itemsPorId.get(dto.getId());
+                if (detalle == null) {
+                    throw new OrdenCompraException("Detalle de orden no encontrado: " + dto.getId());
+                }
+
+                detalle.setCantidadRecibida(dto.getCantidadRecibida() != null ? dto.getCantidadRecibida() : 0);
                 detalle.setRecibido(dto.isRecibido());
                 if (dto.getManifiesto() != null) {
                     detalle.setManifiesto(dto.getManifiesto());
                 }
+
                 log.info("  → Detalle {} ({}/{}): pedido={}, recibido={}",
                         detalle.getId(), detalle.getCodigoProducto(), detalle.getReferenciaVariantes(),
-                        detalle.getCantidad(), cantRecibida);
+                        detalle.getCantidad(), detalle.getCantidadRecibida());
             }
         }
 

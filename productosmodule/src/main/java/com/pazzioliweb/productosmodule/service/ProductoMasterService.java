@@ -117,11 +117,17 @@ public class ProductoMasterService {
             return;
         }
 
+        // ── OPTIMIZACIÓN: cargar todas las unidades de medida en batch para evitar N+1 queries ──
+        List<UnidadesMedida> unidades = unidadMedidaRepository.findAllById(unidadesIds);
+        java.util.Map<Integer, UnidadesMedida> unidadesMap = unidades.stream()
+                .collect(java.util.stream.Collectors.toMap(UnidadesMedida::getUnidadMedidaId, u -> u));
+
         List<UnidadesMedidaProducto> relaciones = unidadesIds.stream()
             .map(unidadId -> {
-
-                UnidadesMedida unidad = unidadMedidaRepository.findById(unidadId)
-                        .orElseThrow(() -> new RuntimeException("Unidad de medida no encontrada: " + unidadId));
+                UnidadesMedida unidad = unidadesMap.get(unidadId);
+                if (unidad == null) {
+                    throw new RuntimeException("Unidad de medida no encontrada: " + unidadId);
+                }
 
                 UnidadesMedidaProducto rel = new UnidadesMedidaProducto();
 
