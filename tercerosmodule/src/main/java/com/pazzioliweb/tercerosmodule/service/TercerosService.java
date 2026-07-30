@@ -705,4 +705,9 @@ public class TercerosService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public boolean existePorIdentificacion(String identificacion) {
+        return terceroRepository.findByIdentificacion(identificacion).isPresent();
+    }
+
 }

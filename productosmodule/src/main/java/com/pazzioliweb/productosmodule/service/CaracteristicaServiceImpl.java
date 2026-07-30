@@ -16,6 +16,7 @@ import com.pazzioliweb.productosmodule.entity.Caracteristica;
 import com.pazzioliweb.productosmodule.entity.TipoCaracteristica;
 import com.pazzioliweb.productosmodule.repositori.CaracteristicaRepository;
 import com.pazzioliweb.productosmodule.repositori.TipoCaracteristicaRepository;
+import com.pazzioliweb.productosmodule.repositori.ProductoVarianteDetalleRepository;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -24,10 +25,12 @@ public class CaracteristicaServiceImpl implements CaracteristicaService {
 
 	private final CaracteristicaRepository repo;
 	private final TipoCaracteristicaRepository tipoRepo;
+	private final ProductoVarianteDetalleRepository productoVarianteDetalleRepo;
 
-	public CaracteristicaServiceImpl(CaracteristicaRepository repo, TipoCaracteristicaRepository tipoRepo) {
+	public CaracteristicaServiceImpl(CaracteristicaRepository repo, TipoCaracteristicaRepository tipoRepo, ProductoVarianteDetalleRepository productoVarianteDetalleRepo) {
 		this.repo = repo;
 		this.tipoRepo = tipoRepo;
+		this.productoVarianteDetalleRepo = productoVarianteDetalleRepo;
 	}
 
 	@Override
@@ -88,6 +91,13 @@ public class CaracteristicaServiceImpl implements CaracteristicaService {
 		if (!repo.existsById(id)) {
 			throw new EntityNotFoundException("Característica no encontrada");
 		}
+		
+		// Verificar si la característica tiene registros en producto_variante_detalle
+		long count = productoVarianteDetalleRepo.countByCaracteristicaId(id);
+		if (count > 0) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta característica ya ha sido asignada a un producto");
+		}
+		
 		repo.deleteById(id);
 	}
 

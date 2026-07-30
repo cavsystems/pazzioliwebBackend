@@ -75,6 +75,12 @@ public class TercerosController {
 
     }
 
+    @GetMapping("/verificar-cedula")
+    public ResponseEntity<Boolean> verificarCedula(@RequestParam String cedula) {
+        boolean existe = terceroService.existePorIdentificacion(cedula);
+        return ResponseEntity.ok(existe);
+    }
+
 
     /*
      * Listado Completo para consulta de terceros, trae todo los detalles (paginado).

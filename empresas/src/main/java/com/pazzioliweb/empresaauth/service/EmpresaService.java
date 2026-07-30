@@ -681,12 +681,12 @@ public class EmpresaService {
 				usuarioExistente.setNombre(usuarioDto.getNombre());
 			}
 			
-			// Actualizar contraseña si se proporcionó
-			if (usuarioDto.getContrasena() != null && !usuarioDto.getContrasena().trim().isEmpty()) {
-				String contrasenaEncriptada = PasswordUtils.encrypt(usuarioDto.getContrasena());
-				usuarioExistente.setContrasena(contrasenaEncriptada);
-				System.out.println("Contraseña actualizada para usuario: " + usuarioDto.getUsuario());
-			}
+			// No se actualiza la contraseña al actualizar usuario desde la empresa
+			// if (usuarioDto.getContrasena() != null && !usuarioDto.getContrasena().trim().isEmpty()) {
+			// 	String contrasenaEncriptada = PasswordUtils.encrypt(usuarioDto.getContrasena());
+			// 	usuarioExistente.setContrasena(contrasenaEncriptada);
+			// 	System.out.println("Contraseña actualizada para usuario: " + usuarioDto.getUsuario());
+			// }
 			
 			// Actualizar estado si se proporcionó
 			if (usuarioDto.getEstado() != null && !usuarioDto.getEstado().trim().isEmpty()) {

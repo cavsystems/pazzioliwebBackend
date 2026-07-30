@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import com.pazzioliweb.productosmodule.entity.ProductoVariante;
 import com.pazzioliweb.productosmodule.entity.ProductoVarianteDetalle;
 import com.pazzioliweb.productosmodule.entity.Caracteristica;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -29,5 +30,8 @@ public interface ProductoVarianteDetalleRepository extends JpaRepository<Product
 	/** Versión EN BLOQUE: detalles (características) de MUCHAS variantes en una consulta. */
 	@EntityGraph(attributePaths = { "caracteristica", "caracteristica.tipo" })
 	List<ProductoVarianteDetalle> findByProductoVariante_ProductoVarianteIdIn(java.util.Collection<Long> varianteIds);
+
+	@Query("SELECT COUNT(pvd) FROM ProductoVarianteDetalle pvd WHERE pvd.caracteristica.caracteristicaId = :caracteristicaId")
+	long countByCaracteristicaId(@Param("caracteristicaId") Long caracteristicaId);
 
 }
