@@ -36,9 +36,10 @@ public class ParametrosService {
         m.put(CategoriaComprobante.DEVOLUCION, Arrays.asList(TipoMovimientoComprobante.DV));
         m.put(CategoriaComprobante.INGRESO,    Arrays.asList(TipoMovimientoComprobante.RC));
         m.put(CategoriaComprobante.EGRESO,     Arrays.asList(TipoMovimientoComprobante.CE));
-        m.put(CategoriaComprobante.AJUSTE,     Arrays.asList(TipoMovimientoComprobante.EI, TipoMovimientoComprobante.SI));
         m.put(CategoriaComprobante.CAJA,       Arrays.asList(TipoMovimientoComprobante.RC, TipoMovimientoComprobante.CE));
         m.put(CategoriaComprobante.TRASLADO,   Arrays.asList(TipoMovimientoComprobante.TI));
+        m.put(CategoriaComprobante.ENTRADA,    Arrays.asList(TipoMovimientoComprobante.EI));
+        m.put(CategoriaComprobante.SALIDA,     Arrays.asList(TipoMovimientoComprobante.SI));
         CATEGORIA_TIPOS = Collections.unmodifiableMap(m);
     }
 

@@ -5,7 +5,6 @@ public enum CategoriaComprobante {
     DEVOLUCION,
     INGRESO,
     EGRESO,
-    AJUSTE,
     CAJA,
     TRASLADO,
     GLOBAL,
