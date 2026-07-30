@@ -16,6 +16,7 @@ com\pazzioliweb\reportesmodule\dtos\MiResumenHoyDTO.class
 com\pazzioliweb\reportesmodule\dtos\StockProductoDTO.class
 com\pazzioliweb\reportesmodule\dtos\SabanaReporteDTO.class
 com\pazzioliweb\reportesmodule\dtos\VentasPorPeriodoDTO.class
+com\pazzioliweb\reportesmodule\dtos\CarteraVendedorDTO.class
 com\pazzioliweb\reportesmodule\dtos\VentasPorClienteDTO.class
 com\pazzioliweb\reportesmodule\dtos\CarteraDetalleDTO.class
 com\pazzioliweb\reportesmodule\dtos\ProductoSinMovimientoDTO.class
@@ -28,6 +29,7 @@ com\pazzioliweb\reportesmodule\dtos\ProductoMasVendidoDTO.class
 com\pazzioliweb\reportesmodule\service\MisReportesService.class
 com\pazzioliweb\reportesmodule\dtos\MiEgresoDTO.class
 com\pazzioliweb\reportesmodule\dtos\MiVentaDTO.class
+com\pazzioliweb\reportesmodule\dtos\ClientePorVendedorDTO.class
 com\pazzioliweb\reportesmodule\dtos\ComprasVsVentasDTO.class
 com\pazzioliweb\reportesmodule\dtos\ConceptoAbiertoUsoDTO.class
 com\pazzioliweb\reportesmodule\dtos\InventarioCompletoDTO.class

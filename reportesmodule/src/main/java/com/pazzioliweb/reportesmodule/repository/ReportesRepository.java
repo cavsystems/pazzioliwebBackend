@@ -150,13 +150,17 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
             LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
             WHERE v.estado = 'COMPLETADA'
               AND v.fecha_emision BETWEEN :inicio AND :fin
+              AND (:lineaId IS NULL OR p.linea_id = :lineaId)
+              AND (:grupoId IS NULL OR p.grupo_id = :grupoId)
             GROUP BY dv.codigo_producto
             ORDER BY cantidadVendida DESC
             LIMIT :topN
             """, nativeQuery = true)
     List<Object[]> topProductosMasVendidos(@Param("inicio") LocalDate inicio,
                                            @Param("fin") LocalDate fin,
-                                           @Param("topN") int topN);
+                                           @Param("topN") int topN,
+                                           @Param("lineaId") Integer lineaId,
+                                           @Param("grupoId") Integer grupoId);
 
     // ══════════════════════════════════════════════════════════════
     // VENTAS POR VENDEDOR
@@ -176,6 +180,63 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
             ORDER BY totalVendido DESC
             """, nativeQuery = true)
     List<Object[]> ventasPorVendedor(@Param("inicio") LocalDate inicio, @Param("fin") LocalDate fin);
+
+    /**
+     * Detalle de CLIENTES a los que un vendedor les vendió en el periodo
+     * (drill-down del reporte "Ventas por vendedor").
+     */
+    @Query(value = """
+            SELECT
+                t.tercero_id                                                       AS clienteId,
+                t.identificacion                                                   AS identificacion,
+                COALESCE(NULLIF(TRIM(t.razon_social), ''),
+                         TRIM(CONCAT(COALESCE(t.nombre_1,''),' ',COALESCE(t.apellido_1,'')))) AS clienteNombre,
+                COUNT(v.id)                                                        AS cantidadVentas,
+                COALESCE(SUM(v.total_venta), 0)                                    AS totalVendido,
+                MAX(v.fecha_emision)                                               AS ultimaVenta
+            FROM ventas v
+            JOIN terceros t ON t.tercero_id = v.cliente_id
+            WHERE v.estado = 'COMPLETADA'
+              AND v.vendedor_id = :vendedorId
+              AND v.fecha_emision BETWEEN :inicio AND :fin
+            GROUP BY t.tercero_id, t.identificacion, clienteNombre
+            ORDER BY totalVendido DESC
+            """, nativeQuery = true)
+    List<Object[]> clientesPorVendedor(@Param("vendedorId") Integer vendedorId,
+                                       @Param("inicio") LocalDate inicio,
+                                       @Param("fin") LocalDate fin);
+
+    /**
+     * Estado de CARTERA por vendedor con buckets de antigüedad
+     * (al día / 1-30 / 31-60 / 61-90 / >90 días). El vendedor sale de la venta
+     * que originó la cuenta por cobrar; las CxC sin venta o sin vendedor van
+     * agrupadas como "Sin vendedor".
+     */
+    @Query(value = """
+            SELECT
+                COALESCE(ve.vendedor_id, 0)                       AS vendedorId,
+                COALESCE(ve.nombre, 'Sin vendedor')               AS vendedorNombre,
+                COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), cxc.fecha_vencimiento) <= 0
+                                  THEN cxc.saldo ELSE 0 END), 0)  AS alDia,
+                COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), cxc.fecha_vencimiento) BETWEEN 1 AND 30
+                                  THEN cxc.saldo ELSE 0 END), 0)  AS d1a30,
+                COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), cxc.fecha_vencimiento) BETWEEN 31 AND 60
+                                  THEN cxc.saldo ELSE 0 END), 0)  AS d31a60,
+                COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), cxc.fecha_vencimiento) BETWEEN 61 AND 90
+                                  THEN cxc.saldo ELSE 0 END), 0)  AS d61a90,
+                COALESCE(SUM(CASE WHEN DATEDIFF(CURDATE(), cxc.fecha_vencimiento) > 90
+                                  THEN cxc.saldo ELSE 0 END), 0)  AS mas90,
+                COALESCE(SUM(cxc.saldo), 0)                       AS totalSaldo,
+                COUNT(cxc.id)                                     AS cantidadCuentas
+            FROM cuentas_por_cobrar cxc
+            LEFT JOIN ventas v      ON v.id = cxc.venta_id
+            LEFT JOIN vendedores ve ON ve.vendedor_id = v.vendedor_id
+            WHERE cxc.estado IN ('PENDIENTE','PARCIAL','VENCIDA')
+              AND cxc.saldo > 0
+            GROUP BY COALESCE(ve.vendedor_id, 0), COALESCE(ve.nombre, 'Sin vendedor')
+            ORDER BY totalSaldo DESC
+            """, nativeQuery = true)
+    List<Object[]> carteraAgingPorVendedor();
 
     // ══════════════════════════════════════════════════════════════
     // VENTAS POR CAJERO
@@ -439,6 +500,101 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
             """, nativeQuery = true)
     List<Object[]> comprasVsVentasPorMes(@Param("inicio") LocalDate inicio, @Param("fin") LocalDate fin);
 
+    /**
+     * COMPRAS VS VENTAS filtrado por línea y/o grupo del producto.
+     * Se calcula desde los DETALLES (detalles_venta / detalles_orden_compra) porque el
+     * encabezado no sabe de líneas: cada línea de documento se resuelve a su producto
+     * vía SKU (mismo join de totalCostoPeriodo). Los parámetros en NULL no filtran.
+     */
+    @Query(value = """
+            SELECT
+                meses.periodo,
+                COALESCE(v.totalVentas, 0)  AS totalVentas,
+                COALESCE(c.totalCompras, 0) AS totalCompras
+            FROM (
+                SELECT DISTINCT DATE_FORMAT(fecha_emision, '%Y-%m') AS periodo
+                FROM ventas WHERE fecha_emision BETWEEN :inicio AND :fin
+                UNION
+                SELECT DISTINCT DATE_FORMAT(fecha_emision, '%Y-%m') AS periodo
+                FROM ordenes_compra WHERE fecha_emision BETWEEN :inicio AND :fin
+            ) meses
+            LEFT JOIN (
+                SELECT DATE_FORMAT(vv.fecha_emision, '%Y-%m') AS periodo, SUM(dv.total) AS totalVentas
+                FROM detalles_venta dv
+                JOIN ventas vv ON vv.id = dv.venta_id
+                LEFT JOIN producto_variantes pv ON pv.sku = dv.codigo_producto
+                LEFT JOIN productos p ON p.producto_id = pv.producto_id
+                WHERE vv.estado = 'COMPLETADA' AND vv.fecha_emision BETWEEN :inicio AND :fin
+                  AND (:lineaId IS NULL OR p.linea_id = :lineaId)
+                  AND (:grupoId IS NULL OR p.grupo_id = :grupoId)
+                GROUP BY DATE_FORMAT(vv.fecha_emision, '%Y-%m')
+            ) v ON v.periodo = meses.periodo
+            LEFT JOIN (
+                SELECT DATE_FORMAT(oc.fecha_emision, '%Y-%m') AS periodo, SUM(doc.total) AS totalCompras
+                FROM detalles_orden_compra doc
+                JOIN ordenes_compra oc ON oc.id = doc.orden_compra_id
+                LEFT JOIN producto_variantes pv ON pv.sku = CONVERT(COALESCE(NULLIF(doc.sku,''), doc.codigo_producto) USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+                LEFT JOIN productos p ON p.producto_id = pv.producto_id
+                WHERE oc.estado != 'ANULADA' AND oc.fecha_emision BETWEEN :inicio AND :fin
+                  AND (:lineaId IS NULL OR p.linea_id = :lineaId)
+                  AND (:grupoId IS NULL OR p.grupo_id = :grupoId)
+                GROUP BY DATE_FORMAT(oc.fecha_emision, '%Y-%m')
+            ) c ON c.periodo = meses.periodo
+            ORDER BY meses.periodo ASC
+            """, nativeQuery = true)
+    List<Object[]> comprasVsVentasPorMesFiltrado(@Param("inicio") LocalDate inicio,
+                                                 @Param("fin") LocalDate fin,
+                                                 @Param("lineaId") Integer lineaId,
+                                                 @Param("grupoId") Integer grupoId);
+
+    // ══════════════════════════════════════════════════════════════
+    // TOTALES DE PERIODO FILTRADOS POR LÍNEA / GRUPO (comparativo)
+    //   Calculados desde detalles_venta: ventas = Σ dv.total de los productos
+    //   de esa línea/grupo, cantidad = ventas distintas que los incluyen,
+    //   costo = Σ cantidad × costo del producto. NULL = sin filtro.
+    // ══════════════════════════════════════════════════════════════
+
+    @Query(value = """
+            SELECT
+                COALESCE(SUM(dv.total), 0)            AS totalVentas,
+                COUNT(DISTINCT v.id)                  AS cantidadVentas,
+                COALESCE(SUM(dv.cantidad * COALESCE(p.costo, 0)), 0) AS totalCosto
+            FROM detalles_venta dv
+            JOIN ventas v ON v.id = dv.venta_id
+            LEFT JOIN producto_variantes pv ON pv.sku = dv.codigo_producto
+            LEFT JOIN productos p ON p.producto_id = pv.producto_id
+            WHERE v.estado = 'COMPLETADA'
+              AND v.fecha_emision BETWEEN :inicio AND :fin
+              AND (:lineaId IS NULL OR p.linea_id = :lineaId)
+              AND (:grupoId IS NULL OR p.grupo_id = :grupoId)
+            """, nativeQuery = true)
+    List<Object[]> totalesPeriodoFiltrado(@Param("inicio") LocalDate inicio,
+                                          @Param("fin") LocalDate fin,
+                                          @Param("lineaId") Integer lineaId,
+                                          @Param("grupoId") Integer grupoId);
+
+    /**
+     * Devoluciones del periodo filtradas por línea/grupo. El producto de cada línea
+     * devuelta se resuelve a través del detalle de venta original (detalle_venta_id).
+     */
+    @Query(value = """
+            SELECT
+                COALESCE(SUM(dd.total_linea), 0) AS totalDevoluciones,
+                COUNT(DISTINCT d.id)             AS cantidadDevoluciones
+            FROM detalles_devolucion_venta dd
+            JOIN devoluciones_venta d ON d.id = dd.devolucion_id
+            JOIN detalles_venta dv ON dv.id = dd.detalle_venta_id
+            LEFT JOIN producto_variantes pv ON pv.sku = dv.codigo_producto
+            LEFT JOIN productos p ON p.producto_id = pv.producto_id
+            WHERE d.fecha_creacion BETWEEN :inicio AND :fin
+              AND (:lineaId IS NULL OR p.linea_id = :lineaId)
+              AND (:grupoId IS NULL OR p.grupo_id = :grupoId)
+            """, nativeQuery = true)
+    List<Object[]> totalDevolucionesPeriodoFiltrado(@Param("inicio") LocalDate inicio,
+                                                    @Param("fin") LocalDate fin,
+                                                    @Param("lineaId") Integer lineaId,
+                                                    @Param("grupoId") Integer grupoId);
+
     // ══════════════════════════════════════════════════════════════
     // PRODUCTOS CON STOCK BAJO — LISTADO DETALLADO
     // ══════════════════════════════════════════════════════════════
@@ -486,13 +642,17 @@ public interface ReportesRepository extends JpaRepository<Venta, Long> {
             LEFT JOIN lineas l ON l.linea_id = p.linea_id
             WHERE v.estado = 'COMPLETADA'
               AND v.fecha_emision BETWEEN :inicio AND :fin
+              AND (:lineaId IS NULL OR p.linea_id = :lineaId)
+              AND (:grupoId IS NULL OR p.grupo_id = :grupoId)
             GROUP BY dv.codigo_producto
             ORDER BY (SUM(dv.total) - SUM(dv.cantidad * p.costo)) DESC
             LIMIT :topN
             """, nativeQuery = true)
     List<Object[]> rentabilidadPorProducto(@Param("inicio") LocalDate inicio,
                                             @Param("fin") LocalDate fin,
-                                            @Param("topN") int topN);
+                                            @Param("topN") int topN,
+                                            @Param("lineaId") Integer lineaId,
+                                            @Param("grupoId") Integer grupoId);
 
     // ══════════════════════════════════════════════════════════════
     // VENTAS POR DÍA DE LA SEMANA (Lunes, Martes... Domingo)

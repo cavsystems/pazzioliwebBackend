@@ -18,6 +18,7 @@ import com.pazzioliweb.cajerosmodule.entity.Cajero;
 import com.pazzioliweb.cajerosmodule.entity.DetalleCajero;
 import com.pazzioliweb.cajerosmodule.repositori.CajeroRepository;
 import com.pazzioliweb.cajerosmodule.service.DetalleCajeroService;
+import com.pazzioliweb.cajerosmodule.service.EmailCuadreCajaService;
 import com.pazzioliweb.cajerosmodule.service.InformeDiarioService;
 
 /**
@@ -36,14 +37,17 @@ public class DetalleCajeroController {
     private final DetalleCajeroService detalleCajeroService;
     private final CajeroRepository     cajeroRepository;
     private final InformeDiarioService informeDiarioService;
+    private final EmailCuadreCajaService emailCuadreCajaService;
 
     @Autowired
     public DetalleCajeroController(DetalleCajeroService detalleCajeroService,
                                    CajeroRepository cajeroRepository,
-                                   InformeDiarioService informeDiarioService) {
+                                   InformeDiarioService informeDiarioService,
+                                   EmailCuadreCajaService emailCuadreCajaService) {
         this.detalleCajeroService = detalleCajeroService;
         this.cajeroRepository     = cajeroRepository;
         this.informeDiarioService = informeDiarioService;
+        this.emailCuadreCajaService = emailCuadreCajaService;
     }
 
     // ============================================================
@@ -191,6 +195,33 @@ public class DetalleCajeroController {
             return ResponseEntity.ok(detalleCajeroService.construirCuadre(detalleCajeroId));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * Envía el cuadre de caja de la sesión por correo electrónico (resumen HTML
+     * + PDF adjunto). Se puede invocar tras el cierre o para sesiones ya cerradas.
+     *
+     * Body: { "correo": "gerencia@empresa.com" }
+     */
+    @PostMapping("/{detalleCajeroId}/cuadre/enviar-correo")
+    public ResponseEntity<?> enviarCuadrePorCorreo(
+            @PathVariable Long detalleCajeroId,
+            @RequestBody Map<String, String> body) {
+        try {
+            String correo = body != null ? body.get("correo") : null;
+            if (correo == null || correo.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Debe indicar el correo destinatario."));
+            }
+            CuadreCajaDTO cuadre = detalleCajeroService.construirCuadre(detalleCajeroId);
+            boolean enviado = emailCuadreCajaService.enviarCuadre(cuadre, correo);
+            if (!enviado) {
+                return ResponseEntity.status(503).body(Map.of(
+                        "error", "El servidor de correo no está configurado (spring.mail.*)."));
+            }
+            return ResponseEntity.ok(Map.of("mensaje", "Cuadre enviado a " + correo));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 

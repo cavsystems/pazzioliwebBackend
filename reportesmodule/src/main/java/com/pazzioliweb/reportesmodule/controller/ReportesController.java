@@ -85,9 +85,11 @@ public class ReportesController {
     public ResponseEntity<List<ProductoMasVendidoDTO>> topProductos(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
-            @RequestParam(defaultValue = "10") int topN) {
+            @RequestParam(defaultValue = "10") int topN,
+            @RequestParam(required = false) Integer lineaId,
+            @RequestParam(required = false) Integer grupoId) {
         LocalDate[] rango = defaults(inicio, fin);
-        return ResponseEntity.ok(reportesService.getTopProductos(rango[0], rango[1], topN));
+        return ResponseEntity.ok(reportesService.getTopProductos(rango[0], rango[1], topN, lineaId, grupoId));
     }
 
     // ════════════════════════════════════════════════
@@ -100,6 +102,27 @@ public class ReportesController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
         LocalDate[] rango = defaults(inicio, fin);
         return ResponseEntity.ok(reportesService.getVentasPorVendedor(rango[0], rango[1]));
+    }
+
+    /**
+     * 6b. Drill-down: clientes a los que el vendedor les vendió en el periodo.
+     */
+    @GetMapping("/ventas-por-vendedor/{vendedorId}/clientes")
+    public ResponseEntity<List<ClientePorVendedorDTO>> clientesPorVendedor(
+            @PathVariable Integer vendedorId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+        LocalDate[] rango = defaults(inicio, fin);
+        return ResponseEntity.ok(reportesService.getClientesPorVendedor(vendedorId, rango[0], rango[1]));
+    }
+
+    /**
+     * 6c. Estado de cartera por vendedor con antigüedad 30/60/90/+90.
+     * Es una foto del saldo ACTUAL de cuentas por cobrar (no depende del rango).
+     */
+    @GetMapping("/cartera-por-vendedor")
+    public ResponseEntity<List<CarteraVendedorDTO>> carteraPorVendedor() {
+        return ResponseEntity.ok(reportesService.getCarteraPorVendedor());
     }
 
     // ════════════════════════════════════════════════
@@ -180,9 +203,11 @@ public class ReportesController {
     @GetMapping("/compras-vs-ventas")
     public ResponseEntity<List<ComprasVsVentasDTO>> comprasVsVentas(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
+            @RequestParam(required = false) Integer lineaId,
+            @RequestParam(required = false) Integer grupoId) {
         LocalDate[] rango = defaults(inicio, fin);
-        return ResponseEntity.ok(reportesService.getComprasVsVentas(rango[0], rango[1]));
+        return ResponseEntity.ok(reportesService.getComprasVsVentas(rango[0], rango[1], lineaId, grupoId));
     }
 
     // ════════════════════════════════════════════════
@@ -215,9 +240,11 @@ public class ReportesController {
     public ResponseEntity<List<RentabilidadProductoDTO>> rentabilidadProductos(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
-            @RequestParam(defaultValue = "20") int topN) {
+            @RequestParam(defaultValue = "20") int topN,
+            @RequestParam(required = false) Integer lineaId,
+            @RequestParam(required = false) Integer grupoId) {
         LocalDate[] rango = defaults(inicio, fin);
-        return ResponseEntity.ok(reportesService.getRentabilidadProductos(rango[0], rango[1], topN));
+        return ResponseEntity.ok(reportesService.getRentabilidadProductos(rango[0], rango[1], topN, lineaId, grupoId));
     }
 
     // ════════════════════════════════════════════════
@@ -253,14 +280,16 @@ public class ReportesController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate prevInicio,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate prevFin) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate prevFin,
+            @RequestParam(required = false) Integer lineaId,
+            @RequestParam(required = false) Integer grupoId) {
         LocalDate[] r = defaults(inicio, fin);
         if (prevInicio == null || prevFin == null) {
             long dias = java.time.temporal.ChronoUnit.DAYS.between(r[0], r[1]);
             prevFin = r[0].minusDays(1);
             prevInicio = prevFin.minusDays(dias);
         }
-        return ResponseEntity.ok(reportesService.getComparativoPeriodos(r[0], r[1], prevInicio, prevFin));
+        return ResponseEntity.ok(reportesService.getComparativoPeriodos(r[0], r[1], prevInicio, prevFin, lineaId, grupoId));
     }
 
     // ════════════════════════════════════════════════

@@ -128,9 +128,10 @@ public class ReportesServiceImpl implements ReportesService {
     // ════════════════════════════════════════════════════════════
 
     @Override
-    public List<ProductoMasVendidoDTO> getTopProductos(LocalDate inicio, LocalDate fin, int topN) {
+    public List<ProductoMasVendidoDTO> getTopProductos(LocalDate inicio, LocalDate fin, int topN,
+                                                        Integer lineaId, Integer grupoId) {
         List<ProductoMasVendidoDTO> result = new ArrayList<>();
-        for (Object[] r : repo.topProductosMasVendidos(inicio, fin, topN)) {
+        for (Object[] r : repo.topProductosMasVendidos(inicio, fin, topN, lineaId, grupoId)) {
             BigDecimal totalVendido = toBigDecimal(r[5]);
             BigDecimal costoTotal = toBigDecimal(r[6]);
             result.add(new ProductoMasVendidoDTO(
@@ -164,6 +165,41 @@ public class ReportesServiceImpl implements ReportesService {
                     cant,
                     total,
                     cant > 0 ? total.divide(BigDecimal.valueOf(cant), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO
+            ));
+        }
+        return result;
+    }
+
+    @Override
+    public List<ClientePorVendedorDTO> getClientesPorVendedor(Integer vendedorId, LocalDate inicio, LocalDate fin) {
+        List<ClientePorVendedorDTO> result = new ArrayList<>();
+        for (Object[] r : repo.clientesPorVendedor(vendedorId, inicio, fin)) {
+            result.add(new ClientePorVendedorDTO(
+                    toInt(r[0]),
+                    str(r[1]),
+                    str(r[2]),
+                    toLong(r[3]),
+                    toBigDecimal(r[4]),
+                    toLocalDate(r[5])
+            ));
+        }
+        return result;
+    }
+
+    @Override
+    public List<CarteraVendedorDTO> getCarteraPorVendedor() {
+        List<CarteraVendedorDTO> result = new ArrayList<>();
+        for (Object[] r : repo.carteraAgingPorVendedor()) {
+            result.add(new CarteraVendedorDTO(
+                    toInt(r[0]),
+                    str(r[1]),
+                    toBigDecimal(r[2]),
+                    toBigDecimal(r[3]),
+                    toBigDecimal(r[4]),
+                    toBigDecimal(r[5]),
+                    toBigDecimal(r[6]),
+                    toBigDecimal(r[7]),
+                    toLong(r[8])
             ));
         }
         return result;
@@ -308,9 +344,14 @@ public class ReportesServiceImpl implements ReportesService {
     // ════════════════════════════════════════════════════════════
 
     @Override
-    public List<ComprasVsVentasDTO> getComprasVsVentas(LocalDate inicio, LocalDate fin) {
+    public List<ComprasVsVentasDTO> getComprasVsVentas(LocalDate inicio, LocalDate fin,
+                                                       Integer lineaId, Integer grupoId) {
+        boolean filtrado = lineaId != null || grupoId != null;
+        List<Object[]> rows = filtrado
+                ? repo.comprasVsVentasPorMesFiltrado(inicio, fin, lineaId, grupoId)
+                : repo.comprasVsVentasPorMes(inicio, fin);
         List<ComprasVsVentasDTO> result = new ArrayList<>();
-        for (Object[] r : repo.comprasVsVentasPorMes(inicio, fin)) {
+        for (Object[] r : rows) {
             BigDecimal ventas = toBigDecimal(r[1]);
             BigDecimal compras = toBigDecimal(r[2]);
             result.add(new ComprasVsVentasDTO(
@@ -371,9 +412,10 @@ public class ReportesServiceImpl implements ReportesService {
     // ════════════════════════════════════════════════════════════
 
     @Override
-    public List<RentabilidadProductoDTO> getRentabilidadProductos(LocalDate inicio, LocalDate fin, int topN) {
+    public List<RentabilidadProductoDTO> getRentabilidadProductos(LocalDate inicio, LocalDate fin, int topN,
+                                                                   Integer lineaId, Integer grupoId) {
         List<RentabilidadProductoDTO> result = new ArrayList<>();
-        for (Object[] r : repo.rentabilidadPorProducto(inicio, fin, topN)) {
+        for (Object[] r : repo.rentabilidadPorProducto(inicio, fin, topN, lineaId, grupoId)) {
             Long cantidad = toLong(r[3]);
             BigDecimal ingresos = toBigDecimal(r[4]);
             BigDecimal costo = toBigDecimal(r[5]);
@@ -543,23 +585,41 @@ public class ReportesServiceImpl implements ReportesService {
 
     @Override
     public ComparativoPeriodosDTO getComparativoPeriodos(LocalDate actualInicio, LocalDate actualFin,
-                                                         LocalDate anteriorInicio, LocalDate anteriorFin) {
+                                                         LocalDate anteriorInicio, LocalDate anteriorFin,
+                                                         Integer lineaId, Integer grupoId) {
         ComparativoPeriodosDTO dto = new ComparativoPeriodosDTO();
         dto.setEtiquetaActual(actualInicio + " a " + actualFin);
         dto.setEtiquetaAnterior(anteriorInicio + " a " + anteriorFin);
 
-        BigDecimal vActual = repo.totalVentasPeriodo(actualInicio, actualFin);
-        BigDecimal vAnt    = repo.totalVentasPeriodo(anteriorInicio, anteriorFin);
-        Long cActual       = repo.cantidadVentasPeriodo(actualInicio, actualFin);
-        Long cAnt          = repo.cantidadVentasPeriodo(anteriorInicio, anteriorFin);
-        BigDecimal costoActual = repo.totalCostoPeriodo(actualInicio, actualFin);
-        BigDecimal costoAnt    = repo.totalCostoPeriodo(anteriorInicio, anteriorFin);
+        boolean filtrado = lineaId != null || grupoId != null;
+        BigDecimal vActual, vAnt, costoActual, costoAnt;
+        Long cActual, cAnt;
+        if (filtrado) {
+            // Con filtro de línea/grupo los totales salen del DETALLE de venta:
+            // ventas = Σ total de las líneas de esos productos; la cantidad cuenta
+            // las ventas que incluyen al menos un producto de la línea/grupo.
+            Object[] act = repo.totalesPeriodoFiltrado(actualInicio, actualFin, lineaId, grupoId).get(0);
+            Object[] ant = repo.totalesPeriodoFiltrado(anteriorInicio, anteriorFin, lineaId, grupoId).get(0);
+            vActual = toBigDecimal(act[0]); cActual = toLong(act[1]); costoActual = toBigDecimal(act[2]);
+            vAnt    = toBigDecimal(ant[0]); cAnt    = toLong(ant[1]); costoAnt    = toBigDecimal(ant[2]);
+        } else {
+            vActual = repo.totalVentasPeriodo(actualInicio, actualFin);
+            vAnt    = repo.totalVentasPeriodo(anteriorInicio, anteriorFin);
+            cActual = repo.cantidadVentasPeriodo(actualInicio, actualFin);
+            cAnt    = repo.cantidadVentasPeriodo(anteriorInicio, anteriorFin);
+            costoActual = repo.totalCostoPeriodo(actualInicio, actualFin);
+            costoAnt    = repo.totalCostoPeriodo(anteriorInicio, anteriorFin);
+        }
 
         BigDecimal devActual = BigDecimal.ZERO;
         BigDecimal devAnt    = BigDecimal.ZERO;
-        List<Object[]> da = repo.totalDevolucionesPeriodo(actualInicio, actualFin);
+        List<Object[]> da = filtrado
+                ? repo.totalDevolucionesPeriodoFiltrado(actualInicio, actualFin, lineaId, grupoId)
+                : repo.totalDevolucionesPeriodo(actualInicio, actualFin);
         if (da != null && !da.isEmpty()) devActual = toBigDecimal(da.get(0)[0]);
-        List<Object[]> dn = repo.totalDevolucionesPeriodo(anteriorInicio, anteriorFin);
+        List<Object[]> dn = filtrado
+                ? repo.totalDevolucionesPeriodoFiltrado(anteriorInicio, anteriorFin, lineaId, grupoId)
+                : repo.totalDevolucionesPeriodo(anteriorInicio, anteriorFin);
         if (dn != null && !dn.isEmpty()) devAnt = toBigDecimal(dn.get(0)[0]);
 
         BigDecimal utilActual = vActual.subtract(devActual).subtract(costoActual);
@@ -1027,9 +1087,9 @@ public class ReportesServiceImpl implements ReportesService {
         s.setVentasPorVendedor(getVentasPorVendedor(inicio, fin));
         s.setVentasPorCajero(getVentasPorCajero(inicio, fin));
         s.setTopClientes(getTopClientes(inicio, fin, 50));
-        s.setTopProductos(getTopProductos(inicio, fin, 50));
+        s.setTopProductos(getTopProductos(inicio, fin, 50, null, null));
         s.setVentasPorLinea(getVentasPorLinea(inicio, fin));
-        s.setRentabilidad(getRentabilidadProductos(inicio, fin, 50));
+        s.setRentabilidad(getRentabilidadProductos(inicio, fin, 50, null, null));
         s.setComprasPorProveedor(getComprasPorProveedor(inicio, fin, 50));
         s.setMovimientosCaja(getMovimientosCajaPorTipo(inicio, fin));
         s.setCarteraPorEstado(getCarteraPorEstado());
