@@ -115,15 +115,16 @@ public class ProductoVarianteServiceImpl implements ProductoVarianteService{
     }
     
     @Override
-    public Page<ProductoInventarioDTO> listarInventarioBasico( String consultarentrada,int bodega,int activo,String estadoproduct,String productodes,Pageable pageable){
+    public Page<ProductoInventarioDTO> listarInventarioBasico( String consultarentrada,int bodega,int activo,String estadoproduct,String productodes,
+            int lineaId, int grupoId, int tipoProductoId, Pageable pageable){
     	Page<ProductoInventarioDTO>  pagina;
         System.out.println("estado variante actul: " + activo);
     	if(consultarentrada.equals("NO")) {
-    		 pagina=varianteRepository.listarInventario( activo,productodes,pageable);
+    		 pagina=varianteRepository.listarInventario( activo,productodes,lineaId,grupoId,tipoProductoId,pageable);
     	}else {
-    		pagina=varianteRepository.listarInventarioentradasalida(activo, bodega, productodes, pageable);
+    		pagina=varianteRepository.listarInventarioentradasalida(activo, bodega, productodes, lineaId, grupoId, tipoProductoId, pageable);
     	}
-    	
+
     	return pagina;
     }
 

@@ -32,6 +32,8 @@ import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.ConfiguracionContableService;
 import org.springframework.context.ApplicationEventPublisher;
 import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportDto;
+import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportePaginadoDto;
+import com.pazzioliweb.movimientosinventariomodule.dtos.KardexTotalesDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioDetalleCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
@@ -87,6 +89,41 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     private UsuarioRepository usuarioRepository;
     @Autowired
     private RedisTemplate<String, DatosSesiones> redisTemplate;
+
+    // Caché en memoria del reporte de kardex COMPLETO por tenant + combinación de filtros.
+    // El scroll infinito pide una página nueva cada vez que el usuario baja en la tabla;
+    // sin esto, cada página re-ejecutaba la consulta nativa completa (joins + ROW_NUMBER)
+    // desde cero. Con esto, solo la primera página de una búsqueda paga ese costo; el resto
+    // reutiliza el mismo resultado mientras no haya expirado.
+    private static final long KARDEX_CACHE_TTL_MS = 90_000;
+    private final java.util.concurrent.ConcurrentHashMap<String, KardexCacheEntry> kardexCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static class KardexCacheEntry {
+        final List<KardexReportDto> datos;
+        final long creadoEn = System.currentTimeMillis();
+        KardexCacheEntry(List<KardexReportDto> datos) { this.datos = datos; }
+        boolean expirado() { return System.currentTimeMillis() - creadoEn > KARDEX_CACHE_TTL_MS; }
+    }
+
+    private List<KardexReportDto> getKardexReportCacheado(String desde, String hasta,
+            Integer varianteproductoid, String bodega, String movimiento) {
+        // La clave incluye el tenant explícitamente: el caché es un campo de instancia
+        // compartido por todas las requests de este bean, y en un backend multi-tenant
+        // NUNCA se puede servir el resultado de un tenant a otro.
+        String tenant = com.pazzioliweb.commonbacken.conexiondb.TenantContext.getCurrentTenant();
+        String clave = tenant + "|" + desde + "|" + hasta + "|" + varianteproductoid + "|" + bodega + "|" + movimiento;
+
+        kardexCache.entrySet().removeIf(e -> e.getValue().expirado());
+
+        KardexCacheEntry entry = kardexCache.get(clave);
+        if (entry != null) {
+            return entry.datos;
+        }
+        List<KardexReportDto> datos = getKardexReport(desde, hasta, varianteproductoid, bodega, movimiento);
+        kardexCache.put(clave, new KardexCacheEntry(datos));
+        return datos;
+    }
     @Autowired
     private Jwcommon jwcommon;
     @Autowired
@@ -853,10 +890,83 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                     dto.setFechaEmision((java.time.LocalDateTime) row[14]);
                 }
             }
+            if (row.length > 15 && row[15] != null) {
+                dto.setKardexId(((Number) row[15]).longValue());
+            }
+            if (row.length > 16 && row[16] != null) {
+                dto.setPrecioVenta(getDoubleValue(row[16]));
+            }
             dtos.add(dto);
         }
-        
+
         return dtos;
+    }
+
+    @Override
+    public KardexReportePaginadoDto getKardexReportPaginado(String desde, String hasta, Integer varianteproductoid,
+            String bodega, String movimiento, int page, int size) {
+        // La consulta ya trae TODO el período filtrado (misma consulta de siempre) porque
+        // el saldo/costo vigentes se calculan sobre el conjunto completo, no solo la página
+        // visible. Lo que cambia es que ahora el total se calcula aquí (antes lo hacía el
+        // front con los datos completos) y solo se le manda al front la página pedida —
+        // así el payload de cada request queda acotado en vez de mandar todo de una vez.
+        // Se usa la versión CACHEADA: así "cargar más" (páginas siguientes del mismo scroll)
+        // no vuelve a pagar el costo de la consulta completa cada vez.
+        List<KardexReportDto> completo = getKardexReportCacheado(desde, hasta, varianteproductoid, bodega, movimiento);
+
+        KardexTotalesDto totales = new KardexTotalesDto();
+        double totalEntradas = 0, totalSalidas = 0;
+        int movimientosEntrada = 0, movimientosSalida = 0;
+        // "Última fila por bodega" (el reporte viene ordenado por fecha_emision ascendente),
+        // para sumar el saldo/valor real del producto entre todas sus bodegas.
+        java.util.LinkedHashMap<String, KardexReportDto> ultimaPorBodega = new java.util.LinkedHashMap<>();
+
+        for (KardexReportDto fila : completo) {
+            double entrada = fila.getEntrada() != null ? fila.getEntrada() : 0;
+            double salida = fila.getSalida() != null ? fila.getSalida() : 0;
+            totalEntradas += entrada;
+            totalSalidas += salida;
+            if (entrada > 0) movimientosEntrada++;
+            if (salida > 0) movimientosSalida++;
+            ultimaPorBodega.put(fila.getNombrebodega(), fila);
+        }
+
+        double saldoActual = 0, valorInventario = 0;
+        for (KardexReportDto ultima : ultimaPorBodega.values()) {
+            double saldo = ultima.getSaldo() != null ? ultima.getSaldo() : 0;
+            double costoProm = ultima.getCostoPromedio() != null ? ultima.getCostoPromedio() : 0;
+            saldoActual += saldo;
+            valorInventario += saldo * costoProm;
+        }
+        // Costo promedio "vigente": el de la fila más reciente del período (solo referencial).
+        double costoPromedioVigente = completo.isEmpty() ? 0
+                : (completo.get(completo.size() - 1).getCostoPromedio() != null
+                        ? completo.get(completo.size() - 1).getCostoPromedio() : 0);
+
+        totales.setSaldoActual(saldoActual);
+        totales.setTotalEntradas(totalEntradas);
+        totales.setTotalSalidas(totalSalidas);
+        totales.setCostoPromedioVigente(costoPromedioVigente);
+        totales.setValorInventario(valorInventario);
+        totales.setMovimientosEntrada(movimientosEntrada);
+        totales.setMovimientosSalida(movimientosSalida);
+
+        int totalElements = completo.size();
+        int desdeIdx = Math.max(0, page) * Math.max(1, size);
+        int hastaIdx = Math.min(totalElements, desdeIdx + Math.max(1, size));
+        List<KardexReportDto> contenidoPagina = desdeIdx >= totalElements
+                ? java.util.Collections.emptyList()
+                : completo.subList(desdeIdx, hastaIdx);
+        int totalPages = size > 0 ? (int) Math.ceil((double) totalElements / size) : 0;
+
+        KardexReportePaginadoDto resultado = new KardexReportePaginadoDto();
+        resultado.setContent(contenidoPagina);
+        resultado.setTotales(totales);
+        resultado.setPage(page);
+        resultado.setSize(size);
+        resultado.setTotalElements(totalElements);
+        resultado.setTotalPages(totalPages);
+        return resultado;
     }
 
     private Double getDoubleValue(Object value) {

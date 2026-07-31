@@ -186,4 +186,9 @@ public class PreciosProductoVarianteServiceImpl implements PreciosProductoVarian
     public Page<PreciosProductoVarianteDTO> listarPreciosVariantesProductos(List<Integer> varianteIds, Pageable pageable) {
         return repository.preciosProductoVarianteMultiple(varianteIds, pageable);
     }
+
+    @Override
+    public List<PreciosProductoVarianteDTO> listarPreciosVariantesProductosTodos(List<Integer> varianteIds) {
+        return repository.preciosProductoVarianteMultipleTodos(varianteIds);
+    }
 }

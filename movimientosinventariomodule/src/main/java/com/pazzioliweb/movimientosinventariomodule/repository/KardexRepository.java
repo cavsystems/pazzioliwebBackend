@@ -52,9 +52,10 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                                                     @Param("bodegaCodigo") Integer bodegaCodigo);
 
         @Query(value = "SELECT fecha_creacion, numerofactura, tipo_movimiento AS movimiento, tipoentrada AS tipo_movimiento, tipo, " +
-                       "descripcion AS Producto, entrada, salida, costo_unitario, costo_promedio, total_costo, saldo, nombrebodega, cliente, fecha_emision " +
+                       "descripcion AS Producto, entrada, salida, costo_unitario, costo_promedio, total_costo, saldo, nombrebodega, cliente, fecha_emision, kardex_id, precio_venta " +
                        "FROM (" +
                        "SELECT " +
+                       "  k.kardex_id AS kardex_id, " +
                        "  m.tipo_movimiento AS tipoentrada, " +
                        "  co.prefijo, " +
                        "  m.consecutivo, " +
@@ -85,6 +86,7 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "  mov.numero_comprobante, " +
                        "  k.total_costo, " +
                        "  k.costo_promedio, " +
+                       "  dev.precio_unitario AS precio_venta, " +
                        "  CASE " +
                        "    WHEN ve.id IS NOT NULL THEN COALESCE(NULLIF(TRIM(tve.razon_social), ''), CONCAT_WS(' ', NULLIF(TRIM(tve.nombre_1),''), NULLIF(TRIM(tve.nombre_2),''), NULLIF(TRIM(tve.apellido_1),''), NULLIF(TRIM(tve.apellido_2),''))) " +
                        "    WHEN orden.id IS NOT NULL THEN COALESCE(NULLIF(TRIM(torden.razon_social), ''), CONCAT_WS(' ', NULLIF(TRIM(torden.nombre_1),''), NULLIF(TRIM(torden.nombre_2),''), NULLIF(TRIM(torden.apellido_1),''), NULLIF(TRIM(torden.apellido_2),''))) " +
@@ -102,7 +104,10 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "JOIN productos pod ON pod.producto_id = po.producto_id " +
                        "LEFT JOIN movimiento_cajero mov ON mov.numero_comprobante = CONCAT(co.prefijo, '-', m.consecutivo) " +
                        "LEFT JOIN ventas ve ON ve.comprobante_id = m.comprobante_id AND ve.consecutivo_comprobante = m.consecutivo " +
-                       "LEFT JOIN detalles_venta dev ON dev.venta_id = ve.id " +
+                       // Una venta puede tener varias líneas de producto; se enlaza por
+                       // codigo_barras para traer el precio de la línea que corresponde
+                       // a ESTE producto/variante del kardex, no cualquier línea de la venta.
+                       "LEFT JOIN detalles_venta dev ON dev.venta_id = ve.id AND dev.codigo_barras = po.codigo_barras " +
                        "LEFT JOIN terceros tve ON tve.tercero_id = ve.cliente_id " +
                        "LEFT JOIN ordenes_compra orden ON orden.comprobante_id = m.comprobante_id AND orden.consecutivo_comprobante = m.consecutivo " +
                        "LEFT JOIN detalles_orden_compra detorden ON detorden.orden_compra_id = orden.id " +
@@ -112,12 +117,19 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
                        "LEFT JOIN ventas ve_devv ON ve_devv.id = devv.venta_id " +
                        "LEFT JOIN terceros tdevv ON tdevv.tercero_id = ve_devv.cliente_id " +
                        "JOIN bodegas b ON b.codigo = k.bodega_id " +
+                       // Filtros que NO dependen de los LEFT JOIN (fecha, producto, bodega) se aplican
+                       // ACÁ, antes del ROW_NUMBER() y de la fan-out hacia ventas/ordenes/devoluciones,
+                       // para que MySQL solo arrastre por esos joins las filas del período/producto
+                       // pedidos en vez de la tabla kardex completa (esto es lo que hacía lento el
+                       // reporte incluso antes de paginar).
+                       "WHERE (:desde IS NULL OR DATE(k.fecha_creacion) >= :desde) " +
+                       "AND (:hasta IS NULL OR DATE(k.fecha_creacion) <= :hasta) " +
+                       "AND (:varianteproductoid IS NULL OR po.producto_variantes_id = :varianteproductoid) " +
+                       "AND (:bodega IS NULL OR b.nombre LIKE CONCAT('%', :bodega, '%')) " +
                        ") t " +
+                       // "movimiento" sí depende de columnas derivadas de los joins (co/mov), por
+                       // eso se queda en el WHERE de afuera junto con rn = 1.
                        "WHERE rn = 1 " +
-                       "AND (:desde IS NULL OR DATE(t.fecha_creacion) >= :desde) " +
-                       "AND (:hasta IS NULL OR DATE(t.fecha_creacion) <= :hasta) " +
-                       "AND (:varianteproductoid IS NULL OR t.variante_id = :varianteproductoid) " +
-                       "AND (:bodega IS NULL OR t.nombrebodega LIKE CONCAT('%', :bodega, '%')) " +
                        "AND (:movimiento IS NULL OR t.tipo_movimiento LIKE CONCAT('%', :movimiento, '%')) " +
                        "ORDER BY fecha_emision", nativeQuery = true)
         List<Object[]> getKardexReportRaw(@Param("desde") String desde, @Param("hasta") String hasta, 

@@ -71,4 +71,28 @@ public interface PreciosProductoVarianteRepository extends JpaRepository<Precios
 			nativeQuery = true
 	)
 	Page<PreciosProductoVarianteDTO> preciosProductoVarianteMultiple(@Param("varianteIds") List<Integer> varianteIds, Pageable pageable);
+
+	/**
+	 * Versión SIN paginar del batch de arriba: para exportar a Excel se necesitan
+	 * TODAS las filas de TODAS las variantes de una vez (miles), no una página de 20.
+	 */
+	@Query(
+			value = """
+					   SELECT
+					pp.valor,
+					pp.producto_variantes_id as productoVarianteId,
+					   pp.precios_producto_id as preciosProductoId,
+					   p.precio_id as precioId,
+					   p.descripcion as precio,
+					   pp.fecha_creacion as fechaCreacion,
+					   pp.fecha_inicio as fechaInicio,
+					   pp.fecha_fin as fechaFin,
+					   pp.predeterminada
+					   FROM precios_producto_variante pp
+					   JOIN precios p ON p.precio_id = pp.precio_id
+					   WHERE pp.producto_variantes_id IN :varianteIds
+					""",
+			nativeQuery = true
+	)
+	List<PreciosProductoVarianteDTO> preciosProductoVarianteMultipleTodos(@Param("varianteIds") List<Integer> varianteIds);
 }

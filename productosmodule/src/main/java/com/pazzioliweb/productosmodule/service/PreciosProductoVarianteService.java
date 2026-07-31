@@ -26,4 +26,7 @@ public interface PreciosProductoVarianteService {
     Page<PreciosProductoVarianteDTO> listarPreciosVariantesProducto(Integer varianteId, Pageable pageable);
 
     Page<PreciosProductoVarianteDTO> listarPreciosVariantesProductos(List<Integer> varianteIds, Pageable pageable);
+
+    // Sin paginar: usado para exportar a Excel (necesita TODAS las filas de una vez).
+    List<PreciosProductoVarianteDTO> listarPreciosVariantesProductosTodos(List<Integer> varianteIds);
 }
