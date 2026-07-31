@@ -385,6 +385,22 @@ public class DetalleCajeroService {
     }
 
     /**
+     * Validación TEMPRANA de que la sesión de caja existe y está ABIERTA.
+     * Para llamarla al INICIO de los flujos que registran movimientos de caja
+     * (completar venta, recibos): sin esto, el "sesión cerrada" saltaba al FINAL
+     * del flujo — después de kardex, inventario y folio — y tocaba revertir todo.
+     */
+    @Transactional(readOnly = true)
+    public void validarSesionAbierta(Long detalleCajeroId) {
+        DetalleCajero detalle = detalleCajeroRepository.findById(detalleCajeroId)
+                .orElseThrow(() -> new RuntimeException("Sesión de cajero no encontrada: " + detalleCajeroId));
+        if (detalle.getEstado() != DetalleCajero.EstadoDetalleCajero.ABIERTA) {
+            throw new RuntimeException("La sesión de caja del día está CERRADA (se cierra automáticamente a " +
+                    "medianoche). Realice la apertura de caja de hoy antes de facturar.");
+        }
+    }
+
+    /**
      * Versión nueva: recibe el comprobante contable (FC, VC, RC, CE, DV) para amarrar
      * el movimiento de caja con su documento contable de origen. Esto permite reportes
      * cruzados del cuadre por tipo de comprobante sin JOINs adicionales.

@@ -381,6 +381,16 @@ public class VentaServiceImpl implements VentaService {
             throw new VentaException("Debe especificar al menos un método de pago");
         }
 
+        // ✅ Sesión de caja: validar PRIMERO, antes de tocar nada. La sesión se cierra
+        // sola a medianoche; sin este guard el "sesión cerrada" saltaba al FINAL del
+        // flujo (después de folio, kardex, inventario y asiento) forzando el rollback
+        // de todo el trabajo y mostrando un error confuso tras varios segundos.
+        DatosSesiones sesionComp = obtenerSesionActiva();
+        if (sesionComp == null || sesionComp.getDetalleCajeroId() == null) {
+            throw new VentaException("No se puede completar la venta: no hay sesión de cajero activa. Inicie sesión nuevamente.");
+        }
+        detalleCajeroService.validarSesionAbierta(sesionComp.getDetalleCajeroId());
+
         // Validar que la suma de montos cubra el total de la venta
         BigDecimal totalPagado = metodosPagoDTO.stream()
                 .map(VentaMetodoPagoDTO::getMonto)
@@ -493,11 +503,7 @@ public class VentaServiceImpl implements VentaService {
         }
 
         // ✅ Registrar movimiento en cajero y generar CxC si hay crédito
-        DatosSesiones sesionComp = obtenerSesionActiva();
-        if (sesionComp == null || sesionComp.getDetalleCajeroId() == null) {
-            throw new VentaException("No se puede completar la venta: no hay sesión de cajero activa. Inicie sesión nuevamente.");
-        }
-
+        // (la sesión de caja ya se validó ABIERTA al inicio del método)
         BigDecimal montoEfectivo = BigDecimal.ZERO;
         BigDecimal montoElectronico = BigDecimal.ZERO;
         BigDecimal montoCredito = BigDecimal.ZERO;
@@ -719,6 +725,27 @@ public class VentaServiceImpl implements VentaService {
             throw new VentaException("No se puede completar la venta a crédito: la cuenta '1305 " +
                     "Clientes' (CxC) no está configurada en el PUC.");
         }
+    }
+
+    /**
+     * Re-genera el asiento de una venta COMPLETADA cuyo asiento automático falló
+     * (quedó en asientos_fallidos, p.ej. por una cuenta mal parametrizada que ya se
+     * corrigió). Reusa generarAsientoVenta, que es idempotente: si ya hay asiento
+     * CONFIRMADO para la venta, el servicio contable devuelve el existente.
+     */
+    @Override
+    @Transactional
+    public void regenerarAsientoVenta(Long ventaId) {
+        Venta venta = ventaRepository.findById(ventaId)
+                .orElseThrow(() -> new VentaException("Venta no encontrada: " + ventaId));
+        if (!"COMPLETADA".equals(venta.getEstado()) && !"DEVOLUCION_PARCIAL".equals(venta.getEstado())) {
+            throw new VentaException("Solo se puede regenerar el asiento de una venta COMPLETADA. Estado actual: "
+                    + venta.getEstado());
+        }
+        if (!modoContabilidad.esContable(venta.getFechaEmision())) {
+            throw new VentaException("La empresa no lleva contabilidad para la fecha de esta venta: no aplica asiento.");
+        }
+        generarAsientoVenta(venta);
     }
 
     private void generarAsientoVenta(Venta venta) {

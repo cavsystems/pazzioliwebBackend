@@ -463,6 +463,18 @@ public class FacturacionElectronicaService {
     //  MÉTODOS PRIVADOS: Construcción de factura desde venta
     // ══════════════════════════════════════════════════════════
 
+    /** Plazo (días) del método de pago a CRÉDITO de la venta, o null si no hay. */
+    private Integer plazoCreditoDeVenta(Venta venta) {
+        if (venta == null || venta.getMetodosPago() == null) return null;
+        Integer plazo = null;
+        for (VentaMetodoPago vmp : venta.getMetodosPago()) {
+            if (vmp.getPlazoEnDias() != null && vmp.getPlazoEnDias() > 0) {
+                plazo = vmp.getPlazoEnDias();
+            }
+        }
+        return plazo;
+    }
+
     private Integer obtenerSiguienteConsecutivo(Integer comprobanteId) {
         Optional<Integer> max = facturasRepository.findMaxConsecutivoByComprobanteId(comprobanteId);
         return max.orElse(0) + 1;
@@ -486,12 +498,20 @@ public class FacturacionElectronicaService {
         // Datos del tercero (cliente de la venta)
         factura.setTerceroId(venta.getCliente().getTerceroId());
 
-        // Fechas
+        // Fechas: a crédito el vencimiento y el plazo salen del método de pago
+        // (mismo dato con el que se crea la CxC); a contado, vencimiento = emisión.
         LocalDate fechaEmision = venta.getFechaEmision() != null ? venta.getFechaEmision() : LocalDate.now();
         factura.setFechaCreacion(LocalDateTime.now());
         factura.setFechaEmision(fechaEmision);
-        factura.setFechaVencimiento(fechaEmision); // Contado
-        factura.setPlazo(0);
+        Integer plazoCredito = plazoCreditoDeVenta(venta);
+        if (plazoCredito == null && venta.getCliente() != null
+                && venta.getCliente().getPlazo() != null && venta.getCliente().getPlazo() > 0
+                && venta.getComprobante() != null
+                && venta.getComprobante().getTipoMovimiento() == com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.VC) {
+            plazoCredito = venta.getCliente().getPlazo();
+        }
+        factura.setFechaVencimiento(plazoCredito != null ? fechaEmision.plusDays(plazoCredito) : fechaEmision);
+        factura.setPlazo(plazoCredito != null ? plazoCredito : 0);
 
         // Usuario y estado
         factura.setUsuarioIngresoId(1); // TODO: obtener del contexto de seguridad
@@ -566,13 +586,19 @@ public class FacturacionElectronicaService {
         boolean esCredito = venta != null && venta.getComprobante() != null
                 && venta.getComprobante().getTipoMovimiento() == com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.VC;
         req.setFormaPago(esCredito ? "2" : "1");
-        if (esCredito && factura.getFechaVencimiento() != null
-                && !factura.getFechaVencimiento().isAfter(factura.getFechaEmision())
-                && venta.getCliente() != null && venta.getCliente().getPlazo() != null
-                && venta.getCliente().getPlazo() > 0) {
-            // MEP_3 (fecha de pago) es obligatorio en crédito: si la factura quedó con
-            // vencimiento = emisión, se calcula con el plazo del cliente.
-            req.setFechaVencimiento(factura.getFechaEmision().plusDays(venta.getCliente().getPlazo()));
+        if (esCredito && (factura.getFechaVencimiento() == null
+                || !factura.getFechaVencimiento().isAfter(factura.getFechaEmision()))) {
+            // MEP_3 (fecha de pago) debe reflejar el vencimiento REAL del crédito.
+            // Prioridad: plazo digitado en el método de pago (es el que usa la CxC),
+            // luego el plazo comercial del cliente. Sin ninguno, queda la emisión.
+            Integer plazoCredito = plazoCreditoDeVenta(venta);
+            if (plazoCredito == null && venta.getCliente() != null
+                    && venta.getCliente().getPlazo() != null && venta.getCliente().getPlazo() > 0) {
+                plazoCredito = venta.getCliente().getPlazo();
+            }
+            if (plazoCredito != null) {
+                req.setFechaVencimiento(factura.getFechaEmision().plusDays(plazoCredito));
+            }
         }
         req.setPlazo(factura.getPlazo());
 

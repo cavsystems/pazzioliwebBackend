@@ -92,6 +92,14 @@ obtener el id de la ultima venta
         return ResponseEntity.ok().build();
     }
 
+    /** Re-genera el asiento contable de una venta que quedó en asientos_fallidos
+     *  (tras corregir la causa, p.ej. parametrización del PUC). Idempotente. */
+    @PostMapping("/{ventaId}/regenerar-asiento")
+    public ResponseEntity<Void> regenerarAsiento(@PathVariable Long ventaId) {
+        ventaService.regenerarAsientoVenta(ventaId);
+        return ResponseEntity.ok().build();
+    }
+
     /** Envía el recibo de venta por email al cliente. */
     @PostMapping("/{ventaId}/enviar-email")
     public ResponseEntity<java.util.Map<String, Object>> enviarEmail(
