@@ -3,6 +3,7 @@ package com.pazzioliweb.movimientosinventariomodule.entity;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.pazzioliweb.comprobantesmodule.entity.CentroCosto;
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.movimientosinventariomodule.enums.EstadoMovimiento;
 import com.pazzioliweb.movimientosinventariomodule.enums.TipoMovimiento;
@@ -12,6 +13,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -67,6 +69,13 @@ public class MovimientoInventario {
     /** ID del documento de origen (venta.id, orden_compra.id, etc.). */
     @Column(name = "documento_origen_id")
     private Long documentoOrigenId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "centro_costo_id")
+    private CentroCosto centroCosto;
+
+    public CentroCosto getCentroCosto() { return centroCosto; }
+    public void setCentroCosto(CentroCosto centroCosto) { this.centroCosto = centroCosto; }
 
     public String getDocumentoOrigenTipo() { return documentoOrigenTipo; }
     public void setDocumentoOrigenTipo(String documentoOrigenTipo) { this.documentoOrigenTipo = documentoOrigenTipo; }

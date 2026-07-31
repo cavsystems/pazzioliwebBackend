@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pazzioliweb.commonbacken.events.MovimientoRegistradoEvent;
+import com.pazzioliweb.comprobantesmodule.entity.CentroCosto;
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
@@ -100,6 +101,8 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
     private com.pazzioliweb.comprobantesmodule.service.PeriodoContableService periodoContableService;
     @Autowired
     private ApplicationEventPublisher eventPublisher;
+    @Autowired
+    private MovimientoInventarioWebSocketService wsProgreso;
     @PersistenceContext
     private EntityManager entityManager;
     @Override
@@ -110,180 +113,250 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             Usuario usuario,
             HttpServletRequest request) {
 
-        // Validar periodo contable abierto antes de mover inventario (afecta kardex y asientos).
+        // ── Extraer login del usuario desde cookie/JWT para progreso WebSocket ──
+        String loginUsuario = null;
+        try {
+            if (request.getCookies() != null) {
+                for (Cookie cookie : request.getCookies()) {
+                    if ("token".equals(cookie.getName())) {
+                        Claims claims = jwcommon.extraerClaims(cookie.getValue());
+                        DatosSesiones datos = redisTemplate.opsForValue().get(claims.get("idsecion", String.class));
+                        if (datos != null) loginUsuario = datos.getLogin();
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // No crítico: el progreso WS es informativo, no bloquea la operación
+        }
+
+        // Paso 1 — validar periodo contable
+        wsProgreso.enviarProgreso(loginUsuario, 1, "Validando periodo contable...", 10, null);
         java.time.LocalDate fechaMov = createDto.getFechaEmision() != null
                 ? createDto.getFechaEmision() : LocalDate.now();
         periodoContableService.validarPeriodoAbierto(fechaMov);
 
-        // Resolver comprobante desde ID si no viene pasado
+        // Paso 2 — resolver comprobante, usuario y consecutivo
+        wsProgreso.enviarProgreso(loginUsuario, 2, "Resolviendo comprobante y consecutivo...", 25, null);
         if (comprobante == null && createDto.getComprobanteId() != null) {
             comprobante = comprobantesRepository.findById(createDto.getComprobanteId().longValue())
                     .orElseThrow(() -> new EntityNotFoundException("Comprobante no encontrado: " + createDto.getComprobanteId()));
         }
-
-        // Resolver usuario desde ID si no viene pasado
         if (usuario == null && createDto.getUsuarioId() != null) {
             usuario = usuarioRepository.findByCodigo(createDto.getUsuarioId().intValue())
                     .orElse(null);
         }
-
-        // Asignar consecutivo automático si no viene
         if (createDto.getConsecutivo() == null && comprobante != null) {
             int nextConsecutivo = movimientoRepository
                     .findTopByComprobanteOrderByConsecutivoDesc(comprobante)
                     .map(m -> m.getConsecutivo() + 1)
                     .orElse(1);
-            comprobante.setSiguienteConsecutivo(comprobante.getSiguienteConsecutivo()+1);
-
-
+            comprobante.setSiguienteConsecutivo(comprobante.getSiguienteConsecutivo() + 1);
             createDto.setConsecutivo(nextConsecutivo);
         }
 
-        // Crear y guardar movimiento
+        // Crear cabecera del movimiento
         MovimientoInventario movimiento = mapper.toEntity(createDto, comprobante, usuario);
         movimiento.setFechaCreacion(LocalDateTime.now());
         if (movimiento.getEstado() == null) {
             movimiento.setEstado(EstadoMovimiento.ACTIVO);
         }
+        // Resolver usuario desde sesión activa (cookie)
         try {
-            String token=null;
             if (request.getCookies() != null) {
-
                 for (Cookie cookie : request.getCookies()) {
                     if ("token".equals(cookie.getName())) {
-                        System.out.println("Cookie token: " + cookie.getValue());
-                        token = cookie.getValue();
-                        Claims claims = jwcommon.extraerClaims( token);
-                        DatosSesiones datos = redisTemplate.opsForValue().get( claims.get("idsecion",String.class));
-                        usuario = entityManager.getReference(Usuario.class, datos.getIdusuario());
-                        movimiento.setUsuario(usuario);
-
+                        Claims claims = jwcommon.extraerClaims(cookie.getValue());
+                        DatosSesiones datos = redisTemplate.opsForValue().get(claims.get("idsecion", String.class));
+                        if (datos != null) {
+                            usuario = entityManager.getReference(Usuario.class, datos.getIdusuario());
+                            movimiento.setUsuario(usuario);
+                        }
                         break;
-
                     }
-
                 }
-
-
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-
+        if (createDto.getCentroCostoId() != null && createDto.getCentroCostoId() > 0) {
+            movimiento.setCentroCosto(entityManager.getReference(CentroCosto.class, createDto.getCentroCostoId()));
+        }
 
         movimientoRepository.save(movimiento);
 
         TipoMovimiento tipo = movimiento.getTipo();
-        List<MovimientoInventarioDetalle> detalles = new ArrayList<>();
 
-        // ── OPTIMIZACIÓN: cargar variantes y bodegas en batch para evitar N+1 queries ──
+        // Paso 3 — precargar datos en bloque
+        wsProgreso.enviarProgreso(loginUsuario, 3, "Precargando productos, bodegas y kardex...", 40, null);
+
+        // ── PRECARGA EN BLOQUE — evita N+1 queries en el loop ──
+
+        // 1. Variantes en una sola query
         List<Long> varianteIds = createDto.getDetalles().stream()
                 .map(MovimientoInventarioDetalleCreateDto::getProductoVarianteId)
                 .distinct().toList();
-        List<ProductoVariante> variantes = productoVarianteRepository.findAllById(varianteIds);
-        java.util.Map<Long, ProductoVariante> variantesMap = variantes.stream()
-                .collect(java.util.stream.Collectors.toMap(ProductoVariante::getProductoVarianteId, v -> v));
+        java.util.Map<Long, ProductoVariante> variantesMap = productoVarianteRepository.findAllById(varianteIds)
+                .stream().collect(java.util.stream.Collectors.toMap(ProductoVariante::getProductoVarianteId, v -> v));
 
-        List<Integer> bodegaIds = new java.util.ArrayList<>();
+        // 2. Bodegas en una sola query
+        java.util.Set<Integer> bodegaIdsSet = new java.util.HashSet<>();
         for (MovimientoInventarioDetalleCreateDto dto : createDto.getDetalles()) {
-            if (dto.getBodegaOrigenId() != null) bodegaIds.add(dto.getBodegaOrigenId());
-            if (dto.getBodegaDestinoId() != null) bodegaIds.add(dto.getBodegaDestinoId());
+            if (dto.getBodegaOrigenId() != null) bodegaIdsSet.add(dto.getBodegaOrigenId());
+            if (dto.getBodegaDestinoId() != null) bodegaIdsSet.add(dto.getBodegaDestinoId());
         }
         java.util.Map<Integer, Bodegas> bodegasMap = new java.util.HashMap<>();
-        if (!bodegaIds.isEmpty()) {
-            List<Integer> distinctBodegaIds = bodegaIds.stream().distinct().toList();
-            List<Bodegas> bodegas = bodegasRepository.findAllById(distinctBodegaIds);
-            bodegasMap = bodegas.stream()
+        if (!bodegaIdsSet.isEmpty()) {
+            bodegasMap = bodegasRepository.findAllById(bodegaIdsSet).stream()
                     .collect(java.util.stream.Collectors.toMap(Bodegas::getCodigo, b -> b));
         }
 
+        // 3. Último kardex y existencias por (variante, bodega) — agrupados por bodega para reeusar query batch
+        //    Key: "varianteId_bodegaId"
+        java.util.Map<String, Kardex> ultimoKardexMap = new java.util.HashMap<>();
+        java.util.Map<String, Double> existenciasMap = new java.util.HashMap<>();
+
+        java.util.Map<Integer, java.util.Set<Long>> variantesPorBodega = new java.util.HashMap<>();
+        for (MovimientoInventarioDetalleCreateDto dto : createDto.getDetalles()) {
+            Long vId = dto.getProductoVarianteId();
+            if (dto.getBodegaOrigenId() != null)
+                variantesPorBodega.computeIfAbsent(dto.getBodegaOrigenId(), k -> new java.util.HashSet<>()).add(vId);
+            if (dto.getBodegaDestinoId() != null)
+                variantesPorBodega.computeIfAbsent(dto.getBodegaDestinoId(), k -> new java.util.HashSet<>()).add(vId);
+        }
+        for (java.util.Map.Entry<Integer, java.util.Set<Long>> entry : variantesPorBodega.entrySet()) {
+            Integer bId = entry.getKey();
+            java.util.Set<Long> vIds = entry.getValue();
+            for (Kardex k : kardexRepository.findUltimosPorVarianteYBodega(bId, vIds)) {
+                ultimoKardexMap.put(k.getProductoVariante().getProductoVarianteId() + "_" + bId, k);
+            }
+            for (Existencias e : existenciasRepository.findByBodega_CodigoAndProductoVariante_ProductoVarianteIdIn(bId, new java.util.ArrayList<>(vIds))) {
+                existenciasMap.put(e.getProductoVariante().getProductoVarianteId() + "_" + bId,
+                        e.getExistencia() != null ? e.getExistencia().doubleValue() : 0.0);
+            }
+        }
+
+        // Paso 4 — calcular kardex y costos en memoria
+        wsProgreso.enviarProgreso(loginUsuario, 4, "Calculando movimientos y costos promedio...", 60, null);
+
+        // ── LOOP: construir detalles y kardex EN MEMORIA sin tocar la BD ──
+        // Estado corrido por (varianteId_bodegaId): [saldo, costoPromedio, totalCosto]
+        java.util.Map<String, double[]> estadoKardex = new java.util.HashMap<>();
+        // Saldo final por (varianteId_bodegaId) para el UPSERT de existencias al final
+        java.util.Map<String, long[]> saldosFinales = new java.util.LinkedHashMap<>();
+
         List<MovimientoInventarioDetalle> detallesAGuardar = new ArrayList<>();
+        List<Kardex> kardexAGuardar = new ArrayList<>();
 
         for (MovimientoInventarioDetalleCreateDto detalleDto : createDto.getDetalles()) {
 
-            // Resolver variante (desde mapa en memoria)
             ProductoVariante variante = variantesMap.get(detalleDto.getProductoVarianteId());
             if (variante == null) {
                 throw new EntityNotFoundException("ProductoVariante no encontrado: " + detalleDto.getProductoVarianteId());
             }
 
-            // Resolver bodegas (desde mapa en memoria)
             Bodegas bodegaOrigen = null;
             Bodegas bodegaDestino = null;
-
             if (detalleDto.getBodegaOrigenId() != null) {
                 bodegaOrigen = bodegasMap.get(detalleDto.getBodegaOrigenId());
-                if (bodegaOrigen == null) {
+                if (bodegaOrigen == null)
                     throw new EntityNotFoundException("Bodega origen no encontrada: " + detalleDto.getBodegaOrigenId());
-                }
             }
             if (detalleDto.getBodegaDestinoId() != null) {
                 bodegaDestino = bodegasMap.get(detalleDto.getBodegaDestinoId());
-                if (bodegaDestino == null) {
+                if (bodegaDestino == null)
                     throw new EntityNotFoundException("Bodega destino no encontrada: " + detalleDto.getBodegaDestinoId());
-                }
             }
 
             double costoUnitario = detalleDto.getCostoUnitario() != null ? detalleDto.getCostoUnitario() : 0.0;
             double cantidad = detalleDto.getCantidad();
             double totalDetalle = detalleDto.getTotalDetalle() != null
-                    ? detalleDto.getTotalDetalle()
-                    : costoUnitario * cantidad;
+                    ? detalleDto.getTotalDetalle() : costoUnitario * cantidad;
 
             MovimientoInventarioDetalle detalle = mapper.toDetalleEntity(
                     detalleDto, movimiento, variante, bodegaOrigen, bodegaDestino);
             detalle.setCostoUnitario(costoUnitario);
-            detalle.setCostoPromedio(costoUnitario);
             detalle.setTotalDetalle(totalDetalle);
             detallesAGuardar.add(detalle);
 
-            // Kardex: SALIDA o TRASLADO → registrar salida en bodega origen
-            if (bodegaOrigen != null && (tipo == TipoMovimiento.SALIDA || tipo == TipoMovimiento.TRASLADO)) {
-                crearKardexEntry(movimiento, detalle, variante, bodegaOrigen,
-                        0.0, cantidad, costoUnitario, tipo);
-            }
-
-            // Kardex: ENTRADA → registrar entrada en bodega destino
-            if (tipo == TipoMovimiento.ENTRADA && bodegaDestino != null) {
-                crearKardexEntry(movimiento, detalle, variante, bodegaDestino,
-                        cantidad, 0.0, costoUnitario, tipo);
-            }
-            // Kardex: TRASLADO → registrar entrada en bodega destino
-            else if (tipo == TipoMovimiento.TRASLADO && bodegaDestino != null) {
-                // El costo de entrada en destino debe ser el costo promedio ponderado
-                // con que salió de bodega origen, no el costo unitario de la última compra.
-                double costoTraslado = costoUnitario;
+            // Construir kardex en memoria para cada bodega involucrada
+            if (tipo == TipoMovimiento.SALIDA || tipo == TipoMovimiento.TRASLADO) {
                 if (bodegaOrigen != null) {
-                    Kardex ultimoKardexOrigen = kardexRepository
-                            .findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(variante, bodegaOrigen)
-                            .orElse(null);
-                    if (ultimoKardexOrigen != null && ultimoKardexOrigen.getCostoPromedio() != null
-                            && ultimoKardexOrigen.getCostoPromedio() > 0) {
-                        costoTraslado = ultimoKardexOrigen.getCostoPromedio();
-                    }
+                    double[] k = construirKardexEnMemoria(
+                            variante, bodegaOrigen, 0.0, cantidad, costoUnitario,
+                            tipo, movimiento, detalle, ultimoKardexMap, existenciasMap, estadoKardex, kardexAGuardar);
+                    saldosFinales.put(variante.getProductoVarianteId() + "_" + bodegaOrigen.getCodigo(),
+                            new long[]{variante.getProductoVarianteId(), bodegaOrigen.getCodigo(), Double.doubleToRawLongBits(k[0])});
+                    // Para TRASLADO, el costo de entrada al destino es el promedio que quedó en origen
+                    costoUnitario = k[1];
                 }
-                crearKardexEntry(movimiento, detalle, variante, bodegaDestino,
-                        cantidad, 0.0, costoTraslado, tipo);
+            }
+            if (tipo == TipoMovimiento.ENTRADA || tipo == TipoMovimiento.TRASLADO) {
+                if (bodegaDestino != null) {
+                    double[] k = construirKardexEnMemoria(
+                            variante, bodegaDestino, cantidad, 0.0, costoUnitario,
+                            tipo, movimiento, detalle, ultimoKardexMap, existenciasMap, estadoKardex, kardexAGuardar);
+                    saldosFinales.put(variante.getProductoVarianteId() + "_" + bodegaDestino.getCodigo(),
+                            new long[]{variante.getProductoVarianteId(), bodegaDestino.getCodigo(), Double.doubleToRawLongBits(k[0])});
+                }
             }
 
-            detalles.add(detalle);
+            // El costoPromedio del detalle queda con el promedio calculado (ya seteado en construirKardexEnMemoria)
         }
 
-        // ── OPTIMIZACIÓN: saveAll batch en lugar de saves individuales ──
-        detalleRepository.saveAll(detallesAGuardar);
+        // Paso 5 — persistir detalles y kardex
+        wsProgreso.enviarProgreso(loginUsuario, 5, "Guardando " + detallesAGuardar.size() + " item(s) en inventario...", 78, null);
 
-        // Actualizar total del movimiento
-        double total = detalles.stream().mapToDouble(MovimientoInventarioDetalle::getTotalDetalle).sum();
+        // ── PERSISTENCIA EN BLOQUE ──
+        // 1. Detalles primero: saveAll asigna IDs que el kardex referencia (mismo objeto en memoria)
+        detalleRepository.saveAll(detallesAGuardar);
+        // 2. Kardex en bloque
+        kardexRepository.saveAll(kardexAGuardar);
+
+        // Calcular total y construir el DTO de respuesta ANTES de flush/clear:
+        // después del clear() los proxies lazy (variante.getProducto()) quedan sin sesión
+        // y mapper.toResponse fallaría con LazyInitializationException.
+        double total = detallesAGuardar.stream().mapToDouble(MovimientoInventarioDetalle::getTotalDetalle).sum();
         movimiento.setTotal(total);
+        MovimientoInventarioResponseDto responseDto = mapper.toResponse(movimiento, detallesAGuardar);
+
+        // 3. Flush + clear DESPUÉS de construir el response: evita dirty-check O(n²) en el UPSERT nativo
+        entityManager.flush();
+        entityManager.clear();
+
+        // Paso 6 — actualizar existencias
+        wsProgreso.enviarProgreso(loginUsuario, 6, "Actualizando existencias en bodega...", 92, null);
+
+        // 4. UPSERT batch de existencias (lotes de 500)
+        final int LOTE_UPSERT = 500;
+        List<long[]> saldosList = new java.util.ArrayList<>(saldosFinales.values());
+        for (int i = 0; i < saldosList.size(); i += LOTE_UPSERT) {
+            List<long[]> lote = saldosList.subList(i, Math.min(i + LOTE_UPSERT, saldosList.size()));
+            StringBuilder sql = new StringBuilder(
+                    "INSERT INTO existencias (producto_variantes_id, bodega_id, existencia) VALUES ");
+            for (int j = 0; j < lote.size(); j++) {
+                if (j > 0) sql.append(',');
+                sql.append("(?,?,?)");
+            }
+            sql.append(" ON DUPLICATE KEY UPDATE existencia = VALUES(existencia)");
+            jakarta.persistence.Query q = entityManager.createNativeQuery(sql.toString());
+            int p = 1;
+            for (long[] row : lote) {
+                q.setParameter(p++, row[0]);
+                q.setParameter(p++, (int) row[1]);
+                q.setParameter(p++, java.math.BigDecimal.valueOf(Double.longBitsToDouble(row[2])));
+            }
+            q.executeUpdate();
+        }
+
+        // Persistir el total en la cabecera del movimiento (merge sobre entidad detached)
         movimientoRepository.save(movimiento);
 
-        // ── Asiento contable para entrada/salida manual de inventario ──
-        // Traslado entre bodegas (TRASLADO) no genera asiento (neto cero).
+        // Asiento contable (usa campos primitivos del movimiento, no proxies lazy)
         generarAsientoMovimientoInventario(movimiento, total);
 
-        // ── Broadcast WebSocket: notifica a todos los clientes conectados
-        // que el comprobante cambió (consecutivo avanzó). AFTER_COMMIT via evento.
+        // Broadcast WebSocket al consecutivo del comprobante (AFTER_COMMIT via evento)
         if (movimiento.getComprobante() != null) {
             eventPublisher.publishEvent(new MovimientoRegistradoEvent(
                 this,
@@ -293,7 +366,10 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             ));
         }
 
-        return mapper.toResponse(movimiento, detalles);
+        // Paso 7 — completado
+        wsProgreso.enviarCompletado(loginUsuario, movimiento.getMovimientoId());
+
+        return responseDto;
     }
 
     /**
@@ -377,6 +453,89 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                     mov.getMovimientoId(), numero,
                     "Error generando asiento de movimiento de inventario: " + ex.getMessage(), ex);
         }
+    }
+
+    /**
+     * Calcula el nuevo estado de kardex EN MEMORIA para una (variante, bodega),
+     * crea el objeto Kardex (sin persistir) y lo agrega a la lista batch.
+     * Devuelve [nuevoSaldo, nuevoCostoPromedio] para encadenar con el siguiente ítem.
+     */
+    private double[] construirKardexEnMemoria(
+            ProductoVariante variante, Bodegas bodega,
+            double entrada, double salida, double costoUnitario,
+            TipoMovimiento tipo,
+            MovimientoInventario movimiento, MovimientoInventarioDetalle detalle,
+            java.util.Map<String, Kardex> ultimoKardexMap,
+            java.util.Map<String, Double> existenciasMap,
+            java.util.Map<String, double[]> estadoKardex,
+            List<Kardex> kardexAGuardar) {
+
+        String key = variante.getProductoVarianteId() + "_" + bodega.getCodigo();
+        double[] estado = estadoKardex.get(key);
+        if (estado == null) {
+            Kardex ultimo = ultimoKardexMap.get(key);
+            if (ultimo != null) {
+                estado = new double[]{
+                    ultimo.getSaldo() != null ? ultimo.getSaldo() : 0.0,
+                    ultimo.getCostoPromedio() != null ? ultimo.getCostoPromedio() : 0.0,
+                    ultimo.getTotalCosto() != null ? ultimo.getTotalCosto() : 0.0};
+            } else {
+                estado = new double[]{existenciasMap.getOrDefault(key, 0.0), 0.0, 0.0};
+            }
+        }
+        double saldoAnterior = estado[0];
+        double promedioAnterior = estado[1];
+        double totalCostoAnterior = estado[2];
+
+        double nuevoSaldo = saldoAnterior + entrada - salida;
+        if (salida > 0 && nuevoSaldo < 0) {
+            throw new IllegalStateException(
+                "Existencias insuficientes para " + variante.getReferenciaVariantes() +
+                " en bodega " + bodega.getNombre() +
+                ". Saldo: " + saldoAnterior + ", salida: " + salida);
+        }
+
+        double costoUnitarioFinal = costoUnitario;
+        if (salida > 0 && promedioAnterior > 0) costoUnitarioFinal = promedioAnterior;
+
+        double nuevoCostoPromedio;
+        if (entrada > 0) {
+            double totalUnidades = saldoAnterior + entrada;
+            nuevoCostoPromedio = totalUnidades > 0
+                    ? (saldoAnterior * promedioAnterior + entrada * costoUnitario) / totalUnidades
+                    : costoUnitario;
+        } else {
+            nuevoCostoPromedio = promedioAnterior;
+        }
+        nuevoCostoPromedio = Math.round(nuevoCostoPromedio * 100.0) / 100.0;
+        if (nuevoCostoPromedio <= 0) nuevoCostoPromedio = costoUnitario;
+
+        double nuevoTotalCosto = entrada > 0
+                ? totalCostoAnterior + (entrada * costoUnitarioFinal)
+                : totalCostoAnterior - (salida * costoUnitarioFinal);
+
+        detalle.setCostoPromedio(nuevoCostoPromedio);
+
+        Kardex kardex = new Kardex();
+        kardex.setMovimiento(movimiento);
+        kardex.setDetalle(detalle);
+        kardex.setProductoVariante(variante);
+        kardex.setBodega(bodega);
+        kardex.setFechaEmision(movimiento.getFechaEmision());
+        kardex.setFechaCreacion(LocalDateTime.now());
+        kardex.setEntrada(entrada);
+        kardex.setSalida(salida);
+        kardex.setSaldo(nuevoSaldo);
+        kardex.setCostoUnitario(costoUnitarioFinal);
+        kardex.setCostoPromedio(nuevoCostoPromedio);
+        kardex.setTotalCosto(nuevoTotalCosto);
+        kardex.setTipo(tipo);
+        kardex.setEstado(movimiento.getEstado());
+        kardex.setObservaciones(movimiento.getObservaciones());
+        kardexAGuardar.add(kardex);
+
+        estadoKardex.put(key, new double[]{nuevoSaldo, nuevoCostoPromedio, nuevoTotalCosto});
+        return new double[]{nuevoSaldo, nuevoCostoPromedio};
     }
 
     private void crearKardexEntry(MovimientoInventario movimiento,

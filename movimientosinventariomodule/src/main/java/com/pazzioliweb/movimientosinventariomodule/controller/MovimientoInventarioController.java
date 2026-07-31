@@ -26,6 +26,7 @@ import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCrea
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioUpdateDto;
 import com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioService;
+import io.jsonwebtoken.Claims;
 
 import jakarta.validation.Valid;
 
@@ -35,6 +36,15 @@ public class MovimientoInventarioController {
 
     @Autowired
     private MovimientoInventarioService movimientoService;
+
+    @Autowired
+    private com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioWebSocketService wsProgreso;
+
+    @Autowired
+    private com.pazzioliweb.commonbacken.util.Jwcommon jwcommon;
+
+    @Autowired
+    private org.springframework.data.redis.core.RedisTemplate<String, com.pazzioliweb.commonbacken.dtos.DatosSesiones> redisTemplate;
 
     /**
      * Crear un nuevo movimiento de inventario (entrada, salida o traslado).
@@ -48,9 +58,11 @@ public class MovimientoInventarioController {
             MovimientoInventarioResponseDto response = movimientoService.crearMovimiento(createDto, null, null, request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (jakarta.persistence.EntityNotFoundException e) {
+            wsProgreso.enviarError(resolverLogin(request), e.getMessage(), null);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
+            wsProgreso.enviarError(resolverLogin(request), e.getMessage(), null);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
@@ -140,5 +152,21 @@ public class MovimientoInventarioController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private String resolverLogin(HttpServletRequest request) {
+        try {
+            if (request.getCookies() != null) {
+                for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                    if ("token".equals(cookie.getName())) {
+                        Claims claims = jwcommon.extraerClaims(cookie.getValue());
+                        com.pazzioliweb.commonbacken.dtos.DatosSesiones datos =
+                                redisTemplate.opsForValue().get(claims.get("idsecion", String.class));
+                        return datos != null ? datos.getLogin() : null;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 }

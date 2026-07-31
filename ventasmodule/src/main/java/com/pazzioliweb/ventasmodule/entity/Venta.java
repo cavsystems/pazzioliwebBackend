@@ -1,5 +1,6 @@
 package com.pazzioliweb.ventasmodule.entity;
 
+import com.pazzioliweb.comprobantesmodule.entity.CentroCosto;
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.tercerosmodule.entity.Terceros;
@@ -101,5 +102,9 @@ public class Venta {
     /** Consecutivo del comprobante en el momento de la venta (para auditoría). */
     @Column(name = "consecutivo_comprobante")
     private Integer consecutivoComprobante;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "centro_costo_id")
+    private CentroCosto centroCosto;
     // Getters y setters generados por Lombok
 }

@@ -629,7 +629,10 @@ CREATE TABLE IF NOT EXISTS ordenes_compra (
     total_descuento DECIMAL(18,2) DEFAULT 0,
     total DECIMAL(18,2) DEFAULT 0,
     estado VARCHAR(20) DEFAULT 'ACTIVO',
-    FOREIGN KEY (tercero_id) REFERENCES terceros(tercero_id)
+    centro_costo_id INT DEFAULT NULL,
+    FOREIGN KEY (tercero_id) REFERENCES terceros(tercero_id),
+    FOREIGN KEY (centro_costo_id) REFERENCES centrocosto(codigo),
+    INDEX idx_oc_centro_costo (centro_costo_id)
 );
 
 CREATE TABLE IF NOT EXISTS detalles_orden_compra (
@@ -745,10 +748,13 @@ CREATE TABLE IF NOT EXISTS ventas (
     retefuente DECIMAL(18,2) DEFAULT 0.00,
     reteiva DECIMAL(18,2) DEFAULT 0.00,
     reteica DECIMAL(18,2) DEFAULT 0.00,
+    centro_costo_id INT DEFAULT NULL,
     FOREIGN KEY (cliente_id) REFERENCES terceros(tercero_id),
     FOREIGN KEY (bodega_id) REFERENCES bodegas(codigo),
     FOREIGN KEY (cajero_id) REFERENCES cajeros(cajero_id) ON DELETE SET NULL ON UPDATE CASCADE,
-    FOREIGN KEY (vendedor_id) REFERENCES vendedores(vendedor_id) ON DELETE SET NULL ON UPDATE CASCADE
+    FOREIGN KEY (vendedor_id) REFERENCES vendedores(vendedor_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    FOREIGN KEY (centro_costo_id) REFERENCES centrocosto(codigo),
+    INDEX idx_venta_centro_costo (centro_costo_id)
 );
 
 CREATE TABLE IF NOT EXISTS detalles_venta (
@@ -904,7 +910,10 @@ CREATE TABLE IF NOT EXISTS movimientos_inventario (
     fecha DATE NOT NULL,
     tipo_movimiento VARCHAR(50) NOT NULL,
     descripcion TEXT,
-    estado VARCHAR(20) DEFAULT 'ACTIVO'
+    estado VARCHAR(20) DEFAULT 'ACTIVO',
+    centro_costo_id INT DEFAULT NULL,
+    FOREIGN KEY (centro_costo_id) REFERENCES centrocosto(codigo),
+    INDEX idx_movinv_centro_costo (centro_costo_id)
 );
 
 CREATE TABLE IF NOT EXISTS movimientos_inventario_detalles (

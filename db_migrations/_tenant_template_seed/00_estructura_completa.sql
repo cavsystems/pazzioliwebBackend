@@ -1473,10 +1473,13 @@ CREATE TABLE `movimientos_inventario` (
   `observaciones` varchar(200) DEFAULT NULL,
   `documento_origen_tipo` varchar(10) DEFAULT NULL,
   `documento_origen_id` bigint DEFAULT NULL,
+  `centro_costo_id` int DEFAULT NULL,
   PRIMARY KEY (`movimiento_inventario_id`),
   KEY `comprobante_id` (`comprobante_id`),
   KEY `idx_mov_origen` (`documento_origen_tipo`,`documento_origen_id`),
-  CONSTRAINT `fk_movinv_comprobante_contable` FOREIGN KEY (`comprobante_id`) REFERENCES `comprobantes_contables` (`id`)
+  KEY `idx_movinv_centro_costo` (`centro_costo_id`),
+  CONSTRAINT `fk_movinv_comprobante_contable` FOREIGN KEY (`comprobante_id`) REFERENCES `comprobantes_contables` (`id`),
+  CONSTRAINT `fk_movinv_centro_costo` FOREIGN KEY (`centro_costo_id`) REFERENCES `centrocosto` (`codigo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=65 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `movimientos_inventario_detalles`;
@@ -1586,11 +1589,14 @@ CREATE TABLE `ordenes_compra` (
   `reteica` decimal(18,2) NOT NULL DEFAULT '0.00',
   `fecha_recibida` timestamp NULL DEFAULT NULL,
   `plazo` int DEFAULT NULL,
+  `centro_costo_id` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `fk_ordenes_proveedor` (`proveedor_id`),
   KEY `fk_ordenes_bodega` (`bodega_id`),
+  KEY `idx_oc_centro_costo` (`centro_costo_id`),
   CONSTRAINT `fk_ordenes_bodega` FOREIGN KEY (`bodega_id`) REFERENCES `bodegas` (`codigo`),
-  CONSTRAINT `fk_ordenes_proveedor` FOREIGN KEY (`proveedor_id`) REFERENCES `terceros` (`tercero_id`)
+  CONSTRAINT `fk_ordenes_proveedor` FOREIGN KEY (`proveedor_id`) REFERENCES `terceros` (`tercero_id`),
+  CONSTRAINT `fk_oc_centro_costo` FOREIGN KEY (`centro_costo_id`) REFERENCES `centrocosto` (`codigo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=174 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `origen_destino_inventario`;
@@ -2288,6 +2294,7 @@ CREATE TABLE `ventas` (
   `retefuente` decimal(18,2) NOT NULL DEFAULT '0.00',
   `reteiva` decimal(18,2) NOT NULL DEFAULT '0.00',
   `reteica` decimal(18,2) NOT NULL DEFAULT '0.00',
+  `centro_costo_id` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_venta_cliente` (`cliente_id`),
   KEY `idx_venta_cajero` (`cajero_id`),
@@ -2295,10 +2302,12 @@ CREATE TABLE `ventas` (
   KEY `idx_venta_fecha` (`fecha_emision`),
   KEY `fk_venta_bodega` (`bodega_id`),
   KEY `fk_ventas_vendedor` (`vendedor_id`),
+  KEY `idx_venta_centro_costo` (`centro_costo_id`),
   CONSTRAINT `fk_venta_bodega` FOREIGN KEY (`bodega_id`) REFERENCES `bodegas` (`codigo`),
   CONSTRAINT `fk_venta_cajero` FOREIGN KEY (`cajero_id`) REFERENCES `cajeros` (`cajero_id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_venta_cliente` FOREIGN KEY (`cliente_id`) REFERENCES `terceros` (`tercero_id`),
-  CONSTRAINT `fk_ventas_vendedor` FOREIGN KEY (`vendedor_id`) REFERENCES `vendedores` (`vendedor_id`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `fk_ventas_vendedor` FOREIGN KEY (`vendedor_id`) REFERENCES `vendedores` (`vendedor_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_venta_centro_costo` FOREIGN KEY (`centro_costo_id`) REFERENCES `centrocosto` (`codigo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=189 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

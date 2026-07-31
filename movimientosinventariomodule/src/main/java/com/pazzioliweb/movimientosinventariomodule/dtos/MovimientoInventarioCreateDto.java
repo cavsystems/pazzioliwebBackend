@@ -35,6 +35,16 @@ public class MovimientoInventarioCreateDto {
     @NotNull
     private List<MovimientoInventarioDetalleCreateDto> detalles;
 
+    private Integer centroCostoId;
+
+	public Integer getCentroCostoId() {
+		return centroCostoId;
+	}
+
+	public void setCentroCostoId(Integer centroCostoId) {
+		this.centroCostoId = centroCostoId;
+	}
+
 	public Integer getComprobanteId() {
 		return comprobanteId;
 	}
