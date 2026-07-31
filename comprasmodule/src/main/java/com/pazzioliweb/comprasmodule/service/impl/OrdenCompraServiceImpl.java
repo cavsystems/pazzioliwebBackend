@@ -13,8 +13,10 @@ import com.pazzioliweb.comprasmodule.service.ConfiguracionComprasService;
 import com.pazzioliweb.comprasmodule.service.CuentaPorPagarService;
 import com.pazzioliweb.comprasmodule.service.OrdenCompraService;
 import com.pazzioliweb.comprasmodule.service.ProductoService;
+import com.pazzioliweb.comprobantesmodule.entity.CentroCosto;
 import com.pazzioliweb.comprobantesmodule.entity.CuentaContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
+import com.pazzioliweb.comprobantesmodule.repositori.CentroCostoRepository;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
 import com.pazzioliweb.comprobantesmodule.service.AsientoContableService;
 import com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService;
@@ -63,6 +65,8 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     private final com.pazzioliweb.comprasmodule.service.OrdenCompraWebSocketService ordenCompraWebSocketService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.pazzioliweb.movimientosinventariomodule.service.MovimientoInventarioAutoService movimientoInventarioAutoService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private CentroCostoRepository centroCostoRepository;
 
     @Autowired
     public OrdenCompraServiceImpl(OrdenCompraRepository ordenCompraRepository,
@@ -832,6 +836,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         orden.setBodega(bodegasRepository.findByCodigo(request.getBodegaId())
                 .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
 
+        if (request.getCentroCostoId() != null && request.getCentroCostoId() > 0) {
+            centroCostoRepository.findById(request.getCentroCostoId()).ifPresent(orden::setCentroCosto);
+        }
+
         return orden;
     }
 
@@ -1171,6 +1179,9 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                     .orElseThrow(() -> new OrdenCompraException("Proveedor no encontrado")));
             orden.setBodega(bodegasRepository.findByCodigo(request.getBodegaId())
                     .orElseThrow(() -> new OrdenCompraException("Bodega no encontrada")));
+            if (request.getCentroCostoId() != null && request.getCentroCostoId() > 0) {
+                centroCostoRepository.findById(request.getCentroCostoId()).ifPresent(orden::setCentroCosto);
+            }
 
             // Paso 9: Asignando número temporal
             ordenCompraWebSocketService.enviarProgreso(usuario, 9, "Asignando número temporal...", 50, null);
@@ -1354,6 +1365,10 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
         // numero_orden pasa a ser el número del comprobante contable (CC-X / CR-X)
         orden.setNumeroOrden(r.getNumeroDocumento());
         if (cajeroId != null) orden.setCajeroId(cajeroId);
+
+        if (dto.getCentroCostoId() != null && dto.getCentroCostoId() > 0) {
+            centroCostoRepository.findById(dto.getCentroCostoId()).ifPresent(orden::setCentroCosto);
+        }
 
         // 3. Procesar métodos de pago
         BigDecimal totalPagado = procesarMetodosPagoFinalizar(orden, dto.getMetodosPago());

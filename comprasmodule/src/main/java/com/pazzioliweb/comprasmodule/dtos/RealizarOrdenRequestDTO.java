@@ -23,6 +23,10 @@ public class RealizarOrdenRequestDTO {
     /** true si la compra es a crédito (genera CxP), false si es contado. */
     private Boolean esCredito;
 
+    /** Centro de costo (opcional). El frontend envía el campo como "centrocostoid". */
+    @JsonProperty("centrocostoid")
+    private Integer centroCostoId;
+
     /** Métodos de pago utilizados al pagar la compra. La suma puede ser menor al total
      *  (en cuyo caso el saldo restante va a CxP), igual al total (pago completo en métodos),
      *  o vacía (todo a crédito).  */

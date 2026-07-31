@@ -59,6 +59,9 @@ public class FinalizarCompraDTO {
     /** ID del proveedor (Terceros). Necesario para los créditos del asiento. */
     private Integer proveedorId;
 
+    /** Centro de costo asignado al ingreso (opcional). */
+    private Integer centroCostoId;
+
     @Data
     public static class ItemFinalDTO {
         /** ID del DetalleOrdenCompra a actualizar. */
