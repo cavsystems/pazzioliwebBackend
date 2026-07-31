@@ -16,3 +16,6 @@
 -- ══════════════════════════════════════════════════════════════════
 ALTER TABLE facturas ADD UNIQUE KEY uq_facturas_comp_consec (comprobante_id, consecutivo);
 ALTER TABLE facturas ADD UNIQUE KEY uq_facturas_venta (venta_id);
+-- La serie del folio pertenece al PREFIJO (FC contado y VC crédito comparten
+-- resolución): unique adicional que impide duplicar folio entre comprobantes.
+ALTER TABLE facturas ADD UNIQUE KEY uq_facturas_prefijo_consec (prefijo, consecutivo);

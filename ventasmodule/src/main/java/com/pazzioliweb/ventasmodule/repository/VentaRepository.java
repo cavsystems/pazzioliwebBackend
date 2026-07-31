@@ -14,6 +14,16 @@ public interface VentaRepository extends JpaRepository<Venta, Long>, JpaSpecific
 
     Optional<Venta> findByNumeroVenta(String numeroVenta);
 
+    /**
+     * ¿La venta tiene factura electrónica AUTORIZADA por la DIAN? Nativa para no
+     * acoplar ventasmodule a facturacionmodule (la tabla vive en el mismo schema).
+     * Se usa como guard de anularVenta: un documento autorizado solo se anula
+     * fiscalmente con Nota Crédito (devolución), no borrando el asiento local.
+     */
+    @Query(value = "SELECT COUNT(*) FROM facturas f WHERE f.venta_id = :ventaId AND f.estado_dian = 'AUTORIZADA'",
+           nativeQuery = true)
+    long countFacturasAutorizadasByVentaId(@Param("ventaId") Long ventaId);
+
     @Query("SELECT v FROM Venta v LEFT JOIN FETCH v.items WHERE v.numeroVenta = :numeroVenta")
     Optional<Venta> findByNumeroVentaWithItems(@Param("numeroVenta") String numeroVenta);
 

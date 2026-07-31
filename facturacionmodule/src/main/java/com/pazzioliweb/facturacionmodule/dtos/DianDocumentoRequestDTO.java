@@ -76,6 +76,9 @@ public class DianDocumentoRequestDTO {
     /** Retención de IVA aplicada — se reporta como TIM/IMP con código 05. */
     private BigDecimal retencionIva;
 
+    /** ReteICA aplicada — TIM/IMP código 07 (solo factura; el anexo DS no la contempla). */
+    private BigDecimal retencionIca;
+
     /** CDN_1: sección del Documento Soporte original que se corrige (nota de ajuste). Default 1. */
     private Integer seccionCorregida;
 
@@ -125,6 +128,10 @@ public class DianDocumentoRequestDTO {
         private String numeroIdentificacion;
         private String digitoVerificacion;
         private String nombre;
+        /** Nombres de pila (persona natural) — Facturatech los exige en ADQ_4 (regla FAK20). */
+        private String nombres;
+        /** Apellidos (persona natural) — Facturatech los exige en ADQ_5 (regla FAK20). */
+        private String apellidos;
         private String direccion;
         private String municipio;
         private String departamento;

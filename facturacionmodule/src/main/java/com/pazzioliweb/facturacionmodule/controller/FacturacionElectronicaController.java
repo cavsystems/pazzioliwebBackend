@@ -69,17 +69,32 @@ public class FacturacionElectronicaController {
     }
 
     /**
-     * Descarga el XML firmado de la factura.
+     * Descarga el XML firmado de la factura (desde BD; ya no dispara una consulta
+     * SOAP como efecto colateral ni devuelve un archivo vacío).
      * GET /api/facturacion-electronica/{facturaId}/xml
      */
     @GetMapping("/{facturaId}/xml")
     public ResponseEntity<byte[]> descargarXml(@PathVariable Integer facturaId) {
-        FacturaElectronicaResponseDTO factura = facturacionService.consultarEstadoDian(facturaId);
-        // Obtener XML desde BD
+        String xml = facturacionService.obtenerXmlFirmado(facturaId);
+        if (xml == null || xml.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.ok()
                 .header("Content-Type", "application/xml")
                 .header("Content-Disposition", "attachment; filename=factura-" + facturaId + ".xml")
-                .body(new byte[0]); // Se completará cuando se tenga el XML
+                .body(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Ventas COMPLETADAS sin factura electrónica (el listener falló o el backend se
+     * reinició entre el commit de la venta y la facturación). Con la lista, el
+     * operador regenera cada una con POST /generar {ventaId}.
+     * GET /api/facturacion-electronica/ventas-sin-factura?dias=30
+     */
+    @GetMapping("/ventas-sin-factura")
+    public ResponseEntity<java.util.List<Map<String, Object>>> ventasSinFactura(
+            @RequestParam(defaultValue = "30") int dias) {
+        return ResponseEntity.ok(facturacionService.buscarVentasSinFactura(dias));
     }
 
     // ─────────────────────────────────────────────────────────────────

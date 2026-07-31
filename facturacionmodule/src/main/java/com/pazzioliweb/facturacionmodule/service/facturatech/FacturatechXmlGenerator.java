@@ -42,6 +42,9 @@ public class FacturatechXmlGenerator {
 
     private static final Logger log = LoggerFactory.getLogger(FacturatechXmlGenerator.class);
     private static final String COP = "COP";
+    /** Medios de pago aceptados (Tabla 5 DIAN, subconjunto que usa el sistema). */
+    private static final java.util.Set<String> MEDIOS_PAGO_TABLA5 = java.util.Set.of(
+            "10", "20", "42", "45", "46", "47", "48", "49", "ZZZ");
     /** ENC_8 del documento soporte debe informarse en la zona horaria de Colombia (-05:00). */
     private static final ZoneId ZONA_CO = ZoneId.of("America/Bogota");
     private static final DateTimeFormatter HORA_DS = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -81,6 +84,11 @@ public class FacturatechXmlGenerator {
         appendAdq(xml, req);
         appendTot(xml, tot);
         appendTim(xml, tot);
+        // Retenciones que el adquiriente practica (3IMP_RETE: TIM_1=true global,
+        // un TIM por tributo; NO modifican los TOT). Solo se emiten si vienen > 0.
+        appendTimRetencion(xml, "06", req.getRetencionFuente(), tot.brutoAntesTributos);
+        appendTimRetencion(xml, "05", req.getRetencionIva(), tot.totalIva);
+        appendTimRetencion(xml, "07", req.getRetencionIca(), tot.brutoAntesTributos);
         appendDrf(xml, req);
         appendMep(xml, req);
         appendItems(xml, req.getLineas());
@@ -196,14 +204,25 @@ public class FacturatechXmlGenerator {
 
         if (residente && (!notBlank(p.getDireccion()) || !notBlank(p.getMunicipio())
                 || !notBlank(p.getCodigoMunicipio()) || !notBlank(p.getCodigoDepartamento()))) {
-            log.warn("[Facturatech][DS] Proveedor {} sin dirección/municipio/departamento completos: " +
-                    "los nodos PRO_10/11/13/19/23 son obligatorios y Facturatech rechazará el documento",
-                    p.getNumeroIdentificacion());
+            // Con residente (ENC_21=10) PRO_10/11/13/19/23 son mandatorios y PRO_11/23
+            // son de RECHAZO si el valor no está en tabla: un tag vacío NO equivale a
+            // omitirlo. Mejor abortar (el rollback devuelve el folio) que enviar basura.
+            throw new IllegalStateException("[DS] El proveedor " + p.getNumeroIdentificacion() +
+                    " no tiene dirección/municipio/departamento completos en terceros: " +
+                    "PRO_10/11/13/19/23 son obligatorios para operación residente (ENC_21=10). " +
+                    "Complete los datos del tercero antes de emitir el documento soporte.");
         }
         if (residente && !notBlank(p.getCodigoPostal())) {
             log.warn("[Facturatech][DS] Proveedor {} sin código postal: se envía 000000 en PRO_14 " +
                     "(la DIAN puede generar notificación; registre el código postal del tercero)",
                     p.getNumeroIdentificacion());
+        }
+        // Estándar DS: con ENC_21=10 el proveedor DEBE identificarse con NIT (PRO_3=31)
+        // y llevar PRO_22. Para persona natural el NIT es su cédula y el DV se calcula.
+        if (residente && !"31".equals(tipoDoc)) {
+            log.warn("[Facturatech][DS] Operación residente (ENC_21=10): PRO_3 se fuerza a 31 " +
+                    "(el tercero {} estaba registrado con tipo {})", p.getNumeroIdentificacion(), tipoDoc);
+            tipoDoc = "31";
         }
 
         xml.append("  <PRO>\n");
@@ -212,18 +231,26 @@ public class FacturatechXmlGenerator {
         tag(xml, "PRO_3", tipoDoc);
         tag(xml, "PRO_6", nvl(p.getNombre()));
         tag(xml, "PRO_10", nvl(p.getDireccion()));
-        tag(xml, "PRO_11", nvl(p.getCodigoDepartamento()));
+        // PRO_11/14/23 (códigos DANE y postal) son dependientes de ENC_21=10: con
+        // no residente (11) se OMITEN, como el ejemplo funcional dse-base.xml.
+        if (residente) {
+            tag(xml, "PRO_11", nvl(p.getCodigoDepartamento()));
+        }
         tag(xml, "PRO_13", nvl(p.getMunicipio()));
-        tag(xml, "PRO_14", notBlank(p.getCodigoPostal()) ? p.getCodigoPostal() : "000000");
+        if (residente) {
+            tag(xml, "PRO_14", notBlank(p.getCodigoPostal()) ? p.getCodigoPostal() : "000000");
+        }
         tag(xml, "PRO_15", codPais);
         tag(xml, "PRO_19", nvl(p.getDepartamento()));
         tag(xml, "PRO_21", nombrePais);
-        // PRO_22 (DV) es mandatorio únicamente cuando PRO_3 = 31 (NIT).
+        // PRO_22 (DV): mandatorio con ENC_21=10 (residente ⇒ PRO_3=31) o con NIT.
         if ("31".equals(tipoDoc)) {
             tag(xml, "PRO_22", notBlank(p.getDigitoVerificacion())
                     ? p.getDigitoVerificacion() : digitoVerificacion(p.getNumeroIdentificacion()));
         }
-        tag(xml, "PRO_23", nvl(p.getCodigoMunicipio()));
+        if (residente) {
+            tag(xml, "PRO_23", nvl(p.getCodigoMunicipio()));
+        }
 
         // TAC: responsabilidades. Un no obligado a facturar es típicamente R-99-PN.
         xml.append("    <TAC>\n");
@@ -282,7 +309,8 @@ public class FacturatechXmlGenerator {
                     codigoTributo, valor);
             return;
         }
-        BigDecimal tarifa = valor.multiply(BigDecimal.valueOf(100)).divide(b, 2, RoundingMode.HALF_UP);
+        // Hasta 3 decimales (3IMP_RETE): tarifas tipo reteica 0.414% no caben en 2
+        BigDecimal tarifa = valor.multiply(BigDecimal.valueOf(100)).divide(b, 3, RoundingMode.HALF_UP);
         xml.append("  <TIM>\n");
         tag(xml, "TIM_1", "true"); // true = retención
         tag(xml, "TIM_2", fmt(valor));
@@ -301,6 +329,11 @@ public class FacturatechXmlGenerator {
     /** CDN/DCN: naturaleza de la corrección de la nota de ajuste (Tabla 42). */
     private void appendCdnDs(StringBuilder xml, DianDocumentoRequestDTO req) {
         int concepto = req.getCodigoConcepto() != null ? req.getCodigoConcepto() : 2;
+        // Tabla 42 solo define los códigos 1..5: un valor fuera de rango cae a 5 (Otros)
+        if (concepto < 1 || concepto > 5) {
+            log.warn("[Facturatech][DS] Concepto de corrección {} fuera de la Tabla 42 (1..5): se envía 5", concepto);
+            concepto = 5;
+        }
         int seccion = req.getSeccionCorregida() != null ? req.getSeccionCorregida() : 1;
         String descripcion = notBlank(req.getRazonConcepto())
                 ? req.getRazonConcepto() : conceptoCorreccionDs(concepto);
@@ -323,9 +356,11 @@ public class FacturatechXmlGenerator {
         xml.append("  <REF>\n");
         tag(xml, "REF_1", "IV");
         tag(xml, "REF_2", nvl(ref.getNumeroDocumento()));
-        if (ref.getFechaEmisionOriginal() != null) {
-            tag(xml, "REF_3", ref.getFechaEmisionOriginal().toString());
-        }
+        // REF_3 = fecha de FIRMA del doc referenciado (el llamador manda la de
+        // validacion DIAN; respaldo: hoy). Va siempre: el manual no lo hace opcional.
+        tag(xml, "REF_3", ref.getFechaEmisionOriginal() != null
+                ? ref.getFechaEmisionOriginal().toString()
+                : LocalDate.now(ZONA_CO).toString());
         if (notBlank(ref.getCufeOriginal())) {
             tag(xml, "REF_4", ref.getCufeOriginal()); // CUDS del DS referenciado
             tag(xml, "REF_5", "CUDS-SHA384");
@@ -347,6 +382,17 @@ public class FacturatechXmlGenerator {
         int forma = req.getFormaGeneracionTransmision() != null
                 ? req.getFormaGeneracionTransmision()
                 : config.getDocumentoSoporte().getFormaGeneracion();
+        LocalDate fechaEmisionDs = req.getFechaEmision() != null ? req.getFechaEmision() : LocalDate.now(ZONA_CO);
+        // Coherencia IBS_1/IBS_2: con forma 1 (por operación) la fecha de compra DEBE
+        // ser la de emisión; con forma 2 (acumulado semanal) no puede ser más vieja de 6 días.
+        if (forma == 1 && !fechaCompra.equals(fechaEmisionDs)) {
+            log.warn("[Facturatech][DS] IBS_2=1 exige fecha de compra = fecha de emisión: " +
+                    "se ajusta {} → {}", fechaCompra, fechaEmisionDs);
+            fechaCompra = fechaEmisionDs;
+        } else if (forma == 2 && fechaCompra.isBefore(fechaEmisionDs.minusDays(6))) {
+            log.warn("[Facturatech][DS] IBS_2=2: la fecha de compra {} excede la ventana de 6 días " +
+                    "respecto a la emisión {} — la DIAN puede rechazar", fechaCompra, fechaEmisionDs);
+        }
 
         for (DianDocumentoRequestDTO.LineaDTO l : req.getLineas()) {
             LineaCalc c = calcularLinea(l);
@@ -425,7 +471,7 @@ public class FacturatechXmlGenerator {
     private String conceptoCorreccionDs(int codigo) {
         return switch (codigo) {
             case 1 -> "Devolución parcial de los bienes y/o no aceptación parcial del servicio";
-            case 2 -> "Anulación del documento soporte en adquisiciones efectuadas a sujetos no obligados a expedir factura";
+            case 2 -> "Anulación del documento soporte en adquisiciones efectuadas a sujetos no obligados a expedir factura de venta o documento equivalente";
             case 3 -> "Rebaja o descuento parcial o total";
             case 4 -> "Ajuste de precio";
             default -> "Otros";
@@ -518,7 +564,9 @@ public class FacturatechXmlGenerator {
         tag(xml, "EMI_13", nvl(e.getMunicipio()));
         tag(xml, "EMI_15", "CO");
         tag(xml, "EMI_19", nvl(e.getDepartamento()));
-        tag(xml, "EMI_22", nvl(e.getDigitoVerificacion()));
+        // EMI_22 es MANDATORIO: sin DV registrado se calcula (algoritmo DIAN)
+        tag(xml, "EMI_22", notBlank(e.getDigitoVerificacion())
+                ? e.getDigitoVerificacion() : digitoVerificacion(e.getNumeroIdentificacion()));
         tag(xml, "EMI_23", codMuni);
         tag(xml, "EMI_24", razonSocial);
 
@@ -550,7 +598,11 @@ public class FacturatechXmlGenerator {
         // CDE: Contacto del emisor
         xml.append("    <CDE>\n");
         tag2(xml, "CDE_2", razonSocial);
-        tag2(xml, "CDE_3", nvl(e.getTelefono()));
+        // CDE_3 es mandatorio: sin telefono de empresa va un neutro (con warn)
+        if (!notBlank(e.getTelefono())) {
+            log.warn("[Facturatech] La empresa no tiene telefono: CDE_3 va con 0000000");
+        }
+        tag2(xml, "CDE_3", notBlank(e.getTelefono()) ? e.getTelefono() : "0000000");
         tag2(xml, "CDE_4", nvl(e.getCorreo()));
         xml.append("    </CDE>\n");
 
@@ -576,12 +628,23 @@ public class FacturatechXmlGenerator {
         String nombre = nvl(r.getNombre());
         boolean responsableIvaAdq = Boolean.TRUE.equals(r.getResponsableIva());
 
+        String tipoPersonaAdq = tipoPersona(r.getTipoContribuyente(), tipoDoc);
         xml.append("  <ADQ>\n");
-        tag(xml, "ADQ_1", tipoPersona(r.getTipoContribuyente(), tipoDoc));
+        tag(xml, "ADQ_1", tipoPersonaAdq);
         tag(xml, "ADQ_2", nvl(r.getNumeroIdentificacion()));
         tag(xml, "ADQ_3", tipoDoc);
         tag(xml, "ADQ_6", nombre);
         tag(xml, "ADQ_7", nombre);
+        // PERSONA NATURAL (ADQ_1=2): el manual exige ADQ_8 (nombres), ADQ_9 (apellidos)
+        // y ADQ_24 (nombre completo). Sin ellos Facturatech rechaza con FAK20
+        // "ADQ_6 no informado" AUNQUE ADQ_6 venga lleno — verificado contra el WS demo
+        // con el SET C1 (folio 28302 aceptado con estos nodos, rechazado sin ellos).
+        if ("2".equals(tipoPersonaAdq)) {
+            String nombresAdq = notBlank(r.getNombres()) ? r.getNombres() : primeraPalabra(nombre);
+            String apellidosAdq = notBlank(r.getApellidos()) ? r.getApellidos() : restoPalabras(nombre);
+            tag(xml, "ADQ_8", nombresAdq);
+            tag(xml, "ADQ_9", notBlank(apellidosAdq) ? apellidosAdq : nombresAdq);
+        }
 
         // ADQ_10 condiciona los nodos 11,13,14,15,19,21,23 → solo si tenemos la información completa
         boolean direccionCompleta = notBlank(r.getDireccion())
@@ -598,9 +661,16 @@ public class FacturatechXmlGenerator {
         }
         if (notBlank(r.getDigitoVerificacion())) {
             tag(xml, "ADQ_22", r.getDigitoVerificacion());
+        } else if ("31".equals(tipoDoc)) {
+            // Cliente NIT sin DV registrado: se calcula (la DIAN valida DV vs NIT)
+            tag(xml, "ADQ_22", digitoVerificacion(r.getNumeroIdentificacion()));
         }
         if (direccionCompleta) {
             tag(xml, "ADQ_23", r.getCodigoMunicipio());
+        }
+        // ADQ_24: nombre completo — requerido junto con ADQ_8/ADQ_9 para persona natural
+        if ("2".equals(tipoPersonaAdq)) {
+            tag(xml, "ADQ_24", nombre);
         }
 
         // TCR: Información tributaria del adquiriente
@@ -615,18 +685,28 @@ public class FacturatechXmlGenerator {
         tag2(xml, "ILA_3", tipoDoc);
         xml.append("    </ILA>\n");
 
-        // CDA: Contacto del adquiriente — sin CDA_4 Facturatech no envía el comprobante al cliente
-        if (notBlank(r.getCorreo())) {
+        // CDA: Contacto del adquiriente. Facturatech EXIGE el nodo con al menos CDA_4
+        // ("Debe definir el nodo CDA, al menos con el nodo CDA_4", verificado en demo).
+        // Si el cliente no tiene correo, se usa el de la empresa emisora como fallback
+        // (a ese buzón llegará la representación gráfica).
+        String correoCda = notBlank(r.getCorreo()) ? r.getCorreo()
+                : (req.getEmisor() != null && notBlank(req.getEmisor().getCorreo())
+                    ? req.getEmisor().getCorreo() : null);
+        if (correoCda != null) {
             xml.append("    <CDA>\n");
+            tag2(xml, "CDA_2", nombre);
             if (notBlank(r.getTelefono())) {
-                tag2(xml, "CDA_2", nombre);
                 tag2(xml, "CDA_3", r.getTelefono());
             }
-            tag2(xml, "CDA_4", r.getCorreo());
+            tag2(xml, "CDA_4", correoCda);
             xml.append("    </CDA>\n");
+            if (!notBlank(r.getCorreo())) {
+                log.warn("[Facturatech] Adquiriente {} sin correo: CDA_4 va con el correo de la empresa",
+                        r.getNumeroIdentificacion());
+            }
         } else {
-            log.warn("[Facturatech] Adquiriente {} sin correo: el comprobante no será enviado por email",
-                    r.getNumeroIdentificacion());
+            log.warn("[Facturatech] Ni el adquiriente {} ni la empresa tienen correo: " +
+                    "Facturatech rechazará el documento (CDA_4 es obligatorio)", r.getNumeroIdentificacion());
         }
 
         // GTA: Detalles tributarios del adquiriente (Tabla 11)
@@ -686,8 +766,10 @@ public class FacturatechXmlGenerator {
         tag(xml, "DRF_2", req.getFechaInicioResolucion() != null ? req.getFechaInicioResolucion().toString() : "");
         tag(xml, "DRF_3", req.getFechaFinResolucion() != null ? req.getFechaFinResolucion().toString() : "");
         tag(xml, "DRF_4", nvl(req.getPrefijo()));
-        tag(xml, "DRF_5", req.getConsecutivoDesde() != null ? String.valueOf(req.getConsecutivoDesde()) : "1");
-        tag(xml, "DRF_6", req.getConsecutivoHasta() != null ? String.valueOf(req.getConsecutivoHasta()) : "5000000");
+        // Sin defaults inventados: la DIAN cruza el rango contra la resolucion real.
+        // Que estos datos existan se garantiza aguas arriba (comprobante validado).
+        tag(xml, "DRF_5", req.getConsecutivoDesde() != null ? String.valueOf(req.getConsecutivoDesde()) : "");
+        tag(xml, "DRF_6", req.getConsecutivoHasta() != null ? String.valueOf(req.getConsecutivoHasta()) : "");
         xml.append("  </DRF>\n");
     }
 
@@ -701,9 +783,11 @@ public class FacturatechXmlGenerator {
         xml.append("  <REF>\n");
         tag(xml, "REF_1", "IV"); // IV = referencia a factura
         tag(xml, "REF_2", nvl(ref.getNumeroDocumento()));
-        if (ref.getFechaEmisionOriginal() != null) {
-            tag(xml, "REF_3", ref.getFechaEmisionOriginal().toString());
-        }
+        // REF_3 = fecha de FIRMA del doc referenciado (el llamador manda la de
+        // validacion DIAN; respaldo: hoy). Va siempre: el manual no lo hace opcional.
+        tag(xml, "REF_3", ref.getFechaEmisionOriginal() != null
+                ? ref.getFechaEmisionOriginal().toString()
+                : LocalDate.now(ZONA_CO).toString());
         if (notBlank(ref.getCufeOriginal())) {
             tag(xml, "REF_4", ref.getCufeOriginal());
             tag(xml, "REF_5", "CUFE-SHA384");
@@ -719,22 +803,32 @@ public class FacturatechXmlGenerator {
         if (mps != null && !mps.isEmpty() && notBlank(mps.get(0).getMedioPago())) {
             medio = mps.get(0).getMedioPago();
         }
+        // MEP_1 se valida contra la Tabla 5: un codigo fuera de tabla -> ZZZ (Otro)
+        if (!MEDIOS_PAGO_TABLA5.contains(medio)) {
+            log.warn("[Facturatech] Medio de pago '{}' fuera de la Tabla 5: se envia ZZZ", medio);
+            medio = "ZZZ";
+        }
         boolean credito = "2".equals(req.getFormaPago());
         xml.append("  <MEP>\n");
         tag(xml, "MEP_1", medio);
         tag(xml, "MEP_2", credito ? "2" : "1");
-        if (credito && req.getFechaVencimiento() != null) {
-            tag(xml, "MEP_3", req.getFechaVencimiento().toString());
+        if (credito) {
+            // MEP_3 es de RECHAZO si MEP_2=2 y falta: sin vencimiento va la emision
+            java.time.LocalDate fpago = req.getFechaVencimiento() != null
+                    ? req.getFechaVencimiento()
+                    : (req.getFechaEmision() != null ? req.getFechaEmision() : LocalDate.now(ZONA_CO));
+            tag(xml, "MEP_3", fpago.toString());
         }
         xml.append("  </MEP>\n");
     }
 
     /** CDN: concepto de la nota (Tabla 18 NC / Tabla 19 ND). */
     private void appendCdn(StringBuilder xml, int concepto, String razon, boolean esNotaCredito) {
-        String descripcion = notBlank(razon) ? razon : descripcionConcepto(concepto, esNotaCredito);
+        // CDN_2 debe ser la DESCRIPCION de la tabla 18/19 (el WS valida contra
+        // tabla): el motivo libre del usuario NO viaja aqui.
         xml.append("  <CDN>\n");
         tag(xml, "CDN_1", String.valueOf(concepto));
-        tag(xml, "CDN_2", descripcion);
+        tag(xml, "CDN_2", descripcionConcepto(concepto, esNotaCredito));
         xml.append("  </CDN>\n");
     }
 
@@ -782,7 +876,7 @@ public class FacturatechXmlGenerator {
                 tag2(xml, "IDE_6", fmt(porcentaje));
                 tag2(xml, "IDE_7", fmt(baseDescuento));
                 tag2(xml, "IDE_8", COP);
-                tag2(xml, "IDE_10", "1");
+                // IDE_10 ELIMINADO del estandar (manual 4DESTM_CARITM): no se envia
                 xml.append("    </IDE>\n");
             }
 
@@ -939,6 +1033,20 @@ public class FacturatechXmlGenerator {
 
     private static boolean notBlank(String s) {
         return s != null && !s.isBlank();
+    }
+
+    /** Primera palabra de un nombre completo ("Consumidor Final" → "Consumidor"). */
+    private static String primeraPalabra(String nombreCompleto) {
+        String n = nvl(nombreCompleto);
+        int i = n.indexOf(' ');
+        return i > 0 ? n.substring(0, i) : n;
+    }
+
+    /** Resto de palabras de un nombre completo ("Consumidor Final" → "Final"). */
+    private static String restoPalabras(String nombreCompleto) {
+        String n = nvl(nombreCompleto);
+        int i = n.indexOf(' ');
+        return i > 0 ? n.substring(i + 1).trim() : "";
     }
 
     private static String esc(String s) {

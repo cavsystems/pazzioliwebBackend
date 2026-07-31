@@ -169,6 +169,12 @@ public class ProveedorFacturatechImpl implements ProveedorFacturacionElectronica
 
             log.info("══════ RESULTADO: {} - {} ══════", response.getEstadoDian(), response.getMensajeDian());
 
+        } catch (IllegalStateException e) {
+            // Error de VALIDACIÓN local (datos incompletos detectados al generar el XML,
+            // p.ej. proveedor DS residente sin dirección): se relanza para que la
+            // transacción del caller haga rollback y DEVUELVA el folio — tragarla aquí
+            // lo convertía en RECHAZADA persistida con folio quemado.
+            throw e;
         } catch (Exception e) {
             log.error("Error en facturación electrónica Facturatech: {}", e.getMessage(), e);
             response.setExitoso(false);

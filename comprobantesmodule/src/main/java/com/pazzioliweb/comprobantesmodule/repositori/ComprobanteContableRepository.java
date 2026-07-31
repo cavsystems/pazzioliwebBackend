@@ -52,6 +52,15 @@ public interface ComprobanteContableRepository extends JpaRepository<Comprobante
     Optional<ComprobanteContable> findByIdForUpdate(@Param("id") Long id);
 
     /**
+     * Todos los comprobantes de un prefijo CON lock pesimista. Se usa como mutex de la
+     * SERIE de folios de facturación electrónica: FC y VC comparten prefijo/resolución,
+     * y bloquear solo uno dejaba pasar carreras entre una venta contado y una a crédito.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ComprobanteContable c WHERE c.prefijo = :prefijo ORDER BY c.id ASC")
+    java.util.List<ComprobanteContable> findByPrefijoForUpdate(@Param("prefijo") String prefijo);
+
+    /**
      * Comprobantes activos (no legacy) de un tipo, CON lock pesimista y orden estable por id.
      * Se usa para asignar consecutivo sin cajero (compra por bodega/empresa) de forma segura
      * y determinista cuando hay varios prefijos del mismo tipo.

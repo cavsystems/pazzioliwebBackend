@@ -24,6 +24,30 @@ public interface FacturasRepository extends JpaRepository<Facturas, Integer>{
 	@Query("SELECT MAX(f.consecutivo) FROM Facturas f WHERE f.comprobanteId = :comprobanteId")
 	Optional<Integer> findMaxConsecutivoByComprobanteId(@Param("comprobanteId") Integer comprobanteId);
 
+	/**
+	 * Máximo folio usado por PREFIJO. La serie del folio (ENC_6) pertenece a la
+	 * resolución/prefijo, no al comprobante: contado (FC) y crédito (VC) comparten
+	 * prefijo y resolución, así que numerar por comprobante duplicaría folios.
+	 */
+	@Query("SELECT MAX(f.consecutivo) FROM Facturas f WHERE f.prefijo = :prefijo")
+	Optional<Integer> findMaxConsecutivoByPrefijo(@Param("prefijo") String prefijo);
+
+	/**
+	 * Ventas COMPLETADAS de los últimos N días SIN factura electrónica: el hueco
+	 * que queda cuando el listener de facturación falla (venta sin cliente, folios
+	 * agotados, caída del backend). Antes solo se veía venta a venta con el 404 de
+	 * /por-venta; con esto el operador tiene la lista para regenerar.
+	 */
+	@Query(value = """
+	        SELECT v.id, v.numero_venta, v.fecha_emision, v.total_venta
+	        FROM ventas v
+	        WHERE v.estado = 'COMPLETADA'
+	          AND v.fecha_emision >= :desde
+	          AND NOT EXISTS (SELECT 1 FROM facturas f WHERE f.venta_id = v.id)
+	        ORDER BY v.id DESC
+	        """, nativeQuery = true)
+	List<Object[]> findVentasCompletadasSinFactura(@Param("desde") java.time.LocalDate desde);
+
 	// ── Listados existentes ──
 	@Query("""
 	        SELECT 
