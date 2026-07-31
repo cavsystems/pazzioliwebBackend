@@ -27,7 +27,24 @@ CREATE TABLE IF NOT EXISTS subpermisos_roles (
         REFERENCES subpermisos (codigo) ON DELETE CASCADE
 );
 
--- ── 3. Datos: sub-permisos de cada módulo ─────────────────────────
+-- ── 3. Garantizar que los permisos padre existen ──────────────────
+-- Guard: INSERT IGNORE ensures this is idempotent if rows already
+-- exist from V2__datos_iniciales.sql.
+INSERT IGNORE INTO permisos (codigo, nombre) VALUES
+(5,  'Empresas'),
+(8,  'Mi Panel'),
+(9,  'Usuarios'),
+(10, 'Terceros'),
+(11, 'Inventarios'),
+(12, 'Compras'),
+(14, 'Ventas'),
+(15, 'Caja'),
+(16, 'Nomina'),
+(17, 'Contabilidad'),
+(18, 'Reportes'),
+(19, 'Parametros');
+
+-- ── 4. Datos: sub-permisos de cada módulo ─────────────────────────
 --   Módulo 5  – Empresas
 INSERT INTO subpermisos (permiso_padre_id, codigo_accion, nombre) VALUES
 (5, 'ver',                  'Ver empresas'),
