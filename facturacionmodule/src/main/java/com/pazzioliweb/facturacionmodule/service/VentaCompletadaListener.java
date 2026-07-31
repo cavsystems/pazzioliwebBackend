@@ -8,8 +8,6 @@ import com.pazzioliweb.ventasmodule.repository.VentaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -31,8 +29,13 @@ public class VentaCompletadaListener {
         this.ventaRepository = ventaRepository;
     }
 
+    // SIN @Transactional propio: este método no escribe nada — solo resuelve el
+    // comprobante y delega. Con TX propia, cualquier excepción que cruzara el proxy
+    // de generarDesdeVenta la marcaba rollback-only y el commit VACÍO del listener
+    // lanzaba UnexpectedRollbackException hacia el commit de la venta (el POS recibía
+    // error con la venta y la factura ya commiteadas). Además retenía una conexión
+    // del pool durante todo el round-trip SOAP. generarDesdeVenta maneja sus TX.
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onVentaCompletada(VentaCompletadaEvent event) {
         log.info("══════ Evento VentaCompletada recibido ══════");
         log.info("Venta ID: {}, Cajero ID: {}", event.getVentaId(), event.getCajeroId());

@@ -53,6 +53,13 @@ public class FacturacionElectronicaService {
     @Autowired private ConfiguracionContableService configContable;
     @Autowired private com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante;
     @Autowired private com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository comprobanteContableRepository;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    /** Mientras Facturatech no habilite el WS de Tiquete POS, el envío TPOS se corta
+     *  ANTES de consumir folio (cada intento quemaba un consecutivo en un camino
+     *  que siempre terminaba RECHAZADO). */
+    @org.springframework.beans.factory.annotation.Value("${facturacion.tpos.habilitado:false}")
+    private boolean tposHabilitado;
 
     @Autowired
     public FacturacionElectronicaService(FacturasRepository facturasRepository,
@@ -129,49 +136,96 @@ public class FacturacionElectronicaService {
                 ? compVenta.getId().intValue()
                 : request.getComprobanteId();
 
-        // Lock pesimista sobre el comprobante: serializa la asignación de folio entre
-        // ventas concurrentes (dos cajas cerrando a la vez leían el mismo MAX y emitían
-        // dos facturas con el mismo folio → rechazo 409 de Facturatech en la segunda).
-        // El lock se libera al commit de esta transacción.
-        if (compVenta != null && compVenta.getId() != null) {
-            comprobanteContableRepository.findByIdForUpdate(compVenta.getId());
+        // Lock pesimista sobre TODOS los comprobantes del PREFIJO: la serie de folios
+        // pertenece a la resolución (FC contado y VC crédito comparten prefijo), así que
+        // el mutex y el MAX deben ser por prefijo — por comprobante se duplicaban folios
+        // entre una venta contado y una a crédito.
+        //
+        // TX CORTA (REQUIRES_NEW): el lock se toma, se asigna el folio, se persiste la
+        // factura PENDIENTE y se COMMITEA aquí mismo. Antes el lock vivía hasta el commit
+        // de toda la generación — es decir, durante el round-trip SOAP a Facturatech
+        // (upload + polls, hasta minutos): una segunda venta simultánea moría por
+        // innodb_lock_wait_timeout y quedaba COMPLETADA sin factura. Con la TX corta el
+        // lock dura milisegundos; si el envío falla después, la factura PENDIENTE ya está
+        // commiteada y se reintenta con el MISMO folio vía reenviarFacturaDian.
+        // Resolución a medio configurar = DRF con tags vacíos = rechazo seguro de
+        // Facturatech. Se corta ANTES de consumir folio. (Si no hay resolución en
+        // absoluto se deja pasar con warn: los tenants en modo simulación no la tienen.)
+        if (compVenta != null && compVenta.getResolucionDian() != null && !compVenta.getResolucionDian().isBlank()
+                && (compVenta.getFechaInicioResolucion() == null || compVenta.getFechaFinResolucion() == null
+                    || compVenta.getConsecutivoDesde() == null || compVenta.getConsecutivoHasta() == null)) {
+            throw new RuntimeException("El comprobante '" + compVenta.getPrefijo() + "' tiene la resolución DIAN " +
+                    "incompleta (faltan fechas de vigencia o rango de numeración). Complétela en " +
+                    "Contabilidad → Comprobantes antes de facturar: el nodo DRF viajaría con datos vacíos.");
+        }
+        if (compVenta == null || compVenta.getResolucionDian() == null || compVenta.getResolucionDian().isBlank()) {
+            log.warn("⚠️ La venta {} no tiene comprobante con resolución DIAN: el DRF saldrá incompleto " +
+                    "(solo válido en modo simulación)", venta.getNumeroVenta());
         }
 
-        log.info("🔢 Paso 3: Obteniendo siguiente consecutivo para comprobante {}...", comprobanteIdSerie);
-        Integer siguienteConsecutivo = obtenerSiguienteConsecutivo(comprobanteIdSerie);
+        // Inicializar relaciones lazy ANTES de la TX corta: dentro de ella la sesión
+        // del caller queda suspendida y un lazy-load de la venta podría fallar.
+        if (venta.getMetodosPago() != null) venta.getMetodosPago().size();
+        if (venta.getItems() != null) venta.getItems().size();
+        if (venta.getCajero() != null) venta.getCajero().getCajeroId();
 
-        // ── Numeración dentro del rango de la resolución del comprobante ──
-        // El folio (ENC_6) debe caer dentro del rango autorizado (DRF_5..DRF_6);
-        // Facturatech rechaza con 409 si queda por fuera. Si el comprobante define
-        // rango, se arranca en consecutivoDesde y se corta al agotar consecutivoHasta.
-        if (compVenta != null && compVenta.getConsecutivoDesde() != null
-                && siguienteConsecutivo < compVenta.getConsecutivoDesde()) {
-            siguienteConsecutivo = compVenta.getConsecutivoDesde();
-        }
-        if (compVenta != null && compVenta.getConsecutivoHasta() != null
-                && siguienteConsecutivo > compVenta.getConsecutivoHasta()) {
-            throw new RuntimeException("La numeración autorizada del comprobante " + compVenta.getPrefijo() +
-                    " está agotada (rango hasta " + compVenta.getConsecutivoHasta() +
-                    "). Configure una nueva resolución DIAN.");
-        }
+        final com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable compV = compVenta;
+        final Integer compIdSerie = comprobanteIdSerie;
+        org.springframework.transaction.support.TransactionTemplate txFolio =
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        txFolio.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        Facturas factura = txFolio.execute(status -> {
+            Integer siguienteConsecutivo;
+            if (compV != null && compV.getPrefijo() != null && !compV.getPrefijo().isBlank()) {
+                comprobanteContableRepository.findByPrefijoForUpdate(compV.getPrefijo());
+                // RE-CHEQUEO de duplicado DENTRO del mutex: el check inicial corre sin
+                // lock y dos peticiones simultáneas de la misma venta lo pasan ambas
+                // (ninguna ve la factura no commiteada de la otra). Con la TX corta el
+                // lock ya no bloquea a la segunda hasta el timeout, así que sin esto se
+                // emitirían DOS facturas legales de la misma venta con folios distintos.
+                Optional<Facturas> dup = facturasRepository.findByVentaId(request.getVentaId());
+                if (dup.isPresent()) {
+                    throw new RuntimeException("Ya existe una factura para la venta ID: " +
+                            request.getVentaId() + " - Factura: " + dup.get().getNumeroFactura());
+                }
+                log.info("🔢 Paso 3: Obteniendo siguiente consecutivo para el prefijo {}...", compV.getPrefijo());
+                siguienteConsecutivo = facturasRepository.findMaxConsecutivoByPrefijo(compV.getPrefijo())
+                        .orElse(0) + 1;
+            } else {
+                log.info("🔢 Paso 3: Obteniendo siguiente consecutivo para comprobante {}...", compIdSerie);
+                siguienteConsecutivo = obtenerSiguienteConsecutivo(compIdSerie);
+            }
 
-        // Prefijo: el del comprobante de la venta (coherente con el DRF que se reporta);
-        // dian.resolucion.prefijo queda como fallback para ventas sin comprobante.
-        String prefijo = (compVenta != null && compVenta.getPrefijo() != null && !compVenta.getPrefijo().isBlank())
-                ? compVenta.getPrefijo()
-                : (dianConfig.getResolucion().getPrefijo() != null ? dianConfig.getResolucion().getPrefijo() : "FE");
-        String numeroFactura = prefijo + siguienteConsecutivo;
-        log.info("✅ Consecutivo: {} → Número factura: {}", siguienteConsecutivo, numeroFactura);
+            // ── Numeración dentro del rango de la resolución del comprobante ──
+            // El folio (ENC_6) debe caer dentro del rango autorizado (DRF_5..DRF_6);
+            // Facturatech rechaza con 409 si queda por fuera. Si el comprobante define
+            // rango, se arranca en consecutivoDesde y se corta al agotar consecutivoHasta.
+            if (compV != null && compV.getConsecutivoDesde() != null
+                    && siguienteConsecutivo < compV.getConsecutivoDesde()) {
+                siguienteConsecutivo = compV.getConsecutivoDesde();
+            }
+            if (compV != null && compV.getConsecutivoHasta() != null
+                    && siguienteConsecutivo > compV.getConsecutivoHasta()) {
+                throw new RuntimeException("La numeración autorizada del comprobante " + compV.getPrefijo() +
+                        " está agotada (rango hasta " + compV.getConsecutivoHasta() +
+                        "). Configure una nueva resolución DIAN.");
+            }
 
-        // 4. Crear factura en BD con TODOS los datos de la venta
-        log.info("📝 Paso 4: Creando factura en BD...");
-        Facturas factura = crearFacturaDesdeVenta(request, venta, siguienteConsecutivo, prefijo, numeroFactura);
-        log.info("   → Tercero ID: {}, Fecha emisión: {}, Total: {}, Descuento: {}",
-                factura.getTerceroId(), factura.getFechaEmision(), factura.getTotalFactura(), factura.getDescuento());
-        log.info("   → TipoTotales: {}, MétodosPago: {}",
-                factura.getTipoTotales() != null ? factura.getTipoTotales().size() : 0,
-                factura.getMetodosPago() != null ? factura.getMetodosPago().size() : 0);
-        factura = facturasRepository.save(factura);
+            // Prefijo: el del comprobante de la venta (coherente con el DRF que se reporta);
+            // dian.resolucion.prefijo queda como fallback para ventas sin comprobante.
+            String prefijo = (compV != null && compV.getPrefijo() != null && !compV.getPrefijo().isBlank())
+                    ? compV.getPrefijo()
+                    : (dianConfig.getResolucion().getPrefijo() != null ? dianConfig.getResolucion().getPrefijo() : "FE");
+            String numeroFactura = prefijo + siguienteConsecutivo;
+            log.info("✅ Consecutivo: {} → Número factura: {}", siguienteConsecutivo, numeroFactura);
+
+            // 4. Crear factura en BD con TODOS los datos de la venta
+            log.info("📝 Paso 4: Creando factura en BD...");
+            Facturas f = crearFacturaDesdeVenta(request, venta, siguienteConsecutivo, prefijo, numeroFactura);
+            log.info("   → Tercero ID: {}, Fecha emisión: {}, Total: {}, Descuento: {}",
+                    f.getTerceroId(), f.getFechaEmision(), f.getTotalFactura(), f.getDescuento());
+            return facturasRepository.save(f);
+        });
         log.info("✅ Factura guardada en BD → ID: {}, Número: {}", factura.getFacturaId(), factura.getNumeroFactura());
 
         // 5. Armar el DTO completo para el proveedor DIAN
@@ -197,12 +251,16 @@ public class FacturacionElectronicaService {
         } catch (Exception e) {
             log.error("❌ Error enviando a DIAN: {}", e.getMessage(), e);
             factura.setEstadoDian(Facturas.EstadoDian.RECHAZADA);
-            factura.setMensajeDian("Error al enviar: " + e.getMessage());
-            facturasRepository.save(factura);
+            factura.setMensajeDian(truncarMensaje("Error al enviar: " + e.getMessage()));
+            // REQUIRES_NEW: el rethrow marca rollback la TX del caller (listener) y sin
+            // esto el estado RECHAZADO se perdería — la factura quedaría PENDIENTE muda.
+            final Facturas fErr = factura;
+            txFolio.execute(status -> facturasRepository.save(fErr));
             throw new RuntimeException("Error al enviar factura a la DIAN: " + e.getMessage(), e);
         }
 
-        // 7. Guardar respuesta de la DIAN
+        // 7. Guardar respuesta de la DIAN — también en TX corta propia: el documento YA
+        // existe en Facturatech; un rollback posterior del caller no debe borrar el CUFE.
         log.info("💾 Paso 7: Guardando respuesta DIAN en BD...");
         factura.setCufe(dianResponse.getCufe());
         factura.setQrData(dianResponse.getQrData());
@@ -210,8 +268,9 @@ public class FacturacionElectronicaService {
         factura.setPdfBase64(dianResponse.getPdfBase64());
         factura.setFechaValidacionDian(dianResponse.getFechaValidacion());
         factura.setEstadoDian(mapearEstadoDian(dianResponse));
-        factura.setMensajeDian(dianResponse.getMensajeDian());
-        facturasRepository.save(factura);
+        factura.setMensajeDian(truncarMensaje(dianResponse.getMensajeDian()));
+        final Facturas fOk = factura;
+        factura = txFolio.execute(status -> facturasRepository.save(fOk));
 
         // Publicar evento para que comprobantesmodule actualice el asiento contable
         // asociado a la venta con el CUFE y estado DIAN. Es desacoplado: si el
@@ -275,7 +334,7 @@ public class FacturacionElectronicaService {
             if (dianResponse.getPdfBase64() != null) factura.setPdfBase64(dianResponse.getPdfBase64());
             if (dianResponse.getQrData() != null) factura.setQrData(dianResponse.getQrData());
         }
-        factura.setMensajeDian(dianResponse.getMensajeDian());
+        factura.setMensajeDian(truncarMensaje(dianResponse.getMensajeDian()));
         factura.setFechaValidacionDian(dianResponse.getFechaValidacion());
         facturasRepository.save(factura);
         log.info("✅ Estado actualizado → {}: {}", factura.getEstadoDian(), factura.getMensajeDian());
@@ -304,6 +363,27 @@ public class FacturacionElectronicaService {
         return factura.getPdfBase64();
     }
 
+    public String obtenerXmlFirmado(Integer facturaId) {
+        Facturas factura = facturasRepository.findById(facturaId)
+                .orElseThrow(() -> new RuntimeException("Factura no encontrada: " + facturaId));
+        return factura.getXmlFirmado();
+    }
+
+    /** Ventas COMPLETADAS sin factura electrónica en los últimos {@code dias} días. */
+    public List<Map<String, Object>> buscarVentasSinFactura(int dias) {
+        LocalDate desde = LocalDate.now().minusDays(Math.max(1, dias));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object[] row : facturasRepository.findVentasCompletadasSinFactura(desde)) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("ventaId", row[0]);
+            m.put("numeroVenta", row[1]);
+            m.put("fechaEmision", row[2] != null ? row[2].toString() : null);
+            m.put("totalVenta", row[3]);
+            out.add(m);
+        }
+        return out;
+    }
+
     /**
      * Reenvía una factura con estado RECHAZADA o PENDIENTE a la DIAN.
      */
@@ -318,6 +398,32 @@ public class FacturacionElectronicaService {
             throw new RuntimeException("La factura ya está AUTORIZADA por la DIAN");
         }
 
+        // Una ENVIADA (EN_PROCESO en Facturatech) puede haber sido firmada entre tanto:
+        // re-subirla devolvería error y la marcaríamos RECHAZADA pisando un documento
+        // realmente autorizado. Se consulta el estado primero; si ya hay CUFE, se cierra.
+        if (factura.getEstadoDian() == Facturas.EstadoDian.ENVIADA
+                && factura.getPrefijo() != null && factura.getConsecutivo() != null) {
+            try {
+                DianDocumentoResponseDTO estado = proveedorDian.consultarEstadoDocumento(
+                        factura.getPrefijo(), factura.getConsecutivo());
+                if (estado.isExitoso()) {
+                    log.info("✅ La factura {} ya estaba firmada en Facturatech: se actualiza sin reenviar",
+                            factura.getNumeroFactura());
+                    factura.setEstadoDian(Facturas.EstadoDian.AUTORIZADA);
+                    if (estado.getCufe() != null) factura.setCufe(estado.getCufe());
+                    if (estado.getXmlFirmado() != null) factura.setXmlFirmado(estado.getXmlFirmado());
+                    if (estado.getPdfBase64() != null) factura.setPdfBase64(estado.getPdfBase64());
+                    if (estado.getQrData() != null) factura.setQrData(estado.getQrData());
+                    factura.setMensajeDian(truncarMensaje(estado.getMensajeDian()));
+                    factura.setFechaValidacionDian(estado.getFechaValidacion());
+                    facturasRepository.save(factura);
+                    return mapToResponse(factura);
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ No se pudo pre-consultar el estado antes del reenvío: {}", e.getMessage());
+            }
+        }
+
         Venta venta = ventaRepository.findById(factura.getVentaId())
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada: " + factura.getVentaId()));
 
@@ -330,8 +436,14 @@ public class FacturacionElectronicaService {
         } catch (Exception e) {
             log.error("❌ Error al reenviar a DIAN: {}", e.getMessage(), e);
             factura.setEstadoDian(Facturas.EstadoDian.RECHAZADA);
-            factura.setMensajeDian("Error al reenviar: " + e.getMessage());
-            facturasRepository.save(factura);
+            factura.setMensajeDian(truncarMensaje("Error al reenviar: " + e.getMessage()));
+            // TX corta: el rethrow marca rollback la TX de este método y sin esto el
+            // save del estado RECHAZADA se perdería con el rollback.
+            org.springframework.transaction.support.TransactionTemplate txErr =
+                    new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            txErr.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            final Facturas fErr = factura;
+            txErr.execute(status -> facturasRepository.save(fErr));
             throw new RuntimeException("Error al reenviar factura a la DIAN: " + e.getMessage(), e);
         }
 
@@ -341,7 +453,7 @@ public class FacturacionElectronicaService {
         factura.setPdfBase64(dianResponse.getPdfBase64());
         factura.setFechaValidacionDian(dianResponse.getFechaValidacion());
         factura.setEstadoDian(mapearEstadoDian(dianResponse));
-        factura.setMensajeDian(dianResponse.getMensajeDian());
+        factura.setMensajeDian(truncarMensaje(dianResponse.getMensajeDian()));
         facturasRepository.save(factura);
 
         return mapToResponse(factura);
@@ -511,6 +623,11 @@ public class FacturacionElectronicaService {
                    + (cliente.getNombre2() != null ? cliente.getNombre2() + " " : "")
                    + (cliente.getApellido1() != null ? cliente.getApellido1() + " " : "")
                    + (cliente.getApellido2() != null ? cliente.getApellido2() : "")).trim());
+        // Nombres/apellidos separados (Facturatech los exige en ADQ_4/ADQ_5 para persona natural)
+        receptor.setNombres(((cliente.getNombre1() != null ? cliente.getNombre1() : "") + " "
+                + (cliente.getNombre2() != null ? cliente.getNombre2() : "")).trim());
+        receptor.setApellidos(((cliente.getApellido1() != null ? cliente.getApellido1() : "") + " "
+                + (cliente.getApellido2() != null ? cliente.getApellido2() : "")).trim());
         receptor.setDireccion(cliente.getDireccion());
         receptor.setCorreo(cliente.getCorreo());
         if (cliente.getCiudad() != null) {
@@ -568,6 +685,11 @@ public class FacturacionElectronicaService {
         req.setTotalDescuento(venta.getDescuentos() != null ? venta.getDescuentos() : BigDecimal.ZERO);
         req.setTotalFactura(venta.getTotalVenta() != null ? venta.getTotalVenta() : BigDecimal.ZERO);
 
+        // ── Retenciones que practica el cliente (van como TIM_1=true, no tocan totales) ──
+        req.setRetencionFuente(venta.getRetefuente());
+        req.setRetencionIva(venta.getReteiva());
+        req.setRetencionIca(venta.getReteica());
+
         // ── Métodos de pago ──
         List<DianDocumentoRequestDTO.MetodoPagoDTO> metodosPago = new ArrayList<>();
         if (venta.getMetodosPago() != null) {
@@ -622,6 +744,15 @@ public class FacturacionElectronicaService {
      * Mapea el estado que reporta el proveedor al enum de la factura.
      * EN_PROCESO (Facturatech aún validando) se guarda como ENVIADA, no como rechazo.
      */
+    /**
+     * facturas.mensaje_dian es varchar(500): los mensajes que concatenan excepciones
+     * SOAP pueden excederlo y un DataTruncation tumbaría el save del estado.
+     */
+    private String truncarMensaje(String mensaje) {
+        if (mensaje == null || mensaje.length() <= 500) return mensaje;
+        return mensaje.substring(0, 497) + "...";
+    }
+
     private Facturas.EstadoDian mapearEstadoDian(DianDocumentoResponseDTO resp) {
         if ("SIMULADA".equals(resp.getEstadoDian())) return Facturas.EstadoDian.SIMULADA;
         if ("EN_PROCESO".equals(resp.getEstadoDian())) return Facturas.EstadoDian.ENVIADA;
@@ -656,6 +787,11 @@ public class FacturacionElectronicaService {
         log.info("══════ Generando Tiquete POS Electrónico (TPOS) ═══════");
         log.info("Venta ID: {}", ventaId);
 
+        if (!tposHabilitado) {
+            throw new IllegalStateException("El Tiquete POS electrónico no está habilitado " +
+                    "(facturacion.tpos.habilitado=false): Facturatech aún no provee el WS del " +
+                    "documento equivalente POS. Se corta ANTES de consumir folio TPOS.");
+        }
         Venta venta = ventaRepository.findById(ventaId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada: " + ventaId));
 
@@ -686,7 +822,8 @@ public class FacturacionElectronicaService {
         try {
             DocumentoElectronico doc = new DocumentoElectronico();
             doc.setTipo("TPOS");
-            doc.setNumero("TPOS-" + consec);
+            // Número LEGAL prefijo+folio (igual al ENC_6): permite re-consultar el estado
+            doc.setNumero(req.getPrefijo() + consec);
             doc.setCufe(resp.getCufe());
             doc.setFechaEmision(req.getFechaEmision());
             doc.setTerceroIdentificacion(req.getReceptor() != null ? req.getReceptor().getNumeroIdentificacion() : null);
@@ -698,7 +835,7 @@ public class FacturacionElectronicaService {
             doc.setTotal(req.getTotalFactura());
             doc.setConcepto("Tiquete POS — Venta " + venta.getNumeroVenta());
             doc.setEstadoDian(resp.getEstadoDian());
-            doc.setMensajeDian(resp.getMensajeDian());
+            doc.setMensajeDian(truncarMensaje(resp.getMensajeDian()));
             doc.setQrData(resp.getQrData());
             doc.setXmlFirmado(resp.getXmlFirmado());
             doc.setFechaValidacionDian(resp.getFechaValidacion());
@@ -729,11 +866,29 @@ public class FacturacionElectronicaService {
 
         Facturas factura = facturasRepository.findById(facturaId)
                 .orElseThrow(() -> new RuntimeException("Factura no encontrada: " + facturaId));
+        // La ND referencia el CUFE (REF_4): sin factura AUTORIZADA con CUFE real la DIAN
+        // la rechaza y el folio ND ya estaría consumido. Se valida ANTES de asignar folio.
+        if (factura.getEstadoDian() != Facturas.EstadoDian.AUTORIZADA
+                || factura.getCufe() == null || factura.getCufe().isBlank()
+                || factura.getCufe().startsWith("SIMULADO-")) {
+            throw new IllegalStateException("La factura " + factura.getNumeroFactura() +
+                    " no está AUTORIZADA por la DIAN (estado: " + factura.getEstadoDian() +
+                    "): no se puede emitir una nota débito que la referencie. " +
+                    "Autorice o reenvíe la factura primero.");
+        }
         Venta venta = ventaRepository.findById(factura.getVentaId())
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada: " + factura.getVentaId()));
 
         DianDocumentoRequestDTO req = construirRequestDianBase(venta);
         req.setTipoDocumento("92");  // 92 = Nota Débito
+        // La ND se emite HOY: heredar la fecha de la venta violaría la regla
+        // "fecha de la nota >= fecha de la factura" cuando pasan días entre ambas.
+        req.setFechaEmision(LocalDate.now());
+        // Y MEP_3 no puede quedar ANTES de esa emisión: una venta a crédito vieja
+        // trae un vencimiento (fechaEmision venta + plazo) que ya puede haber pasado.
+        if (req.getFechaVencimiento() != null && req.getFechaVencimiento().isBefore(req.getFechaEmision())) {
+            req.setFechaVencimiento(req.getFechaEmision());
+        }
         Integer cajeroIdNd = (venta != null && venta.getCajero() != null) ? venta.getCajero().getCajeroId() : null;
         com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService.Resultado rNd =
                 asignarComprobanteAuto(cajeroIdNd,
@@ -756,7 +911,10 @@ public class FacturacionElectronicaService {
         DianDocumentoRequestDTO.DocumentoReferenciaDTO ref = new DianDocumentoRequestDTO.DocumentoReferenciaDTO();
         ref.setNumeroDocumento(factura.getNumeroFactura());
         ref.setCufeOriginal(factura.getCufe());
-        ref.setFechaEmisionOriginal(factura.getFechaEmision());
+        // REF_3 = fecha de FIRMA del documento referenciado (validación DIAN), no la de emisión
+        ref.setFechaEmisionOriginal(factura.getFechaValidacionDian() != null
+                ? factura.getFechaValidacionDian().toLocalDate()
+                : factura.getFechaEmision());
         ref.setTipoDocumentoOriginal("01");
         req.setDocumentoReferencia(ref);
 
@@ -789,7 +947,8 @@ public class FacturacionElectronicaService {
         try {
             DocumentoElectronico doc = new DocumentoElectronico();
             doc.setTipo("ND");
-            doc.setNumero("ND-" + consec);
+            // Número LEGAL prefijo+folio (igual al ENC_6): permite re-consultar el estado
+            doc.setNumero(req.getPrefijo() + consec);
             doc.setCufe(resp.getCufe());
             doc.setFechaEmision(req.getFechaEmision());
             doc.setTerceroIdentificacion(req.getReceptor() != null ? req.getReceptor().getNumeroIdentificacion() : null);
@@ -802,7 +961,7 @@ public class FacturacionElectronicaService {
             doc.setConcepto(razon);
             doc.setCodigoConceptoDian(codigoConcepto);
             doc.setEstadoDian(resp.getEstadoDian());
-            doc.setMensajeDian(resp.getMensajeDian());
+            doc.setMensajeDian(truncarMensaje(resp.getMensajeDian()));
             doc.setQrData(resp.getQrData());
             doc.setXmlFirmado(resp.getXmlFirmado());
             doc.setFechaValidacionDian(resp.getFechaValidacion());
@@ -925,7 +1084,7 @@ public class FacturacionElectronicaService {
             doc.setTotal(req.getTotalFactura());
             doc.setConcepto(concepto);
             doc.setEstadoDian(resp.getEstadoDian());
-            doc.setMensajeDian(resp.getMensajeDian());
+            doc.setMensajeDian(truncarMensaje(resp.getMensajeDian()));
             doc.setQrData(resp.getQrData());
             doc.setXmlFirmado(resp.getXmlFirmado());
             doc.setFechaValidacionDian(resp.getFechaValidacion());
@@ -1053,7 +1212,7 @@ public class FacturacionElectronicaService {
             na.setConcepto(razon);
             na.setCodigoConceptoDian(concepto);
             na.setEstadoDian(resp.getEstadoDian());
-            na.setMensajeDian(resp.getMensajeDian());
+            na.setMensajeDian(truncarMensaje(resp.getMensajeDian()));
             na.setQrData(resp.getQrData());
             na.setXmlFirmado(resp.getXmlFirmado());
             na.setFechaValidacionDian(resp.getFechaValidacion());
@@ -1161,7 +1320,27 @@ public class FacturacionElectronicaService {
     private DianDocumentoRequestDTO construirRequestDianBase(Venta venta) {
         DianDocumentoRequestDTO req = new DianDocumentoRequestDTO();
         req.setFechaEmision(venta.getFechaEmision());
-        req.setFormaPago("1");
+
+        // Forma y medios de pago REALES de la venta (la nota debe calcar el MEP de la
+        // factura que referencia; antes viajaba siempre contado/efectivo por defecto).
+        boolean esCreditoBase = venta.getComprobante() != null
+                && venta.getComprobante().getTipoMovimiento() == com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante.VC;
+        req.setFormaPago(esCreditoBase ? "2" : "1");
+        if (esCreditoBase && venta.getCliente() != null && venta.getCliente().getPlazo() != null
+                && venta.getCliente().getPlazo() > 0 && venta.getFechaEmision() != null) {
+            req.setFechaVencimiento(venta.getFechaEmision().plusDays(venta.getCliente().getPlazo()));
+        }
+        List<DianDocumentoRequestDTO.MetodoPagoDTO> mpsBase = new ArrayList<>();
+        if (venta.getMetodosPago() != null) {
+            for (VentaMetodoPago vmp : venta.getMetodosPago()) {
+                DianDocumentoRequestDTO.MetodoPagoDTO mp = new DianDocumentoRequestDTO.MetodoPagoDTO();
+                mp.setMedioPago(mapearMedioPagoDian(vmp.getMetodoPago().getSigla()));
+                mp.setMonto(vmp.getMonto());
+                mp.setReferencia(vmp.getReferencia());
+                mpsBase.add(mp);
+            }
+        }
+        req.setMetodosPago(mpsBase);
 
         // Emisor
         req.setEmisor(armarEmisorDesdeEmpresa());
@@ -1179,6 +1358,11 @@ public class FacturacionElectronicaService {
             receptor.setNombre(cliente.getRazonSocial() != null && !cliente.getRazonSocial().isBlank()
                     ? cliente.getRazonSocial()
                     : cliente.getNombre1());
+            // Nombres/apellidos separados (Facturatech los exige en ADQ_4/ADQ_5 para persona natural)
+            receptor.setNombres(((cliente.getNombre1() != null ? cliente.getNombre1() : "") + " "
+                    + (cliente.getNombre2() != null ? cliente.getNombre2() : "")).trim());
+            receptor.setApellidos(((cliente.getApellido1() != null ? cliente.getApellido1() : "") + " "
+                    + (cliente.getApellido2() != null ? cliente.getApellido2() : "")).trim());
             receptor.setDireccion(cliente.getDireccion());
             receptor.setCorreo(cliente.getCorreo());
         } else {
@@ -1186,6 +1370,8 @@ public class FacturacionElectronicaService {
             receptor.setTipoIdentificacion("13");
             receptor.setNumeroIdentificacion("222222222222");
             receptor.setNombre("CONSUMIDOR FINAL");
+            receptor.setNombres("CONSUMIDOR");
+            receptor.setApellidos("FINAL");
         }
         req.setReceptor(receptor);
 

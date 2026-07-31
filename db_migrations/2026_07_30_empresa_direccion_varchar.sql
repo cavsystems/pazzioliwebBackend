@@ -1,0 +1,13 @@
+-- ══════════════════════════════════════════════════════════════════
+-- Fix de schema: empresa.direccion estaba creada como DOUBLE (número),
+-- por lo que era imposible guardar la dirección de la empresa (quedaba
+-- NULL y el encabezado de tirillas/facturas salía sin dirección).
+-- La entidad Java (Empresa.direccion) siempre fue String(200).
+--
+-- Ejecutar POR TENANT (sin schema quemado):
+--     mysql -u root -p <tenant> < 2026_07_30_empresa_direccion_varchar.sql
+-- Seguro si la columna está en NULL; si algún tenant tuviera un número
+-- guardado ahí, MySQL lo convierte a texto (revisar antes por sanidad):
+--     SELECT direccion FROM empresa;
+-- ══════════════════════════════════════════════════════════════════
+ALTER TABLE empresa MODIFY direccion VARCHAR(200) NULL;

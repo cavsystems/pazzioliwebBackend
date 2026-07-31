@@ -1089,6 +1089,16 @@ public class VentaServiceImpl implements VentaService {
             throw new VentaException("La venta ya está anulada");
         }
 
+        // Una venta con FACTURA ELECTRÓNICA AUTORIZADA no se anula localmente sin más:
+        // el documento sigue VIGENTE ante la DIAN y quedaría el asiento reversado con la
+        // factura fiscal viva. El camino correcto es la DEVOLUCIÓN total, que emite la
+        // Nota Crédito electrónica que anula la factura ante la DIAN.
+        if (ventaRepository.countFacturasAutorizadasByVentaId(ventaId) > 0) {
+            throw new VentaException("La venta " + venta.getNumeroVenta() +
+                    " tiene factura electrónica AUTORIZADA por la DIAN y no puede anularse directamente. " +
+                    "Registre una DEVOLUCIÓN total: eso emite la Nota Crédito electrónica que la anula fiscalmente.");
+        }
+
         // No permitir anular una venta a CRÉDITO que ya recibió ABONOS: el asiento y la CxC se
         // reversarían, pero el efectivo del abono (recaudado vía Recibo de Caja) quedaría en caja sin
         // respaldo → descuadre. El usuario debe anular primero los recibos de caja del abono.
