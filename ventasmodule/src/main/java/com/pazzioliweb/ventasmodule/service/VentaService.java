@@ -15,6 +15,10 @@ public interface VentaService {
     void completarVenta(Long ventaId, List<VentaMetodoPagoDTO> metodosPago);
     void devolverVenta(Long ventaId, List<DetalleVentaDTO> detallesDevueltos);
     void anularVenta(Long ventaId);
+
+    /** Re-genera el asiento contable de una venta COMPLETADA que quedó en asientos_fallidos
+     *  (p.ej. cuenta mal parametrizada ya corregida). Idempotente: si ya existe asiento, no duplica. */
+    void regenerarAsientoVenta(Long ventaId);
     Double getTotalVentasByFecha(LocalDate fechaInicio, LocalDate fechaFin);
     Long getCantidadVendidaByProducto(String codigoProducto, LocalDate fechaInicio, LocalDate fechaFin);
     Double getTotalVentasByCajero(Integer cajeroId, LocalDate fechaInicio, LocalDate fechaFin);
