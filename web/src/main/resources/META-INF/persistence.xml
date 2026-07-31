@@ -20,6 +20,7 @@
           <class>com.pazzioliweb.empresasback.entity.Empresa</class>
            <class>com.pazzioliweb.empresasback.entity.Empresas</class>
             <class>com.pazzioliweb.empresasback.entity.Regimen</class>
+        <class>com.pazzioliweb.usuariosbacken.entity.SubPermiso</class>
         <!-- Common (si tiene entidades) -->
         <class>com.pazzioliweb.commonbacken.entity.Administrador</class>
         <class>com.pazzioliweb.commonbacken.entity.CodigoPostal</class>
