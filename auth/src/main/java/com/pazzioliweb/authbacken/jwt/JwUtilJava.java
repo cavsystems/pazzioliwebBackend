@@ -6,7 +6,9 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,8 +19,10 @@ import org.springframework.stereotype.Component;
 
 import com.pazzioliweb.commonbacken.dtos.DatosSesiones;
 import com.pazzioliweb.usuariosbacken.entity.PermisoRol;
+import com.pazzioliweb.usuariosbacken.entity.SubPermisoRol;
 import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.PermisoRolRepository;
+import com.pazzioliweb.usuariosbacken.repositorio.SubPermisoRolRepository;
 import com.pazzioliweb.usuariosbacken.repositorio.UsuarioRepository;
 import com.pazzioliweb.empresasback.entity.Empresa;
 import com.pazzioliweb.empresasback.repositori.EmpresaRepositori;
@@ -37,6 +41,9 @@ public class JwUtilJava {
 
 	@Autowired
 	private PermisoRolRepository permisoRolRepository;
+
+	@Autowired
+	private SubPermisoRolRepository subPermisoRolRepository;
 
 	@Autowired
 	private EmpresaRepositori empresaRepositori;
@@ -66,6 +73,7 @@ public class JwUtilJava {
 			Usuario u = optional.get();
 			System.out.println(u.getCodigorol().getNombre());
 			List<String> permisosUsuarioActivo = cargarPermisosUsuario(u.getCodigorol().getCodigo());
+			Map<String, List<String>> subpermisos = cargarSubPermisosUsuario(u.getCodigorol().getCodigo());
 			System.out.println("permisos actuales" + permisosUsuarioActivo);
 
 			DatosSesiones sesion = new DatosSesiones();
@@ -76,6 +84,7 @@ public class JwUtilJava {
 			sesion.setIdUsuario(sessionId);
 			sesion.setNivel(u.getCodigorol().getNombre());
 			sesion.setPermisos(permisosUsuarioActivo);
+			sesion.setSubpermisos(subpermisos);
 			sesion.setCreada(Instant.now());
 			sesion.setExpira(Instant.now().plus(24, ChronoUnit.HOURS));
 			// cajeroId y detalleCajeroId se establecen en AuthController.verificarYAbrirSesionCajero()
@@ -170,6 +179,17 @@ public class JwUtilJava {
 			}
 		}
 		return permisosUsuarioActivo;
+	}
+
+	public Map<String, List<String>> cargarSubPermisosUsuario(int codigoRolUsuario) {
+		List<SubPermisoRol> asignaciones = subPermisoRolRepository.findSubPermisosActivosByRol(codigoRolUsuario);
+		Map<String, List<String>> resultado = new HashMap<>();
+		for (SubPermisoRol spr : asignaciones) {
+			String padre = spr.getCodigosubpermiso().getPermisoPadre().getNombre();
+			String accion = spr.getCodigosubpermiso().getCodigoAccion();
+			resultado.computeIfAbsent(padre, k -> new ArrayList<>()).add(accion);
+		}
+		return resultado;
 	}
 
 }
