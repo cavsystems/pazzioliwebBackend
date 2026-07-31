@@ -2,6 +2,7 @@ package com.pazzioliweb.commonbacken.dtos;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 //DTO para trabajar colas secciones que se crean
 
@@ -70,12 +71,21 @@ public class DatosSesiones {
 	}
 
 	private int bodegaid;
-	private List<String> permisos; // 👈 NUEVO
+	private List<String> permisos;
 	public List<String> getPermisos() {
 		return permisos;
 	}
 	public void setPermisos(List<String> permisos) {
 		this.permisos = permisos;
+	}
+
+	// Clave = nombre del permiso padre, valor = lista de codigo_accion asignados al rol
+	private Map<String, List<String>> subpermisos;
+	public Map<String, List<String>> getSubpermisos() {
+		return subpermisos;
+	}
+	public void setSubpermisos(Map<String, List<String>> subpermisos) {
+		this.subpermisos = subpermisos;
 	}
 	public String getNivel() {
 		return nivel;

@@ -12,6 +12,8 @@
                         <class>com.pazzioliweb.productosmodule.entity.Usuariobodega</class>
                            <class>com.pazzioliweb.usuariosbacken.entity.Usuarioclientes</class>
                             <class>com.pazzioliweb.usuariosbacken.entity.Usuarioclientesusuario</class>
+                            <class>com.pazzioliweb.usuariosbacken.entity.SubPermiso</class>
+                            <class>com.pazzioliweb.usuariosbacken.entity.SubPermisoRol</class>
           
           
         

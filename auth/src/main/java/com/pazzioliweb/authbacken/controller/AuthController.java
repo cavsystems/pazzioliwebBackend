@@ -151,6 +151,7 @@ public class AuthController {
                     response.put("success", true);
                     response.put("sesion", datos);
                     response.put("permisos", datos.getPermisos());
+                    response.put("subpermisos", datos.getSubpermisos());
 
                     return ResponseEntity.ok().body(response);
                 } else {
@@ -262,6 +263,7 @@ public class AuthController {
                 response.put("success", true);
                 response.put("sesion", datos);
                 response.put("permisos", datos.getPermisos());
+                response.put("subpermisos", datos.getSubpermisos());
 
                 return ResponseEntity.ok().body(response);
             } else {
