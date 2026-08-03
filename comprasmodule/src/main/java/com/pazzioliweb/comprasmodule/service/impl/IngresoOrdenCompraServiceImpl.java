@@ -165,8 +165,7 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
             TipoMovimientoComprobante tipo = esCredito ? TipoMovimientoComprobante.CR : TipoMovimientoComprobante.CC;
             Integer cajeroId = orden.getCajeroId();
             try {
-                Integer cajeroEfectivo = resolverCajeroParaComprobante(cajeroId, tipo);
-                AsignacionComprobanteService.Resultado r = asignacionComprobante.asignar(cajeroEfectivo, tipo);
+                AsignacionComprobanteService.Resultado r = asignarComprobanteCompra(cajeroId, tipo);
                 orden.setComprobante(r.getComprobante());
                 orden.setConsecutivoComprobante(r.getConsecutivo());
                 // Preservar el número OC original si aún no se había guardado
@@ -289,22 +288,31 @@ public class IngresoOrdenCompraServiceImpl implements IngresoOrdenCompraService 
         }
     }
 
-    private Integer resolverCajeroParaComprobante(Integer cajeroUsuario, TipoMovimientoComprobante tipo) {
+    /**
+     * Asigna el comprobante de la compra SIN exigir cajero: la numeración de compra va
+     * por bodega/empresa, no por caja. Mismo criterio que OrdenCompraServiceImpl:
+     *   1. cajero del usuario, si tiene comprobante de ese tipo (compatibilidad),
+     *   2. cajero por defecto de compras, si tiene comprobante de ese tipo,
+     *   3. cualquier comprobante ACTIVO del tipo (sin cajero).
+     *
+     * Antes esto lanzaba excepción cuando no había ningún cajero con comprobante de
+     * compra, el llamador la atrapaba y solo dejaba un WARN: la orden se recibía
+     * SIN comprobante contable y sin que nadie se enterara. Exigir cajero en compras
+     * era además incorrecto de negocio (una compra no la hace una caja).
+     */
+    private AsignacionComprobanteService.Resultado asignarComprobanteCompra(
+            Integer cajeroUsuario, TipoMovimientoComprobante tipo) {
         if (cajeroUsuario != null
                 && comprobanteRepository.findActivoByCajeroAndTipo(cajeroUsuario, tipo).isPresent()) {
-            return cajeroUsuario;
+            return asignacionComprobante.asignar(cajeroUsuario, tipo);
         }
         Integer cajeroDefault = configCompras.obtenerCajeroDefaultId();
         if (cajeroDefault != null
                 && comprobanteRepository.findActivoByCajeroAndTipo(cajeroDefault, tipo).isPresent()) {
-            return cajeroDefault;
+            return asignacionComprobante.asignar(cajeroDefault, tipo);
         }
-        throw new OrdenCompraException(
-            "No hay cajero válido para asignar el comprobante de " + tipo.name() +
-            ". El usuario actual " + (cajeroUsuario == null ? "no es cajero" : "no tiene comprobante " + tipo.name()) +
-            " y no se ha configurado un cajero por defecto para compras. " +
-            "Configúrelo en Admin → Configuración de compras."
-        );
+        // Sin cajero: numeración por empresa/bodega.
+        return asignacionComprobante.asignarSinCajero(tipo);
     }
 
     private boolean tieneMetodoPagoCreditoEnOrden(List<com.pazzioliweb.comprasmodule.entity.OrdenCompraMetodoPago> metodosPago) {
