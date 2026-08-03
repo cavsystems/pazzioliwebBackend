@@ -370,7 +370,14 @@ public class ProductosServiceImpl implements ProductosService{
         producto.setImpuestos(impuesto);
 
         TipoProducto tipoProducto = cacheTipos.computeIfAbsent(dto.getTipoProducto(), n -> tipoProductoRepository.findByNombre(n)
-                .orElseThrow(() -> new EntityNotFoundException("TipoProducto no encontrado: " + n)));
+                .orElseGet(() -> {
+                    TipoProducto nuevo = new TipoProducto();
+                    nuevo.setNombre(n);
+                    nuevo.setDescripcion(n);
+                    nuevo.setEstado(true);
+                    nuevo.setFechaCreacion(java.time.LocalDateTime.now());
+                    return tipoProductoRepository.save(nuevo);
+                }));
         producto.setTipoProducto(tipoProducto);
 
         // Assume default usuario, perhaps system
