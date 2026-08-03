@@ -131,4 +131,16 @@ public class PreciosProductoVarianteController {
 
         return ResponseEntity.ok(PaginationResponse.of(resultado));
     }
+
+    /**
+     * Precios de MUCHAS variantes de una vez, SIN paginar (usado por la exportación a
+     * Excel de productos: miles de variantes no caben como query params en una URL GET,
+     * por eso va por POST con el listado en el body — mismo criterio que
+     * /api/variantes/resolver-inventario).
+     */
+    @PostMapping("/variantes-todos")
+    public ResponseEntity<List<PreciosProductoVarianteDTO>> listarPreciosVariantesMultiplesTodos(
+            @RequestBody List<Integer> varianteIds) {
+        return ResponseEntity.ok(service.listarPreciosVariantesProductosTodos(varianteIds));
+    }
 }

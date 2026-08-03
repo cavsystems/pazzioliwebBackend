@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportDto;
+import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportePaginadoDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioUpdateDto;
@@ -38,6 +39,11 @@ public interface MovimientoInventarioService {
     void reversarKardex(Long movimientoId);
 
     List<KardexReportDto> getKardexReport(String desde, String hasta, Integer varianteproductoid, String bodega, String movimiento);
+
+    // Igual que getKardexReport, pero devuelve solo la página pedida (para scroll infinito)
+    // más los totales ya calculados sobre TODO el período/filtros.
+    KardexReportePaginadoDto getKardexReportPaginado(String desde, String hasta, Integer varianteproductoid,
+            String bodega, String movimiento, int page, int size);
 
     boolean bodegaTieneRegistrosKardex(Integer bodegaId);
 

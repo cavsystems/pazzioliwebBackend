@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportDto;
+import com.pazzioliweb.movimientosinventariomodule.dtos.KardexReportePaginadoDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioCreateDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioResponseDto;
 import com.pazzioliweb.movimientosinventariomodule.dtos.MovimientoInventarioUpdateDto;
@@ -144,9 +144,15 @@ public class MovimientoInventarioController {
             @RequestParam(required = false) String hasta,
             @RequestParam(required = false) Integer varianteproductoid,
             @RequestParam(required = false) String bodega,
-            @RequestParam(required = false) String movimiento) {
+            @RequestParam(required = false) String movimiento,
+            // page/size: antes se mandaba TODO el período de una vez. Ahora se pagina
+            // (20 por defecto) para scroll infinito; los totales igual se calculan
+            // sobre el período/filtros completo, no solo la página devuelta.
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size) {
         try {
-            java.util.List<KardexReportDto> report = movimientoService.getKardexReport(desde, hasta, varianteproductoid, bodega, movimiento);
+            KardexReportePaginadoDto report = movimientoService.getKardexReportPaginado(
+                    desde, hasta, varianteproductoid, bodega, movimiento, page, size);
             return ResponseEntity.ok(report);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

@@ -153,4 +153,9 @@ public class ExistenciasServiceImpl implements ExistenciasService{
     public Page<ExistenciasBodegaDTO> listarExistenciasConNombreBodegaPorVariante(Long varianteId, Pageable pageable) {
         return repo.listadoExistenciasNombreBodegaVariante(varianteId, pageable);
     }
+
+    @Override
+    public List<ExistenciasBodegaDTO> listarExistenciasConNombreBodegaPorVariantes(List<Long> varianteIds) {
+        return repo.listadoExistenciasNombreBodegaVariantes(varianteIds);
+    }
 }

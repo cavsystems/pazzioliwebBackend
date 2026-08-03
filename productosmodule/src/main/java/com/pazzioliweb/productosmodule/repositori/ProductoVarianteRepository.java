@@ -254,21 +254,25 @@ FROM (
 		        FROM producto_variantes pv
 		        JOIN productos p ON p.producto_id = pv.producto_id
 		        JOIN impuestos pi ON pi.codigo=p.impuesto_id
-		        LEFT JOIN unidades_medida_producto ump 
+		        LEFT JOIN unidades_medida_producto ump
 				       ON ump.producto_id = p.producto_id
-				LEFT JOIN unidades_medida u 
+				LEFT JOIN unidades_medida u
 				       ON u.unidad_medida_id = ump.unidad_medida_id
 		        LEFT JOIN lineas l ON l.linea_id = p.linea_id
 		        LEFT JOIN grupos g ON g.grupo_id = p.grupo_id
 		        LEFT JOIN (
-		            SELECT 
+		            SELECT
 		                e.producto_variantes_id AS varianteId,
 		                SUM(e.existencia) AS totalExistencia
 		            FROM existencias e
 		            GROUP BY e.producto_variantes_id
-		        ) ex ON ex.varianteId = pv.producto_variantes_id) t 
+		        ) ex ON ex.varianteId = pv.producto_variantes_id) t
 		        WHERE (LOWER(t.descripcion) LIKE LOWER(CONCAT('%', :productodes, '%')) ||   LOWER(t.codigobarras) LIKE LOWER(CONCAT('%', :productodes, '%')) || LOWER(t.codigobarrasvariante) LIKE LOWER(CONCAT('%', :productodes, '%'))) AND
- t.activo=:activo   order by t.descripcion
+ t.activo=:activo
+ AND (:lineaId = 0 OR t.lineaid = :lineaId)
+ AND (:grupoId = 0 OR t.grupoid = :grupoId)
+ AND (:tipoProductoId = 0 OR t.tipoproductid = :tipoProductoId)
+ order by t.descripcion
 		        """,
 			countQuery = """
 				SELECT COUNT(*)
@@ -282,10 +286,15 @@ FROM (
 				    OR LOWER(p.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
 				    OR LOWER(pv.codigo_barras) LIKE LOWER(CONCAT('%', :productodes, '%'))
 				  )
+				  AND (:lineaId = 0 OR p.linea_id = :lineaId)
+				  AND (:grupoId = 0 OR p.grupo_id = :grupoId)
+				  AND (:tipoProductoId = 0 OR p.tipo_producto_id = :tipoProductoId)
 			""",
 			nativeQuery = true
 	)
-	Page<ProductoInventarioDTO> listarInventario( @Param("activo") int activo,@Param("productodes") String desproduct,Pageable pageable);
+	Page<ProductoInventarioDTO> listarInventario( @Param("activo") int activo,@Param("productodes") String desproduct,
+			@Param("lineaId") int lineaId, @Param("grupoId") int grupoId, @Param("tipoProductoId") int tipoProductoId,
+			Pageable pageable);
 
 
 
@@ -348,6 +357,9 @@ WHERE (
 AND t.estado = 'ACTIVO'
 AND t.activo = :activo
 AND t.bodegaid = :bodega
+AND (:lineaId = 0 OR t.lineaid = :lineaId)
+AND (:grupoId = 0 OR t.grupoid = :grupoId)
+AND (:tipoProductoId = 0 OR t.tipoproductid = :tipoProductoId)
 			        """,
 			  countQuery = """
 			      SELECT COUNT(*) FROM (
@@ -367,11 +379,17 @@ AND t.bodegaid = :bodega
 			          AND p.estado = 'ACTIVO'
 			          AND pv.activo = :activo
 			          AND ex.bodegaid = :bodega
+			          AND (:lineaId = 0 OR p.linea_id = :lineaId)
+			          AND (:grupoId = 0 OR p.grupo_id = :grupoId)
+			          AND (:tipoProductoId = 0 OR p.tipo_producto_id = :tipoProductoId)
 			      ) cnt
 			      """,
 			  nativeQuery = true
 			)
-			Page<ProductoInventarioDTO> listarInventarioentradasalida( @Param("activo") int activo, @Param("bodega") int bodega,@Param("productodes") String desproduct,Pageable pageable);
+			Page<ProductoInventarioDTO> listarInventarioentradasalida( @Param("activo") int activo, @Param("bodega") int bodega,
+					@Param("productodes") String desproduct,
+					@Param("lineaId") int lineaId, @Param("grupoId") int grupoId, @Param("tipoProductoId") int tipoProductoId,
+					Pageable pageable);
 
 
 

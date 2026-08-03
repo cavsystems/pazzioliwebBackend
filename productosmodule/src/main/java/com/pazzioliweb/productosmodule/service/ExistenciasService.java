@@ -26,4 +26,8 @@ public interface ExistenciasService {
     Page<ExistenciasResponseDTO> listarPorBodega(Integer bodegaId, Pageable pageable);
 
     Page<ExistenciasBodegaDTO> listarExistenciasConNombreBodegaPorVariante(Long varianteId, Pageable pageable);
+
+    // EN BLOQUE y sin paginar: usado para exportar a Excel (necesita TODAS las filas
+    // de TODAS las variantes de una vez, no una página de 20).
+    List<ExistenciasBodegaDTO> listarExistenciasConNombreBodegaPorVariantes(List<Long> varianteIds);
 }

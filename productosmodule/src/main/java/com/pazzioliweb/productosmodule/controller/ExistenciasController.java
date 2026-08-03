@@ -137,4 +137,15 @@ public class ExistenciasController {
 
         return ResponseEntity.ok(PaginationResponse.of(resultado));
     }
+
+    /**
+     * Existencias con nombre de bodega de MUCHAS variantes de una vez, SIN paginar
+     * (usado por la exportación a Excel de productos: miles de variantes no caben como
+     * query params en una URL GET, por eso va por POST con el listado en el body).
+     */
+    @PostMapping("/variantes-bodega")
+    public ResponseEntity<List<ExistenciasBodegaDTO>> listarConBodegaPorVariantes(
+            @RequestBody List<Long> varianteIds) {
+        return ResponseEntity.ok(service.listarExistenciasConNombreBodegaPorVariantes(varianteIds));
+    }
 }

@@ -3,6 +3,9 @@ package com.pazzioliweb.movimientosinventariomodule.dtos;
 import java.time.LocalDateTime;
 
 public class KardexReportDto {
+    // Id estable de la fila (kardex_id), usado por el frontend para deduplicar
+    // en el scroll infinito paginado.
+    private Long kardexId;
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaEmision;
     private String numeroFactura;
@@ -18,6 +21,18 @@ public class KardexReportDto {
     private Double saldo;
     private String nombrebodega;
     private String cliente;
+    // Precio de venta unitario: solo viene poblado cuando el movimiento es VENTA
+    // (la consulta lo trae del detalle de venta correspondiente); en los demás
+    // movimientos (compra, entrada, devolución, traslado) queda en null.
+    private Double precioVenta;
+
+    public Long getKardexId() {
+        return kardexId;
+    }
+
+    public void setKardexId(Long kardexId) {
+        this.kardexId = kardexId;
+    }
 
     public LocalDateTime getFechaCreacion() {
         return fechaCreacion;
@@ -137,5 +152,13 @@ public class KardexReportDto {
 
     public void setCliente(String cliente) {
         this.cliente = cliente;
+    }
+
+    public Double getPrecioVenta() {
+        return precioVenta;
+    }
+
+    public void setPrecioVenta(Double precioVenta) {
+        this.precioVenta = precioVenta;
     }
 }
