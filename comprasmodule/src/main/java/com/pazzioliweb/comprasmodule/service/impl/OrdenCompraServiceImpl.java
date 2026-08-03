@@ -200,8 +200,18 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
     public Page<OrdenCompraDTO> buscarConFiltros(String estado, LocalDate fechaDesde,
                                                  LocalDate fechaHasta, Integer proveedorId,
                                                  Pageable pageable) {
-        return ordenCompraRepository.buscarConFiltros(estado, fechaDesde, fechaHasta, proveedorId, pageable)
-                .map(ordenCompraMapper::toDto);
+        return buscarConFiltros(estado, fechaDesde, fechaHasta, proveedorId, false, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<OrdenCompraDTO> buscarConFiltros(String estado, LocalDate fechaDesde,
+                                                 LocalDate fechaHasta, Integer proveedorId,
+                                                 boolean excluirLegalizaciones, Pageable pageable) {
+        Page<OrdenCompra> pagina = excluirLegalizaciones
+                ? ordenCompraRepository.buscarConFiltrosSinLegalizaciones(estado, fechaDesde, fechaHasta, proveedorId, pageable)
+                : ordenCompraRepository.buscarConFiltros(estado, fechaDesde, fechaHasta, proveedorId, pageable);
+        return pagina.map(ordenCompraMapper::toDto);
     }
 
     @Override
