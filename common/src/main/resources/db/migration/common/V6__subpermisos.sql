@@ -27,6 +27,24 @@ CREATE TABLE IF NOT EXISTS subpermisos_roles (
         REFERENCES subpermisos (codigo) ON DELETE CASCADE
 );
 
+-- ── 2b. Blindaje: garantizar los permisos PADRE antes de insertar ──
+-- La plantilla _tenant_template no tenía el módulo 5 (Empresas) y la FK
+-- fk_subpermiso_padre reventaba la migración completa. INSERT IGNORE:
+-- en schemas que ya tienen los módulos no cambia nada.
+INSERT IGNORE INTO permisos (codigo, nombre) VALUES
+(5,  'Empresas'),
+(8,  'Mi Panel'),
+(9,  'Usuarios'),
+(10, 'Terceros'),
+(11, 'Inventarios'),
+(12, 'Compras'),
+(14, 'Ventas'),
+(15, 'Caja'),
+(16, 'Nomina'),
+(17, 'Contabilidad'),
+(18, 'Reportes'),
+(19, 'Parametros');
+
 -- ── 3. Datos: sub-permisos de cada módulo ─────────────────────────
 --   Módulo 5  – Empresas
 INSERT INTO subpermisos (permiso_padre_id, codigo_accion, nombre) VALUES

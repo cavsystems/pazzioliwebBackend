@@ -1,0 +1,197 @@
+# ══════════════════════════════════════════════════════════════════
+# application-prod.yml — Pazzioli WEB backend (SERVIDOR)
+# Copia de referencia versionada en docs/ (la real vive en el servidor y
+# se pasa con --spring.config.additional-location al arrancar el JAR).
+# Última sincronización con application.properties local: 2026-07-31.
+# ══════════════════════════════════════════════════════════════════
+
+server:
+  port: 4000
+  address: 0.0.0.0          # escucha en todas las interfaces (intranet)
+  tomcat:
+    max-http-form-post-size: 10485760
+    max-swallow-size: 10485760
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: pazzioli-web-backend
+
+  datasource:
+    host: localhost           # MySQL corre en la misma máquina del JAR
+    port: 3306
+    username: root            # ← reemplazar por el usuario real
+    password: root            # ← reemplazar por el password real
+    # rewriteBatchedStatements: SIN esto el batch_size=200 de Hibernate no agrupa
+    # los INSERT reales (importación masiva y documentos grandes se arrastran).
+    # characterEncoding=UTF-8: evita mojibake de tildes según el default del server.
+    url: jdbc:mysql://localhost:3306/administrador?useSSL=false&serverTimezone=America/Bogota&rewriteBatchedStatements=true&cachePrepStmts=true&useServerPrepStmts=true&useUnicode=true&characterEncoding=UTF-8
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    default-tenant: cavsystems
+
+  jpa:
+    hibernate:
+      ddl-auto: none          # NUNCA "update" o "create" en producción
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          batch_size: 200
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+
+  # Redis para las sesiones. 127.0.0.1 explícito (no "localhost"): en Windows la JVM
+  # puede intentar IPv6 (::1) primero y quedarse esperando si Redis solo escucha IPv4.
+  # Timeouts cortos: si Redis está caído/lento la petición falla rápido en vez de colgarse.
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2000ms
+      connect-timeout: 2000ms
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: cavsystem78@gmail.com     # ← idealmente el SMTP propio del cliente
+    password: zlbqgbmdopkicjjj
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: smtp.gmail.com
+
+  flyway:
+    enabled: false            # TenantService migra la plantilla _tenant_template él solo
+
+  cloud:
+    discovery:
+      enabled: false
+
+  jackson:
+    time-zone: America/Bogota
+
+  servlet:
+    multipart:
+      max-request-size: 50MB
+      max-file-size: 50MB
+
+  sql:
+    init:
+      mode: always
+
+# Compatibilidad: claves Redis legacy (algunas libs viejas leen spring.redis.*)
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    timeout: 2000ms
+    connect-timeout: 2000ms
+
+# Backups de schemas (mysqldump)
+app:
+  backup:
+    path: C:\\backups_pazzioli          # ← crear la carpeta en el servidor
+    mysqldump: mysqldump                # o ruta completa al .exe
+  tenant:
+    master: cavsystems                  # schema dueño, exento de validación de licencia
+  storage:
+    manifiestos:
+      base-path: C:/DocumentosImportacion   # ← crear la carpeta en el servidor
+
+# Módulo de productos (URL interna)
+productos:
+  module:
+    url: http://localhost:4000
+
+eureka:
+  client:
+    enabled: false
+
+logging:
+  level:
+    org.springframework.security: INFO
+    org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl: WARN
+    org.hibernate.metamodel.model.domain.internal: WARN
+    org.springframework.boot.autoconfigure.orm.jpa: WARN
+
+# ══════════════════════════════════════════════════════════════════
+# Facturación electrónica vía FACTURATECH
+# ══════════════════════════════════════════════════════════════════
+facturacion:
+  proveedor: facturatech      # facturatech | dian (dian directo está inactivo)
+  tpos:
+    # Tiquete POS electrónico (tipo 20): Facturatech aún no provee ese WS.
+    # En false el sistema corta ANTES de consumir folio TPOS. No encender
+    # hasta que Facturatech confirme el servicio POS.
+    habilitado: false
+
+facturatech:
+  # 1 = Producción (pro) | 2 = Pruebas (demo). También viaja en ENC_20.
+  ambiente: 2                 # ← cambiar a 1 al pasar a producción
+  # Usuario del WS: en producción es el NIT del emisor SIN dígito de verificación.
+  usuario: ""                 # ← pendiente credenciales WS de producción
+  # Contraseña del Web Service (NO la del portal; la entrega soportews@facturatech.co).
+  # En texto plano: el sistema la hashea SHA-256 automáticamente.
+  password: ""
+  # SOLO si Facturatech entrega la clave YA hasheada en SHA-256 hexadecimal.
+  # ¡TIENE PRIORIDAD sobre password! — si se llena password, dejar esta VACÍA.
+  password-sha256: ""
+  # URLs del WS (no cambiar salvo indicación de Facturatech)
+  url:
+    produccion: https://ws.facturatech.co/v2/pro/index.php
+    demo: https://ws.facturatech.co/v2/demo/index.php
+  # Espera de firma: intentos de consulta de estado y pausa entre intentos (ms)
+  intentos-estado: 10
+  espera-entre-intentos-ms: 2000
+  # Descargar la representación gráfica PDF que genera Facturatech
+  descargar-pdf: true
+  # ── Documento Soporte (05) y su Nota de Ajuste (95) ──
+  documento-soporte:
+    tipo-operacion: "10"      # ENC_21 (Tabla 38): 10 = Residente, 11 = No Residente
+    forma-generacion: 1       # IBS_2 (Tabla 41): 1 = Por operación, 2 = Acumulado semanal
+  # ── SET DE PRUEBAS de certificación ──
+  # En true, el NIT del emisor se sobreescribe con el demo de Facturatech SOLO
+  # en el XML (la BD guarda los datos reales). Requiere los prefijos/resolución
+  # del set en los comprobantes (C1: TCFA/TCNC/TCND, rango 28301..28400).
+  # ¡¡SIEMPRE false en producción real!! — es el olvido más peligroso.
+  set-pruebas:
+    habilitado: false
+    nit: 901143311
+    dv: 8
+    razon-social: Ftech Solutions SAS
+
+whatsapp:
+  cloud:
+    # Vacío = el botón de WhatsApp abre wa.me con el mensaje listo (adjuntar PDF a mano).
+    # Con token + phone-number-id pasa a envío automático con PDF adjunto.
+    token: ""
+    phone-number-id: ""
+    api-version: v21.0
+    default-country-code: 57
+
+# ══════════════════════════════════════════════════════════════════
+# DIAN directo — INACTIVO (facturacion.proveedor=facturatech).
+# Solo se usa dian.empresa-id (id de la empresa emisora en BD).
+# ══════════════════════════════════════════════════════════════════
+dian:
+  ambiente: 2
+  url:
+    produccion: https://vpfe.dian.gov.co/WcfDianCustomerServices.svc
+    pruebas: https://vpfe-hab.dian.gov.co/WcfDianCustomerServices.svc
+  resolucion:
+    prefijo: FE
+    rango-desde: 1
+    rango-hasta: 5000000
+  empresa-id: 1
