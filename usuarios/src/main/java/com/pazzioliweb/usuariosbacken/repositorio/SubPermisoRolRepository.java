@@ -1,3 +1,4 @@
+
 package com.pazzioliweb.usuariosbacken.repositorio;
 
 import com.pazzioliweb.usuariosbacken.entity.SubPermisoRol;
@@ -19,6 +20,8 @@ public interface SubPermisoRolRepository extends JpaRepository<SubPermisoRol, In
           AND spr.estado = 'ACTIVO'
           AND sp.activo = true
         """)
+
+        
     List<SubPermisoRol> findSubPermisosActivosByRol(@Param("codigoRol") int codigoRol);
 
     @Transactional
