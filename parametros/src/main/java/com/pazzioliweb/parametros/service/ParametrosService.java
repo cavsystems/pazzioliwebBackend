@@ -24,6 +24,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 @Service
 public class ParametrosService {
@@ -115,7 +116,9 @@ public class ParametrosService {
                             (String) row[4],
                             (String) row[5],
                             ((Number) row[6]).longValue(),
-                            (String) row[7]
+                            (String) row[7],
+                            (String) row[8],
+                            (String) row[9]
                     ))
                     .collect(Collectors.toList());
         }
@@ -139,6 +142,7 @@ public class ParametrosService {
     }
 
     private void crearParametroGlobal(Parametros parametro, String valor) {
+        validarValor(parametro, valor);
         Parametrosglobales parametroGlobal = new Parametrosglobales();
         parametroGlobal.setParametros(parametro);
         parametroGlobal.setValor(valor);
@@ -146,6 +150,7 @@ public class ParametrosService {
     }
 
     private void crearParametroComprobante(Parametros parametro, Integer comprobanteContableId, String valor) {
+        validarValor(parametro, valor);
         ComprobanteContable comprobante = comprobanteContableRepository.findById(Long.valueOf(comprobanteContableId))
                 .orElseThrow(() -> new EntityNotFoundException(
                     "Comprobante contable no encontrado: " + comprobanteContableId
@@ -167,6 +172,7 @@ public class ParametrosService {
         Parametrosglobales parametroGlobal = parametrosglobalesRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Parámetro global no encontrado: " + id));
 
+        validarValor(parametroGlobal.getParametros(), valor);
         parametroGlobal.setValor(valor);
         return parametrosglobalesRepository.save(parametroGlobal);
     }
@@ -191,6 +197,7 @@ public class ParametrosService {
                             "Parámetro comprobante no encontrado para parámetro " + id + " y comprobante " + comprobante.get().getId()
                         ));
 
+                validarValor(parametro, valor);
                 parametroComprobante.setValor(valor);
                 return parametroscomprobantesRepository.save(parametroComprobante);
             }
@@ -200,6 +207,7 @@ public class ParametrosService {
         Parametrosglobales parametroGlobal = parametrosglobalesRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Parámetro global no encontrado: " + id));
 
+        validarValor(parametroGlobal.getParametros(), valor);
         parametroGlobal.setValor(valor);
         return parametrosglobalesRepository.save(parametroGlobal);
     }
@@ -236,5 +244,21 @@ public class ParametrosService {
         Parametrosglobales parametroGlobal = parametrosglobalesRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Parámetro global no encontrado: " + id));
         parametrosglobalesRepository.delete(parametroGlobal);
+    }
+
+    private void validarValor(Parametros parametro, String valor) {
+        String valoresPermitidos = parametro.getValores();
+        if (valoresPermitidos != null && !valoresPermitidos.trim().isEmpty()) {
+            List<String> listaValores = Arrays.asList(valoresPermitidos.split(","));
+            List<String> valoresTrimmed = new ArrayList<>();
+            for (String v : listaValores) {
+                valoresTrimmed.add(v.trim().toUpperCase());
+            }
+            if (!valoresTrimmed.contains(valor.trim().toUpperCase())) {
+                throw new IllegalArgumentException(
+                    "Valor '" + valor + "' no permitido. Estos son los valores permitidos: " + valoresPermitidos
+                );
+            }
+        }
     }
 }

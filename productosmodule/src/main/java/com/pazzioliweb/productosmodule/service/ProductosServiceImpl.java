@@ -300,6 +300,22 @@ public class ProductosServiceImpl implements ProductosService{
     	return productosRepository.getTotalesPorLineaPorBodegaId(bodegaId, pageable);
     }
     
+    /** Trabajo diferido: existencia a actualizar-o-crear una vez que la variante ya tiene ID. */
+    private record PendienteExistencia(ProductoVariante variante, Bodegas bodega,
+            ProductoActualizarCrearDTO.ExistenciaDTO existenciaDto, String ubicacionProducto) {
+    }
+
+    /** Trabajo diferido: precio de variante a actualizar-o-crear una vez que la variante ya tiene ID. */
+    private record PendientePrecio(ProductoVariante variante,
+            com.pazzioliweb.productosmodule.entity.Precios precio, ProductoActualizarCrearDTO.PrecioDTO precioDto) {
+    }
+
+    /** Código de barras "válido" = no nulo, no vacío y distinto de "0" (las plantillas de
+     *  importación llegan con "0" cuando el producto no tiene código de barras). */
+    private static boolean codigoBarraValido(String codigoBarraTrim) {
+        return codigoBarraTrim != null && !codigoBarraTrim.isEmpty() && !"0".equals(codigoBarraTrim);
+    }
+
     @Override
     @Transactional
     public void actualizarOCrearProducto(List<ProductoActualizarCrearDTO> dtos) {
@@ -323,11 +339,67 @@ public class ProductosServiceImpl implements ProductosService{
             java.util.Map<Integer, com.pazzioliweb.productosmodule.entity.Precios> cachePrecios = new java.util.HashMap<>();
             Usuario usuarioDefault = usuarioRepository.findById(1).orElse(null);
 
+            // ── Precarga EN BLOQUE de productos y variantes ──
+            // Antes: 1 SELECT por producto (findByCodigoContable) + 1-2 SELECT por
+            // variante (findByCodigoBarras / findByProducto_CodigoContableAndReferenciaVariantes
+            // / findByProducto_ProductoId) DENTRO del bucle. Con un lote de 500-3000
+            // productos eran miles de round-trips. Ahora se resuelve todo en 3 consultas
+            // para el lote completo y se busca en memoria con Maps.
+            java.util.List<String> codigosProductos = dtos.stream()
+                    .map(ProductoActualizarCrearDTO::getCodigo)
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+            java.util.Map<String, Productos> productosPorCodigo = codigosProductos.isEmpty()
+                    ? new java.util.HashMap<>()
+                    : productosRepository.findByCodigoContableIn(codigosProductos).stream()
+                            .collect(Collectors.toMap(Productos::getCodigoContable, p -> p, (a, b) -> a,
+                                    java.util.HashMap::new));
+
+            java.util.List<Integer> productoIdsExistentes = productosPorCodigo.values().stream()
+                    .map(Productos::getProductoId)
+                    .collect(Collectors.toList());
+            // Variantes existentes agrupadas por producto (para el fallback por
+            // referenciaVariantes y para el fallback de "variante única del producto").
+            java.util.Map<Integer, java.util.List<ProductoVariante>> variantesPorProductoId = productoIdsExistentes
+                    .isEmpty()
+                            ? new java.util.HashMap<>()
+                            : productoVarianteRepository.findByProducto_ProductoIdIn(productoIdsExistentes).stream()
+                                    .collect(Collectors.groupingBy(v -> v.getProducto().getProductoId()));
+
+            // Variantes por código de barras, EN CUALQUIER producto (la búsqueda original
+            // es global: primero se busca por código de barras y luego se valida que no
+            // pertenezca a otro producto del lote).
+            java.util.Set<String> codigosBarrasVariantes = new java.util.HashSet<>();
+            for (ProductoActualizarCrearDTO dto : dtos) {
+                if (dto.getVariantes() == null) continue;
+                for (ProductoActualizarCrearDTO.VarianteDTO v : dto.getVariantes()) {
+                    String cb = v.getCodigoBarraVariante() != null ? v.getCodigoBarraVariante().trim() : "";
+                    if (codigoBarraValido(cb)) {
+                        codigosBarrasVariantes.add(cb);
+                    }
+                }
+            }
+            java.util.Map<String, ProductoVariante> variantesPorCodigoBarras = codigosBarrasVariantes.isEmpty()
+                    ? new java.util.HashMap<>()
+                    : productoVarianteRepository.findByCodigoBarrasIn(codigosBarrasVariantes).stream()
+                            .collect(Collectors.toMap(ProductoVariante::getCodigoBarras, v -> v, (a, b) -> a,
+                                    java.util.HashMap::new));
+
+            // Trabajo diferido: existencias y precios de variante solo se pueden
+            // resolver contra la BD después de que la variante tenga ID (recién
+            // guardada). Se difieren aquí y se procesan en bloque al final del bucle
+            // principal, con 2 consultas totales en vez de 1 por variante.
+            java.util.List<PendienteExistencia> pendientesExistencias = new java.util.ArrayList<>();
+            java.util.List<PendientePrecio> pendientesPrecios = new java.util.ArrayList<>();
+
         for (ProductoActualizarCrearDTO dto : dtos) {
         // Find or create product
 
-        Productos producto = productosRepository.findByCodigoContable(dto.getCodigo())
-                .orElse(new Productos());
+        Productos producto = productosPorCodigo.get(dto.getCodigo());
+        if (producto == null) {
+            producto = new Productos();
+        }
 
         // Set basic fields
         producto.setCodigoContable(dto.getCodigo());
@@ -384,6 +456,17 @@ public class ProductosServiceImpl implements ProductosService{
         producto.setUsuario(usuarioDefault);
 
         producto = productosRepository.save(producto);
+        // Reflejar el producto recién guardado en la caché: si el mismo código
+        // contable se repite más adelante en el lote (dato sucio de la plantilla),
+        // debe reutilizarse este producto en vez de crear uno duplicado — igual que
+        // hacía el findByCodigoContable original (que veía el save anterior gracias
+        // al auto-flush de Hibernate).
+        productosPorCodigo.put(producto.getCodigoContable(), producto);
+        // Variantes ya conocidas de este producto (precargadas o creadas más arriba
+        // en este mismo lote): se resuelven en memoria más abajo en vez de consultar
+        // la BD por cada variante del DTO.
+        java.util.List<ProductoVariante> variantesDeProducto = variantesPorProductoId
+                .computeIfAbsent(producto.getProductoId(), k -> new java.util.ArrayList<>());
         // Handle unidad medida
         if (dto.getUnidadMedida() != null) {
             UnidadesMedida unidadesMedida = cacheUnidades.computeIfAbsent(dto.getUnidadMedida(), s ->
@@ -408,9 +491,14 @@ public class ProductosServiceImpl implements ProductosService{
                         ? varianteDto.getCodigoBarraVariante().trim() : "";
                 boolean codBarraValido = !codBarraVar.isEmpty() && !"0".equals(codBarraVar);
 
+                // Resolución EN MEMORIA (sin consultas a BD): usa los Maps precargados
+                // antes del bucle (variantesPorCodigoBarras / variantesPorProductoId), que
+                // se van actualizando a medida que se crean/guardan variantes en este mismo
+                // lote — equivalente a lo que antes lograba el auto-flush de Hibernate con
+                // consultas repetidas.
                 ProductoVariante variante = null;
                 if (codBarraValido) {
-                    variante = productoVarianteRepository.findByCodigoBarras(codBarraVar).orElse(null);
+                    variante = variantesPorCodigoBarras.get(codBarraVar);
                     // NUNCA reasignar la variante de OTRO producto. Con códigos vacíos/"0"
                     // repetidos, la búsqueda global encontraba la variante del producto anterior
                     // del lote y se la "robaba": una importación de 3000+ productos terminaba con
@@ -422,9 +510,10 @@ public class ProductosServiceImpl implements ProductosService{
                     }
                 } else if (varianteDto.getReferenciaVariantes() != null && !varianteDto.getReferenciaVariantes().isBlank()) {
                     // Sin código de barras: resolver DENTRO del mismo producto por referencia
-                    variante = productoVarianteRepository
-                            .findByProducto_CodigoContableAndReferenciaVariantes(
-                                    producto.getCodigoContable(), varianteDto.getReferenciaVariantes())
+                    final String referenciaBuscada = varianteDto.getReferenciaVariantes();
+                    variante = variantesDeProducto.stream()
+                            .filter(v -> referenciaBuscada.equals(v.getReferenciaVariantes()))
+                            .findFirst()
                             .orElse(null);
                 }
                 // Producto de UNA sola variante en el DTO que no se resolvió arriba:
@@ -435,10 +524,8 @@ public class ProductosServiceImpl implements ProductosService{
                 // creaba una segunda variante con la misma referencia → el kardex reventaba
                 // con "query did not return a unique result").
                 if (variante == null && dto.getVariantes().size() == 1 && producto.getProductoId() != null) {
-                    java.util.List<ProductoVariante> delProducto =
-                            productoVarianteRepository.findByProducto_ProductoId(producto.getProductoId());
-                    if (delProducto.size() == 1) {
-                        ProductoVariante unica = delProducto.get(0);
+                    if (variantesDeProducto.size() == 1) {
+                        ProductoVariante unica = variantesDeProducto.get(0);
                         boolean sinCodigo = unica.getCodigoBarras() == null || unica.getCodigoBarras().isBlank();
                         if (sinCodigo || !codBarraValido || codBarraVar.equals(unica.getCodigoBarras())) {
                             variante = unica;
@@ -450,6 +537,11 @@ public class ProductosServiceImpl implements ProductosService{
                 }
                 // ¿Es una variante nueva o una ya existente?
                 boolean esNueva = variante.getProductoVarianteId() == null;
+                // Código de barras ANTES de esta actualización: si cambia, hay que
+                // desregistrarlo del Map global para que no quede una entrada apuntando
+                // a un valor que la variante ya no tiene (mismo efecto que tendría un
+                // SELECT fresco a la BD tras el UPDATE).
+                String codigoBarrasAnterior = variante.getCodigoBarras();
 
                 variante.setProducto(producto);
                 // SKU: NO degradar el SKU de una variante existente usando el código de barras como fallback.
@@ -485,7 +577,22 @@ public class ProductosServiceImpl implements ProductosService{
 
                 variante = productoVarianteRepository.save(variante);
 
+                // Mantener los Maps del lote sincronizados con la BD para que las
+                // siguientes iteraciones (mismo lote) resuelvan correctamente en memoria.
+                if (esNueva) {
+                    variantesDeProducto.add(variante);
+                }
+                if (codigoBarrasAnterior != null && !codigoBarrasAnterior.equals(variante.getCodigoBarras())
+                        && variantesPorCodigoBarras.get(codigoBarrasAnterior) == variante) {
+                    variantesPorCodigoBarras.remove(codigoBarrasAnterior);
+                }
+                if (codBarraValido) {
+                    variantesPorCodigoBarras.put(codBarraVar, variante);
+                }
+
                 // Handle existencias - Solo para la bodega destino
+                // (diferido: se resuelve en bloque después del bucle principal, una vez
+                // que todas las variantes del lote ya tienen ID — ver pendientesExistencias)
                 if (varianteDto.getExistencias() != null && !varianteDto.getExistencias().isEmpty()) {
                     // Asume que el bodegaId es el mismo en todas las existencias (la destino)
                     Integer bodegaDestinoId = varianteDto.getExistencias().get(0).getBodegaId();
@@ -493,58 +600,21 @@ public class ProductosServiceImpl implements ProductosService{
                             bodegasRepository.findByCodigo(b)
                                     .orElseThrow(() -> new EntityNotFoundException("Bodega destino no encontrada: " + b)));
 
-                    Existencias existencia = existenciasRepository.findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(variante.getProductoVarianteId(), bodegaDestino.getCodigo())
-                            .orElse(new Existencias());
-                    existencia.setBodega(bodegaDestino);
-                    existencia.setProductoVariante(variante);
-                    // No setear existencia aquí, ya que la mercancía no ha llegado peros si se crea el registro en
-                    // caso de que no exista si existe no hace nada.
                     ProductoActualizarCrearDTO.ExistenciaDTO existenciaDto = varianteDto.getExistencias().get(0);
-                    if (existenciaDto.getMinimo() != null) {
-                        existencia.setStockMin(BigDecimal.valueOf(existenciaDto.getMinimo()));
-                    }
-                    if (existenciaDto.getMaximo() != null) {
-                        existencia.setStockMax(BigDecimal.valueOf(existenciaDto.getMaximo()));
-                    }
-                    // Opcional: Si quieres setear ubicación desde alguna fuente (ej. del DTO principal), agrégalo aquí
-                    if (dto.getUbicacion() != null) {
-                        existencia.setUbicacion(dto.getUbicacion());
-                    }
-                    if (existencia.getExistenciaId() == null) {
-                        existencia.setExistencia(BigDecimal.ZERO); // Inicializar en 0
-                        existencia.setFechaUltimoMovimiento(LocalDateTime.now());
-                    }
-                    existenciasRepository.save(existencia);
+                    pendientesExistencias.add(new PendienteExistencia(variante, bodegaDestino, existenciaDto, dto.getUbicacion()));
                 } else {
                     // No crear existencia por defecto, se creará en el ingreso con 0
                 }
 
                 // Handle precios
+                // (diferido: se resuelve en bloque después del bucle principal — ver pendientesPrecios)
                 if (varianteDto.getPrecios() != null && !varianteDto.getPrecios().isEmpty()) {
                     for (ProductoActualizarCrearDTO.PrecioDTO precioDto : varianteDto.getPrecios()) {
                         com.pazzioliweb.productosmodule.entity.Precios precio = cachePrecios.computeIfAbsent(precioDto.getIdTipoPrecio(), id ->
                                 preciosRepository.findById(id)
                                         .orElseThrow(() -> new EntityNotFoundException("Precio no encontrado: " + id)));
 
-                        Optional<PreciosProductoVariante> existente =
-                                preciosProductoVarianteRepository.findByProductoVariante_ProductoVarianteIdAndPrecio_PrecioId(
-                                        variante.getProductoVarianteId(), precio.getPrecioId());
-
-                        PreciosProductoVariante ppv;
-                        if (existente.isPresent()) {
-                            // Ya existe: solo actualiza el valor
-                            ppv = existente.get();
-                            ppv.setValor(precioDto.getValor().doubleValue());
-                        } else {
-                            // No existe: crea uno nuevo
-                            ppv = new PreciosProductoVariante();
-                            ppv.setProductoVariante(variante);
-                            ppv.setPrecio(precio);
-                            ppv.setValor(precioDto.getValor().doubleValue());
-                            ppv.setFechaCreacion(LocalDateTime.now());
-                            ppv.setFechaInicio(LocalDateTime.now());
-                        }
-                        preciosProductoVarianteRepository.save(ppv);
+                        pendientesPrecios.add(new PendientePrecio(variante, precio, precioDto));
                     }
                 }
 
@@ -579,9 +649,14 @@ public class ProductosServiceImpl implements ProductosService{
             }
 
         } else {
-            // Create default variant
-            ProductoVariante variante = productoVarianteRepository.findByProductoAndPredeterminada(producto, true)
+            // Create default variant (resuelta en memoria con la lista de variantes ya
+            // conocidas del producto, en vez de un findByProductoAndPredeterminada por DTO)
+            ProductoVariante variante = variantesDeProducto.stream()
+                    .filter(v -> Boolean.TRUE.equals(v.getPredeterminada()))
+                    .findFirst()
                     .orElse(new ProductoVariante());
+            boolean eraNueva = variante.getProductoVarianteId() == null;
+            String codigoBarrasAnteriorDefault = variante.getCodigoBarras();
 
             variante.setProducto(producto);
             variante.setSku(dto.getCodigo());
@@ -590,10 +665,103 @@ public class ProductosServiceImpl implements ProductosService{
             variante.setActivo(true);
             variante.setPredeterminada(true);
 
-            productoVarianteRepository.save(variante);
+            variante = productoVarianteRepository.save(variante);
+
+            if (eraNueva) {
+                variantesDeProducto.add(variante);
+            }
+            String cbAnteriorTrim = codigoBarrasAnteriorDefault != null ? codigoBarrasAnteriorDefault.trim() : "";
+            if (codigoBarraValido(cbAnteriorTrim) && !cbAnteriorTrim.equals(variante.getCodigoBarras())
+                    && variantesPorCodigoBarras.get(cbAnteriorTrim) == variante) {
+                variantesPorCodigoBarras.remove(cbAnteriorTrim);
+            }
+            String cbNuevoTrim = variante.getCodigoBarras() != null ? variante.getCodigoBarras().trim() : "";
+            if (codigoBarraValido(cbNuevoTrim)) {
+                variantesPorCodigoBarras.put(cbNuevoTrim, variante);
+            }
         }
 
     }
+
+            // ── Resolución EN BLOQUE de existencias y precios diferidos ──
+            // Antes: 1 SELECT por (variante, bodega) + 1 SELECT por (variante, tipoPrecio)
+            // DENTRO del bucle de variantes. Ahora, con todas las variantes del lote ya
+            // guardadas (tienen ID), se resuelve en 2 consultas totales para todo el lote.
+            java.util.Set<Long> varianteIdsTocados = new java.util.HashSet<>();
+            for (PendienteExistencia pe : pendientesExistencias) {
+                if (pe.variante().getProductoVarianteId() != null) {
+                    varianteIdsTocados.add(pe.variante().getProductoVarianteId());
+                }
+            }
+            for (PendientePrecio pp : pendientesPrecios) {
+                if (pp.variante().getProductoVarianteId() != null) {
+                    varianteIdsTocados.add(pp.variante().getProductoVarianteId());
+                }
+            }
+
+            java.util.Map<String, Existencias> existenciasPorClave = varianteIdsTocados.isEmpty()
+                    ? new java.util.HashMap<>()
+                    : existenciasRepository.findByProductoVariante_ProductoVarianteIdIn(varianteIdsTocados).stream()
+                            .collect(Collectors.toMap(
+                                    e -> e.getProductoVariante().getProductoVarianteId() + "|" + e.getBodega().getCodigo(),
+                                    e -> e, (a, b) -> a, java.util.HashMap::new));
+
+            java.util.Map<String, PreciosProductoVariante> preciosPorClave = varianteIdsTocados.isEmpty()
+                    ? new java.util.HashMap<>()
+                    : preciosProductoVarianteRepository.findByProductoVariante_ProductoVarianteIdIn(varianteIdsTocados).stream()
+                            .collect(Collectors.toMap(
+                                    p -> p.getProductoVariante().getProductoVarianteId() + "|" + p.getPrecio().getPrecioId(),
+                                    p -> p, (a, b) -> a, java.util.HashMap::new));
+
+            for (PendienteExistencia pe : pendientesExistencias) {
+                String clave = pe.variante().getProductoVarianteId() + "|" + pe.bodega().getCodigo();
+                Existencias existencia = existenciasPorClave.get(clave);
+                if (existencia == null) {
+                    existencia = new Existencias();
+                }
+                existencia.setBodega(pe.bodega());
+                existencia.setProductoVariante(pe.variante());
+                // No setear existencia aquí, ya que la mercancía no ha llegado peros si se crea el registro en
+                // caso de que no exista si existe no hace nada.
+                if (pe.existenciaDto().getMinimo() != null) {
+                    existencia.setStockMin(BigDecimal.valueOf(pe.existenciaDto().getMinimo()));
+                }
+                if (pe.existenciaDto().getMaximo() != null) {
+                    existencia.setStockMax(BigDecimal.valueOf(pe.existenciaDto().getMaximo()));
+                }
+                // Opcional: Si quieres setear ubicación desde alguna fuente (ej. del DTO principal), agrégalo aquí
+                if (pe.ubicacionProducto() != null) {
+                    existencia.setUbicacion(pe.ubicacionProducto());
+                }
+                if (existencia.getExistenciaId() == null) {
+                    existencia.setExistencia(BigDecimal.ZERO); // Inicializar en 0
+                    existencia.setFechaUltimoMovimiento(LocalDateTime.now());
+                    // Registrar en el mapa por si el mismo lote referencia la misma
+                    // variante+bodega más de una vez (evita crear duplicados).
+                    existenciasPorClave.put(clave, existencia);
+                }
+                existenciasRepository.save(existencia);
+            }
+
+            for (PendientePrecio pp : pendientesPrecios) {
+                String clave = pp.variante().getProductoVarianteId() + "|" + pp.precio().getPrecioId();
+                PreciosProductoVariante ppv = preciosPorClave.get(clave);
+                if (ppv != null) {
+                    // Ya existe: solo actualiza el valor
+                    ppv.setValor(pp.precioDto().getValor().doubleValue());
+                } else {
+                    // No existe: crea uno nuevo
+                    ppv = new PreciosProductoVariante();
+                    ppv.setProductoVariante(pp.variante());
+                    ppv.setPrecio(pp.precio());
+                    ppv.setValor(pp.precioDto().getValor().doubleValue());
+                    ppv.setFechaCreacion(LocalDateTime.now());
+                    ppv.setFechaInicio(LocalDateTime.now());
+                    preciosPorClave.put(clave, ppv);
+                }
+                preciosProductoVarianteRepository.save(ppv);
+            }
+
         } catch (Exception e) {
 
             System.out.println("ERROR REAL:");

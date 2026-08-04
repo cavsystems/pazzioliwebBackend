@@ -29,7 +29,9 @@ import lombok.Data;
 	        targetClass = EmpresaResponseauth.class,
 	        columns = {
 	            @ColumnResult(name = "nombreconexion", type = String.class),
-	          
+	            @ColumnResult(name = "Empresa", type = String.class),
+	            @ColumnResult(name = "identificacion", type = String.class),
+	            @ColumnResult(name = "tipoidentificacion", type = String.class),
 	        }
 	    )
 	)

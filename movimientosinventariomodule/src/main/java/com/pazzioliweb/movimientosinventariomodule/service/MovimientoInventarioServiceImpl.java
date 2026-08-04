@@ -744,12 +744,31 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
             LocalDate fechaEmisionDesde,
             LocalDate fechaEmisionHasta) {
 
+        // La paginación va sobre la consulta simple (sin fetch-join de colección,
+        // por eso es segura con Pageable). Los detalles de TODA la página se traen
+        // en una segunda consulta EN BLOQUE (WHERE movimiento_id IN (...)) — patrón
+        // estándar para evitar el "cannot paginate on fetch join of a collection"
+        // que daría fetch-joinear detalles junto con la página.
         Page<MovimientoInventario> movimientos = movimientoRepository.findByFiltros(
                 tipo, fechaEmisionDesde, fechaEmisionHasta, pageable);
 
+        List<Long> movimientoIds = movimientos.getContent().stream()
+                .map(MovimientoInventario::getMovimientoId)
+                .toList();
+
+        // ── Antes: 1 consulta de detalles POR movimiento de la página (N+1) ──
+        // Con 20 movimientos por página eran 1 (movimientos) + 20 (detalles) = 21
+        // consultas, y por cada detalle además 2 SELECT extra (bodegaOrigen/
+        // bodegaDestino EAGER sin fetch-join). Ahora: 1 consulta de detalles para
+        // TODA la página, agrupada en memoria por movimientoId.
+        java.util.Map<Long, List<MovimientoInventarioDetalle>> detallesPorMovimiento = movimientoIds.isEmpty()
+                ? java.util.Collections.emptyMap()
+                : detalleRepository.findByMovimiento_MovimientoIdInWithProducto(movimientoIds).stream()
+                        .collect(java.util.stream.Collectors.groupingBy(d -> d.getMovimiento().getMovimientoId()));
+
         return movimientos.map(mov -> {
             List<MovimientoInventarioDetalle> detalles =
-                    detalleRepository.findByMovimiento_MovimientoIdWithProducto(mov.getMovimientoId());
+                    detallesPorMovimiento.getOrDefault(mov.getMovimientoId(), java.util.Collections.emptyList());
             return mapper.toResponse(mov, detalles);
         });
     }

@@ -7,14 +7,18 @@ public class ParametroGlobalResponseDTO {
     private String categoriaparametro;
     private String categoriacomprobante;
     private String valor;
+    private String label;
+    private String valores;
 
-    public ParametroGlobalResponseDTO(Integer id, String clave, String nombre, String categoriaparametro, String categoriacomprobante, String valor) {
+    public ParametroGlobalResponseDTO(Integer id, String clave, String nombre, String categoriaparametro, String categoriacomprobante, String valor, String label, String valores) {
         this.id = id;
         this.clave = clave;
         this.nombre = nombre;
         this.categoriaparametro = categoriaparametro;
         this.categoriacomprobante = categoriacomprobante;
         this.valor = valor;
+        this.label = label;
+        this.valores = valores;
     }
 
     public Integer getId() { return id; }
@@ -34,4 +38,10 @@ public class ParametroGlobalResponseDTO {
 
     public String getValor() { return valor; }
     public void setValor(String valor) { this.valor = valor; }
+
+    public String getLabel() { return label; }
+    public void setLabel(String label) { this.label = label; }
+
+    public String getValores() { return valores; }
+    public void setValores(String valores) { this.valores = valores; }
 }

@@ -20,6 +20,14 @@ public interface ExistenciasRepository extends JpaRepository<Existencias, Intege
 	Optional<Existencias> findByProductoVariante_ProductoVarianteIdAndBodega_Codigo(Long varianteId, Integer bodegaId);
 
 	/**
+	 * Existencias (entidad, no DTO) de VARIAS variantes en una sola consulta.
+	 * Se usa para precargar en bloque, en actualizarOCrearProducto, las filas que
+	 * hay que actualizar-o-crear por (variante, bodega) en vez de 1 SELECT por
+	 * variante dentro del bucle de importación masiva.
+	 */
+	java.util.List<Existencias> findByProductoVariante_ProductoVarianteIdIn(java.util.Collection<Long> varianteIds);
+
+	/**
 	 * Upsert atómico del saldo (sincronización kardex → existencias). El patrón
 	 * SELECT-luego-INSERT fallaba con "Duplicate entry ... uq_existencias_producto_bodega"
 	 * cuando otra transacción creaba la fila (variante, bodega) después del snapshot

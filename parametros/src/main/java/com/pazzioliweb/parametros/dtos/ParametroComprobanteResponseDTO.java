@@ -9,10 +9,12 @@ public class ParametroComprobanteResponseDTO {
     private String valor;
     private Long comprobanteContableId;
     private String prefijo;
+    private String label;
+    private String valores;
 
     public ParametroComprobanteResponseDTO(Integer id, String clave, String nombre, String categoriaparametro,
                                            String categoriacomprobante, String valor,
-                                           Long comprobanteContableId, String prefijo) {
+                                           Long comprobanteContableId, String prefijo, String label, String valores) {
         this.id = id;
         this.clave = clave;
         this.nombre = nombre;
@@ -21,6 +23,8 @@ public class ParametroComprobanteResponseDTO {
         this.valor = valor;
         this.comprobanteContableId = comprobanteContableId;
         this.prefijo = prefijo;
+        this.label = label;
+        this.valores = valores;
     }
 
     public Integer getId() { return id; }
@@ -46,4 +50,10 @@ public class ParametroComprobanteResponseDTO {
 
     public String getPrefijo() { return prefijo; }
     public void setPrefijo(String prefijo) { this.prefijo = prefijo; }
+
+    public String getLabel() { return label; }
+    public void setLabel(String label) { this.label = label; }
+
+    public String getValores() { return valores; }
+    public void setValores(String valores) { this.valores = valores; }
 }

@@ -103,17 +103,19 @@ public class Empresacontroller {
 	 public ResponseEntity<Map<String, Object>> crearEmpresa(@RequestPart("dto") Empresaresponse dto,@RequestPart(value = "archivo", required = false) MultipartFile archivo) throws Exception{
 	    	 // Aquí request.db es el tenantId}
 		 
-		nombredb.setNombre(dto.getRazonsocial());
-		
+		// El esquema del tenant se nombra a partir de la IDENTIFICACIÓN, no de la razón
+		// social/nombre: la razón social puede repetirse o cambiar, la identificación no.
+		nombredb.setNombre(dto.getNumeroidentificacion());
+
 		  String schema = nombredb.getNombre().toLowerCase().replaceAll("[^a-z0-9_]", "");
-		  
+
 		  // Verificar si ya existe un esquema con ese nombre
 		  Integer schemaExists = jdbc.queryForObject(
 			  "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?",
 			  Integer.class, schema);
-		  
+
 		  if (schemaExists != null && schemaExists > 0) {
-			  throw new RuntimeException("Ya existe una empresa creada con el nombre: " + dto.getRazonsocial());
+			  throw new RuntimeException("Ya existe una empresa creada con la identificación: " + dto.getNumeroidentificacion());
 		  }
 		  
 		   jdbc.execute("CREATE SCHEMA IF NOT EXISTS `" + schema + "`");
@@ -173,7 +175,16 @@ public class Empresacontroller {
 		   response.put("respuesta", new mensajesuccesempres("Empresa creada",true) );
 		   return ResponseEntity.status(HttpStatus.CREATED).body(response);
 		 	 }
-	 
+
+	 // Se consulta al desenfocar el input de identificación en "Crear empresa": corre
+	 // buscarempresaexiste (busca en TODOS los esquemas de tenant), no requiere tenant.
+	 @GetMapping("/existe-identificacion")
+	 public ResponseEntity<Map<String, Boolean>> existeIdentificacion(@RequestParam String identificacion) {
+		 Map<String, Boolean> resp = new HashMap<>();
+		 resp.put("existe", serv.existeEmpresaPorIdentificacion(identificacion));
+		 return ResponseEntity.ok(resp);
+	 }
+
 	 @Transactional
 	 @PostMapping(value = "/actualizar/{id}", consumes = "multipart/form-data")
 	 public ResponseEntity<Map<String, Object>> actualizarEmpresa(
@@ -189,7 +200,8 @@ public class Empresacontroller {
 					  response.put("error", "Empresa no encontrada con ID: " + id);
 					  return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
 				  }
-				  nombredb.setNombre(dto.getRazonsocial());
+				  // Mismo criterio que en la creación: el schema se resuelve por identificación.
+				  nombredb.setNombre(dto.getNumeroidentificacion());
 				  // Obtener el schema/tenant de la empresa existente
 				String schema = nombredb.getNombre().toLowerCase().replaceAll("[^a-z0-9_]", "");
 				  TenantContext.setCurrentTenant(schema);

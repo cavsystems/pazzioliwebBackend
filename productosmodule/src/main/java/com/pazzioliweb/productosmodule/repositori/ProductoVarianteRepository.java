@@ -122,6 +122,15 @@ public interface ProductoVarianteRepository extends JpaRepository<ProductoVarian
 
 	/** Todas las variantes de un producto (para reutilizar la única existente en importaciones). */
 	java.util.List<ProductoVariante> findByProducto_ProductoId(Integer productoId);
+
+	/**
+	 * Versión EN BLOQUE de la anterior: todas las variantes de VARIOS productos en
+	 * una sola consulta. Se usa en actualizarOCrearProducto para precargar, por
+	 * producto, sus variantes existentes y resolverlas en memoria (por
+	 * referenciaVariantes o como variante única) en vez de 1-2 consultas por
+	 * producto dentro del bucle de importación masiva.
+	 */
+	java.util.List<ProductoVariante> findByProducto_ProductoIdIn(java.util.Collection<Integer> productoIds);
 	
 	@EntityGraph(attributePaths = { "producto" })
 	@Query("SELECT p FROM ProductoVariante p")

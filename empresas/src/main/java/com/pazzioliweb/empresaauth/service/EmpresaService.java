@@ -135,9 +135,18 @@ public class EmpresaService {
 
 	@SuppressWarnings("unchecked")
 	public List<EmpresaResponseauth> buscarNombreconexion(String cc) {
-	    return em.createNativeQuery("CALL buscarusuarios(:cc)", "EmpresaResponseauthMapping")
+	    return em.createNativeQuery("CALL buscarusuariosempresa(:cc)", "EmpresaResponseauthMapping")
 	             .setParameter("cc", cc)
 	             .getResultList();
+	}
+
+	// Recorre TODOS los esquemas de tenant buscando una empresa con esa identificación
+	// (ver procedimiento buscarempresaexiste). Se usa al crear una empresa nueva, antes
+	// de que exista un schema/tenant al que atarse — por eso corre por JdbcTemplate
+	// plano y no requiere TenantContext.
+	public boolean existeEmpresaPorIdentificacion(String identificacion) {
+		Boolean existe = jdbc.queryForObject("CALL buscarempresaexiste(?)", Boolean.class, identificacion);
+		return Boolean.TRUE.equals(existe);
 	}
 
 	public List<EmpresaTenantProjection> listartodoslossquemas() {

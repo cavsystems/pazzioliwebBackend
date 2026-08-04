@@ -14,6 +14,8 @@ public class ParametroCreateDTO {
     private String valor;
     private String tipoDato;
     private Integer comprobanteContableId;
+    private String label;
+    private String valores;
 
     public Long getParametroId() {
         return parametroId;
@@ -69,5 +71,21 @@ public class ParametroCreateDTO {
 
     public void setComprobanteContableId(Integer comprobanteContableId) {
         this.comprobanteContableId = comprobanteContableId;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public String getValores() {
+        return valores;
+    }
+
+    public void setValores(String valores) {
+        this.valores = valores;
     }
 }

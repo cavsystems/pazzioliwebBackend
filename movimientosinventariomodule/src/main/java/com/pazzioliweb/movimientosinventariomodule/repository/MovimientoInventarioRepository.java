@@ -23,9 +23,17 @@ public interface MovimientoInventarioRepository extends JpaRepository<Movimiento
 	 * Compara el enum tipo con el string del parámetro usando .name() para
 	 * que sea compatible con cualquier modo de Hibernate. La comparación
 	 * directa enum = String falla silenciosamente y devuelve cero filas.
+	 *
+	 * LEFT JOIN FETCH de comprobante/usuario: son @ManyToOne EAGER por defecto
+	 * (JPA) y sin fetch-join Hibernate resolvía cada uno con una SELECT extra
+	 * POR FILA de la página al armar el DTO (mapper.toResponse los toca a
+	 * todos). Al ser asociaciones a-uno (no colección), el fetch-join es seguro
+	 * junto con Pageable: no multiplica filas ni rompe la paginación.
 	 */
 	@Query("""
 		    SELECT m FROM MovimientoInventario m
+		    LEFT JOIN FETCH m.comprobante
+		    LEFT JOIN FETCH m.usuario
 		    WHERE (:tipo IS NULL OR :tipo = '' OR CAST(m.tipo AS string) = :tipo)
 		      AND (:desde IS NULL OR m.fechaEmision >= :desde)
 		      AND (:hasta IS NULL OR m.fechaEmision <= :hasta)

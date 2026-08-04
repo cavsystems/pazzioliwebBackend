@@ -20,6 +20,10 @@ public class Parametros {
    private String valor;
     @Column(name="tipoDato")
     private String tipodato;
+    @Column(name="label")
+    private String label;
+    @Column(name="valores")
+    private String valores;
 
     public Long getId() {
         return id;
@@ -75,6 +79,22 @@ public class Parametros {
 
     public void setTipodato(String tipodato) {
         this.tipodato = tipodato;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public String getValores() {
+        return valores;
+    }
+
+    public void setValores(String valores) {
+        this.valores = valores;
     }
 
 }
