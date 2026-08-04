@@ -29,6 +29,13 @@ public interface AsientoContableRepository extends JpaRepository<AsientoContable
 
     List<AsientoContable> findByFechaBetweenOrderByFechaAscIdAsc(LocalDate desde, LocalDate hasta);
 
+    /**
+     * ¿Existe algún asiento numerado con este prefijo (p.ej. "NC-")? Se usa para
+     * decidir si un tipo de comprobante manual puede ELIMINARSE: con movimientos
+     * emitidos solo se permite inactivar, nunca borrar la numeración.
+     */
+    boolean existsByNumeroAsientoStartingWith(String prefijo);
+
     /** Listado para el reporte: trae el comprobante en eager para evitar LazyInitException. */
     @Query("SELECT a FROM AsientoContable a LEFT JOIN FETCH a.comprobante " +
            " WHERE a.fecha BETWEEN :desde AND :hasta ORDER BY a.fecha, a.id")

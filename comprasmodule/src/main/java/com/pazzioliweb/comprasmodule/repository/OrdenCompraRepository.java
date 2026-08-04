@@ -33,6 +33,34 @@ public interface OrdenCompraRepository extends JpaRepository<OrdenCompra, Long> 
             Pageable pageable
     );
 
+    /**
+     * Igual que buscarConFiltros pero EXCLUYE las órdenes creadas por una compra directa
+     * (legalización). La lista de "Ingreso de Compras" del front mostraba también las
+     * compras legalizadas —la misma orden con su mismo comprobante CC-N—, lo que se
+     * percibía como un consecutivo duplicado entre ingreso y compra (legalización).
+     */
+    @Query(value = "SELECT o FROM OrdenCompra o WHERE " +
+            "(:estado IS NULL OR o.estado = :estado) AND " +
+            "(:fechaDesde IS NULL OR o.fechaEmision >= :fechaDesde) AND " +
+            "(:fechaHasta IS NULL OR o.fechaEmision <= :fechaHasta) AND " +
+            "(:proveedorId IS NULL OR o.proveedor.terceroId = :proveedorId) AND " +
+            "NOT EXISTS (SELECT l FROM Legalizacion l WHERE l.ordenCompra = o)",
+           // countQuery explícito: primera JPQL paginada del proyecto con NOT EXISTS;
+           // así la paginación no depende de la derivación automática del count.
+           countQuery = "SELECT COUNT(o) FROM OrdenCompra o WHERE " +
+            "(:estado IS NULL OR o.estado = :estado) AND " +
+            "(:fechaDesde IS NULL OR o.fechaEmision >= :fechaDesde) AND " +
+            "(:fechaHasta IS NULL OR o.fechaEmision <= :fechaHasta) AND " +
+            "(:proveedorId IS NULL OR o.proveedor.terceroId = :proveedorId) AND " +
+            "NOT EXISTS (SELECT l FROM Legalizacion l WHERE l.ordenCompra = o)")
+    Page<OrdenCompra> buscarConFiltrosSinLegalizaciones(
+            @Param("estado") String estado,
+            @Param("fechaDesde") LocalDate fechaDesde,
+            @Param("fechaHasta") LocalDate fechaHasta,
+            @Param("proveedorId") Integer proveedorId,
+            Pageable pageable
+    );
+
     @Query("SELECT o FROM OrdenCompra o WHERE " +
             "(:estado IS NULL OR o.estado = :estado) AND " +
             "(:fechaDesde IS NULL OR o.fechaEmision >= :fechaDesde) AND " +

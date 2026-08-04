@@ -2,6 +2,7 @@ package com.pazzioliweb.comprobantesmodule.service;
 
 import com.pazzioliweb.comprobantesmodule.dtos.TipoComprobanteManualDTO;
 import com.pazzioliweb.comprobantesmodule.entity.TipoComprobanteManual;
+import com.pazzioliweb.comprobantesmodule.repositori.AsientoContableRepository;
 import com.pazzioliweb.comprobantesmodule.repositori.TipoComprobanteManualRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,9 +14,12 @@ import java.util.stream.Collectors;
 public class TipoComprobanteManualService {
 
     private final TipoComprobanteManualRepository repo;
+    private final AsientoContableRepository asientoRepo;
 
-    public TipoComprobanteManualService(TipoComprobanteManualRepository repo) {
+    public TipoComprobanteManualService(TipoComprobanteManualRepository repo,
+                                        AsientoContableRepository asientoRepo) {
         this.repo = repo;
+        this.asientoRepo = asientoRepo;
     }
 
     @Transactional(readOnly = true)
@@ -61,6 +65,25 @@ public class TipoComprobanteManualService {
     @Transactional
     public TipoComprobanteManualDTO inactivar(Integer id) {
         return cambiarEstado(id, "INACTIVO");
+    }
+
+    /**
+     * Elimina el tipo SOLO si nunca ha numerado un asiento (sin movimientos).
+     * Se comprueba con el prefijo efectivo (PREFIJO-N o CODIGO-N): si existe
+     * cualquier asiento que empiece por él, se bloquea con mensaje claro y la
+     * opción correcta pasa a ser inactivarlo.
+     */
+    @Transactional
+    public void eliminar(Integer id) {
+        TipoComprobanteManual t = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tipo de comprobante no encontrado: " + id));
+        String prefijo = (t.getPrefijo() != null && !t.getPrefijo().isBlank()) ? t.getPrefijo() : t.getCodigo();
+        if (asientoRepo.existsByNumeroAsientoStartingWith(prefijo + "-")) {
+            throw new RuntimeException("El comprobante '" + t.getCodigo() + " — " + t.getNombre()
+                    + "' ya tiene asientos numerados con el prefijo " + prefijo
+                    + "-. No se puede eliminar; puede inactivarlo para que no se use más.");
+        }
+        repo.delete(t);
     }
 
     @Transactional

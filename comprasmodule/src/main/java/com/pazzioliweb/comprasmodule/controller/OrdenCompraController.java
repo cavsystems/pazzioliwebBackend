@@ -67,10 +67,13 @@ public class OrdenCompraController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @RequestParam(required = false) Integer proveedorId,
+            // true = omite las órdenes creadas por compra directa (legalización); lo usa la
+            // lista de "Ingreso de Compras" para no repetir documentos del módulo de Compras.
+            @RequestParam(required = false, defaultValue = "false") boolean excluirLegalizaciones,
             Pageable pageable) {
 
         Page<OrdenCompraDTO> resultado = ordenCompraService.buscarConFiltros(
-                estado, fechaDesde, fechaHasta, proveedorId, pageable);
+                estado, fechaDesde, fechaHasta, proveedorId, excluirLegalizaciones, pageable);
         return ResponseEntity.ok(resultado);
     }
 

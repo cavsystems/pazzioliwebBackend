@@ -46,4 +46,11 @@ public class TipoComprobanteManualController {
         try { return ResponseEntity.ok(service.activar(id)); }
         catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
     }
+
+    /** Eliminar definitivo — solo si el tipo no ha numerado ningún asiento. */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> eliminar(@PathVariable Integer id) {
+        try { service.eliminar(id); return ResponseEntity.ok(Map.of("mensaje", "Tipo de comprobante eliminado")); }
+        catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
 }

@@ -18,6 +18,14 @@ public interface OrdenCompraService {
     Page<OrdenCompraDTO> buscarConFiltros(String estado, LocalDate fechaDesde, LocalDate fechaHasta,
                                           Integer proveedorId, Pageable pageable);
 
+    /**
+     * Variante con opción de excluir las órdenes creadas por compra directa (legalización),
+     * para que la lista de "Ingreso de Compras" no repita documentos que pertenecen al
+     * módulo de Compras (mismo comprobante CC-N mostrado en ambas listas).
+     */
+    Page<OrdenCompraDTO> buscarConFiltros(String estado, LocalDate fechaDesde, LocalDate fechaHasta,
+                                          Integer proveedorId, boolean excluirLegalizaciones, Pageable pageable);
+
     Optional<OrdenCompraDTO> obtenerPorId(Long id);
     Optional<OrdenCompraDTO> obtenerPorNumeroOrden(String numeroOrden);
     List<OrdenCompraDTO> obtenerPorNumeroOrdenlist(String numeroOrden, Pageable pageable);
