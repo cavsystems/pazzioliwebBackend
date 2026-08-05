@@ -543,7 +543,7 @@ public class TercerosService {
         // Guardar cambios
         Terceros actualizado = terceroRepository.save(tercero);
 
-        List<ContactoTerceroDTO> conc = dto.getContactos()
+        List<ContactoTerceroDTO> conc = dto.getContactos() != null ? dto.getContactos()
                 .stream()
                 .filter(item -> {
                    if(item.getEsPrincipal()) {
@@ -567,7 +567,7 @@ public class TercerosService {
                    }
                    return item.getEsPrincipal();
                 }) // o item.getIsPrincipal()
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()) : new ArrayList<>();
 
 
         return TerceroDTOImpl.fromEntity(actualizado);

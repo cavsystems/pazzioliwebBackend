@@ -412,12 +412,17 @@ public class Empresaresponse {
 	public static class RolPermiso {
 		private String rol;
 		private List<Integer> permisos;
+		// Subpermisos marcados para este rol (independiente de qué permiso padre
+		// los agrupa en el frontend — se resuelven por su propio código).
+		private List<Integer> subpermisos;
 		private Integer idrol;
 
 		public String getRol() { return rol; }
 		public void setRol(String rol) { this.rol = rol; }
 		public List<Integer> getPermisos() { return permisos; }
 		public void setPermisos(List<Integer> permisos) { this.permisos = permisos; }
+		public List<Integer> getSubpermisos() { return subpermisos; }
+		public void setSubpermisos(List<Integer> subpermisos) { this.subpermisos = subpermisos; }
 		public Integer getIdrol() { return idrol; }
 		public void setIdrol(Integer idrol) { this.idrol = idrol; }
 	}

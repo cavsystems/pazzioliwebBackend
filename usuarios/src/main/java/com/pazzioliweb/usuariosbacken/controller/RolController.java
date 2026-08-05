@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -132,6 +134,46 @@ public class RolController {
     public ResponseEntity<Object> quitarPermiso(@PathVariable int idRol, @PathVariable int idPermiso) {
         permisoRolRepository.deleteByCodigorol_CodigoAndCodigopermiso_Codigo(idRol, idPermiso);
         return ResponseEntity.ok(new MensajeDTO("Permiso quitado", true));
+    }
+
+    // Asigna el permiso Y TODOS sus subpermisos activos de un solo golpe (lo que
+    // dispara la UI al tildar el checkbox del permiso padre). Cada relación que ya
+    // existía se deja tal cual — no se duplica ni se pisa.
+    @Transactional
+    @PutMapping("/{idRol}/permisos/{idPermiso}/con-subpermisos")
+    public ResponseEntity<Object> asignarPermisoConSubpermisos(@PathVariable int idRol, @PathVariable int idPermiso) {
+        Optional<Roles> rol = rolesRepository.findByCodigo(idRol);
+        Optional<Permiso> permiso = permisoRepository.findByCodigo(idPermiso);
+        if (rol.isEmpty() || permiso.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MensajeDTO("Rol o permiso no encontrado", false));
+        }
+
+        boolean permisoYaAsignado = permisoRolRepository.findPermisosActivosByRol(idRol).stream()
+                .anyMatch(p -> p.getCodigopermiso().getCodigo() == idPermiso);
+        if (!permisoYaAsignado) {
+            PermisoRol pr = new PermisoRol();
+            pr.setCodigorol(rol.get());
+            pr.setCodigopermiso(permiso.get());
+            pr.setEstado("ACTIVO");
+            permisoRolRepository.save(pr);
+        }
+
+        List<SubPermiso> subpermisosDelPermiso = subPermisoRepository.findByPermisoPadre_CodigoAndActivoTrue(idPermiso);
+        if (!subpermisosDelPermiso.isEmpty()) {
+            Set<Integer> yaAsignados = subPermisoRolRepository.findSubPermisosActivosByRol(idRol).stream()
+                    .map(spr -> spr.getCodigosubpermiso().getCodigo())
+                    .collect(Collectors.toSet());
+            for (SubPermiso sp : subpermisosDelPermiso) {
+                if (yaAsignados.contains(sp.getCodigo())) continue;
+                SubPermisoRol spr = new SubPermisoRol();
+                spr.setCodigorol(rol.get());
+                spr.setCodigosubpermiso(sp);
+                spr.setEstado("ACTIVO");
+                subPermisoRolRepository.save(spr);
+            }
+        }
+
+        return ResponseEntity.ok(new MensajeDTO("Permiso y subpermisos asignados", true));
     }
 
     // ── Subpermisos asignados a un rol ────────────────────────────────────

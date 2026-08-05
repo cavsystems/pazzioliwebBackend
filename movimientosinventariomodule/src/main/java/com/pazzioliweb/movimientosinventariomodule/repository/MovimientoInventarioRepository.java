@@ -37,7 +37,7 @@ public interface MovimientoInventarioRepository extends JpaRepository<Movimiento
 		    WHERE (:tipo IS NULL OR :tipo = '' OR CAST(m.tipo AS string) = :tipo)
 		      AND (:desde IS NULL OR m.fechaEmision >= :desde)
 		      AND (:hasta IS NULL OR m.fechaEmision <= :hasta)
-		   AND m.documentoOrigenTipo IS NULL
+		  
 		      
 		""")
 		Page<MovimientoInventario> findByFiltros(

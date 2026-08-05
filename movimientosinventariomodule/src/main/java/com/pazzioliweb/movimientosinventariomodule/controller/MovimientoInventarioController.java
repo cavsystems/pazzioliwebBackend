@@ -93,13 +93,19 @@ public class MovimientoInventarioController {
 
     /**
      * Obtener un movimiento por ID con todos sus detalles.
+     * Emite progreso por WebSocket (mismo patrón que "guardar movimiento" en compras) para
+     * que la pantalla de historial pueda mostrar una barra de carga mientras se expande.
      */
     @GetMapping("/{id}")
-    public ResponseEntity<?> obtenerPorId(@PathVariable Long id) {
+    public ResponseEntity<?> obtenerPorId(@PathVariable Long id, HttpServletRequest request) {
+        String login = resolverLogin(request);
         try {
+            wsProgreso.enviarProgresoDetalle(login, 1, "Cargando detalle del movimiento...", 40, id);
             MovimientoInventarioResponseDto response = movimientoService.obtenerMovimientoConDetalles(id);
+            wsProgreso.enviarCompletadoDetalle(login, id);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
+            wsProgreso.enviarErrorDetalle(login, e.getMessage(), id);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", e.getMessage()));
         }

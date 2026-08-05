@@ -17,4 +17,6 @@ public interface SubPermisoRepository extends JpaRepository<SubPermiso, Integer>
         ORDER BY pp.nombre, sp.nombre
         """)
     List<SubPermiso> findActivosConPadre();
+
+    List<SubPermiso> findByPermisoPadre_CodigoAndActivoTrue(int permisoPadreCodigo);
 }

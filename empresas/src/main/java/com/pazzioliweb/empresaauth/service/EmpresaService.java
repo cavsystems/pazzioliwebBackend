@@ -107,6 +107,10 @@ public class EmpresaService {
 	  private PermisoRepository permisoRepository;
 	  @Autowired
 	  private PermisoRolRepository permisoRolRepository;
+	  @Autowired
+	  private com.pazzioliweb.usuariosbacken.repositorio.SubPermisoRepository subPermisoRepository;
+	  @Autowired
+	  private com.pazzioliweb.usuariosbacken.repositorio.SubPermisoRolRepository subPermisoRolRepository;
 
 	  @Autowired
 	  private UsuariobodegaRepository bodegarepositori;
@@ -602,26 +606,52 @@ public class EmpresaService {
 
 				// Crear relaciones permiso-rol que no existan aún
 				List<Integer> permisoIds = rolPermiso.getPermisos();
-				if (permisoIds == null || permisoIds.isEmpty()) continue;
+				if (permisoIds != null && !permisoIds.isEmpty()) {
+					Set<Integer> yaAsignados = permisoRolRepository.findPermisosActivosByRol(rol.getCodigo())
+							.stream()
+							.map(pr -> pr.getCodigopermiso().getCodigo())
+							.collect(Collectors.toSet());
 
-				Set<Integer> yaAsignados = permisoRolRepository.findPermisosActivosByRol(rol.getCodigo())
-						.stream()
-						.map(pr -> pr.getCodigopermiso().getCodigo())
-						.collect(Collectors.toSet());
-
-				List<PermisoRol> nuevasRelaciones = new ArrayList<>();
-				for (Integer permisoId : permisoIds) {
-					if (yaAsignados.contains(permisoId)) continue;
-					permisoRepository.findByCodigo(permisoId).ifPresent(permiso -> {
-						PermisoRol pr = new PermisoRol();
-						pr.setCodigorol(rol);
-						pr.setCodigopermiso(permiso);
-						pr.setEstado("ACTIVO");
-						nuevasRelaciones.add(pr);
-					});
+					List<PermisoRol> nuevasRelaciones = new ArrayList<>();
+					for (Integer permisoId : permisoIds) {
+						if (yaAsignados.contains(permisoId)) continue;
+						permisoRepository.findByCodigo(permisoId).ifPresent(permiso -> {
+							PermisoRol pr = new PermisoRol();
+							pr.setCodigorol(rol);
+							pr.setCodigopermiso(permiso);
+							pr.setEstado("ACTIVO");
+							nuevasRelaciones.add(pr);
+						});
+					}
+					if (!nuevasRelaciones.isEmpty()) {
+						permisoRolRepository.saveAll(nuevasRelaciones);
+					}
 				}
-				if (!nuevasRelaciones.isEmpty()) {
-					permisoRolRepository.saveAll(nuevasRelaciones);
+
+				// Mismo patrón para subpermisos (si el frontend marcó alguno). No se
+				// exige que "permisos" venga lleno: un rol podría llegar solo con
+				// subpermisos si ya tenía el permiso padre de una carga anterior.
+				List<Integer> subpermisoIds = rolPermiso.getSubpermisos();
+				if (subpermisoIds != null && !subpermisoIds.isEmpty()) {
+					Set<Integer> subYaAsignados = subPermisoRolRepository.findSubPermisosActivosByRol(rol.getCodigo())
+							.stream()
+							.map(spr -> spr.getCodigosubpermiso().getCodigo())
+							.collect(Collectors.toSet());
+
+					List<com.pazzioliweb.usuariosbacken.entity.SubPermisoRol> nuevasSubrelaciones = new ArrayList<>();
+					for (Integer subpermisoId : subpermisoIds) {
+						if (subYaAsignados.contains(subpermisoId)) continue;
+						subPermisoRepository.findByCodigo(subpermisoId).ifPresent(subpermiso -> {
+							com.pazzioliweb.usuariosbacken.entity.SubPermisoRol spr = new com.pazzioliweb.usuariosbacken.entity.SubPermisoRol();
+							spr.setCodigorol(rol);
+							spr.setCodigosubpermiso(subpermiso);
+							spr.setEstado("ACTIVO");
+							nuevasSubrelaciones.add(spr);
+						});
+					}
+					if (!nuevasSubrelaciones.isEmpty()) {
+						subPermisoRolRepository.saveAll(nuevasSubrelaciones);
+					}
 				}
 
 			} catch (Exception e) {

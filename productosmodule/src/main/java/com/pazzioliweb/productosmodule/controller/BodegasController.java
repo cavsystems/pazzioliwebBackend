@@ -100,11 +100,7 @@ public class BodegasController {
 			response.put("mensaje", new MensajeResponsederol("Ya existe un usuario con ese nombre de usuario", false));
 			return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
 		}
-		if (nombrerol.getNombre() != null && !nombrerol.getNombre().trim().isEmpty()
-				&& usurepo.findByNombre(nombrerol.getNombre().trim()).isPresent()) {
-			response.put("mensaje", new MensajeResponsederol("Ya existe un usuario con ese nombre", false));
-			return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
-		}
+
 
 	      Optional<Roles> rol= reporoles.findByCodigo(nombrerol.getRol());
 		if (rol.isEmpty()) {
