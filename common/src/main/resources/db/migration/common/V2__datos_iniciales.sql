@@ -496,7 +496,7 @@ CREATE TABLE `clasificaciones_terceros` (
 
 
 INSERT INTO `clasificaciones_terceros` VALUES (1,'Cliente'),(2,'Proveedor'),(3, 'Empleado'
-),(4, 'Cliente-provedpr'
+),(4, 'Cliente-Proveedor'
 );
 
 --
