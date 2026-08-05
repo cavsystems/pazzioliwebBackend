@@ -365,7 +365,7 @@ CREATE TABLE `clasificaciones_terceros` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 
-INSERT INTO `clasificaciones_terceros` VALUES (1,'Cliente'),(2,'Proveedor');
+INSERT INTO `clasificaciones_terceros` VALUES (1,'Cliente'),(2,'Proveedor'),(3,'Empleado'),(4,'Cliente-Proveedor');
 
 --
 -- Table structure for table `codigospostalesnacionales`

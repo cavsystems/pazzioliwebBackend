@@ -77,6 +77,9 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 	Page<TerceroDTO> traerTercerosXFiltro(@Param("busqueda") String busqueda, Pageable pageable);
 
 
+	// Estas tres búsquedas alimentan los autocompletes de COMPRAS/VENTAS/PEDIDOS/COTIZACIONES:
+	// solo deben ofrecer terceros ACTIVOS (un tercero inactivado no debe poder seleccionarse
+	// para nuevas operaciones; el módulo de Terceros sí lo sigue mostrando para reactivarlo).
 	@Query("""
 			SELECT t
 			FROM Terceros t
@@ -84,6 +87,7 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 			JOIN t.clasificacionTercero c
 			WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
 			   OR LOWER(t.razonSocial) LIKE LOWER(:busqueda))
+			AND t.estado = com.pazzioliweb.tercerosmodule.entity.EstadoTercero.ACTIVO
 			AND (
 			    CASE
 			        WHEN :tipousuario = 1 AND UPPER(c.nombre) IN ('CLIENTE', 'CLIENTE-PROVEEDOR') THEN 1
@@ -102,7 +106,7 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 			LEFT JOIN t.regimen r
 			WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
 			   OR LOWER(t.razonSocial) LIKE LOWER(:busqueda))
-
+			AND t.estado = com.pazzioliweb.tercerosmodule.entity.EstadoTercero.ACTIVO
 			""")
 	Page<Terceros> traerTercerosXFiltropronormal(@Param("busqueda") String busqueda, Pageable pageable);
 
@@ -113,6 +117,7 @@ public interface TercerosRepository extends JpaRepository<Terceros, Integer>{
 			LEFT JOIN t.regimen r
 			WHERE (LOWER(t.identificacion) LIKE LOWER(:busqueda)
 			   OR LOWER(t.razonSocial) LIKE LOWER(:busqueda))
+			AND t.estado = com.pazzioliweb.tercerosmodule.entity.EstadoTercero.ACTIVO
 			AND t.clasificacionTercero.clasificacionTerceroId != :tipousuario
 			""")
 	Page<Terceros> traerTercerosXFiltroExcluir(@Param("busqueda") String busqueda, @Param("tipousuario") int tipousuario, Pageable pageable);
