@@ -315,6 +315,14 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                     detalleDto, movimiento, variante, bodegaOrigen, bodegaDestino);
             detalle.setCostoUnitario(costoUnitario);
             detalle.setTotalDetalle(totalDetalle);
+
+            if (tipo == TipoMovimiento.ENTRADA && costoUnitario > 0) {
+                Productos prod = variante.getProducto();
+                if (prod != null) {
+                    prod.setCosto(costoUnitario);
+                }
+            }
+
             detallesAGuardar.add(detalle);
 
             // Construir kardex en memoria para cada bodega involucrada
@@ -1007,5 +1015,12 @@ public class MovimientoInventarioServiceImpl implements MovimientoInventarioServ
                 .orElseThrow(() -> new EntityNotFoundException("Bodega no encontrada: " + bodegaId));
         List<Kardex> kardexRecords = kardexRepository.findByBodega(bodega);
         return !kardexRecords.isEmpty();
+    }
+
+    @Override
+    public Double obtenerUltimoCostoPromedio(Long productoVarianteId) {
+        return kardexRepository.findTopByProductoVariante_ProductoVarianteIdOrderByKardexIdDesc(productoVarianteId)
+                .map(Kardex::getCostoPromedio)
+                .orElse(null);
     }
 }

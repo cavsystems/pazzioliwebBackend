@@ -18,6 +18,11 @@ public interface KardexRepository extends JpaRepository<Kardex, Long> {
 
         Optional<Kardex> findTopByProductoVarianteAndBodegaOrderByFechaCreacionDesc(ProductoVariante variante, Bodegas bodega);
 
+        // Último kardex de la variante SIN filtrar por bodega (para "costo promedio" en
+        // el formulario de producto, que es un valor global, no por bodega). El id
+        // autoincremental sigue el orden de inserción = orden cronológico real.
+        Optional<Kardex> findTopByProductoVariante_ProductoVarianteIdOrderByKardexIdDesc(Long productoVarianteId);
+
         /**
          * Último kardex de CADA variante en una bodega, EN BLOQUE (para movimientos
          * masivos: reemplaza el findTop... por ítem). Usa max(kardexId) como "último":

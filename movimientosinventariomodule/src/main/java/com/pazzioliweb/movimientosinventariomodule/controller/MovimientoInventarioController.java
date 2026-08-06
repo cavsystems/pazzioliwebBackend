@@ -166,6 +166,24 @@ public class MovimientoInventarioController {
         }
     }
 
+    /**
+     * Costo promedio del ÚLTIMO registro de kardex de una variante (cualquier bodega).
+     * Usado en el formulario de producto: al editar un producto, el campo "Costo
+     * promedio" se precarga con este valor en vez de dejarse editable manualmente.
+     * costoPromedio=null si la variante nunca tuvo movimientos de inventario (producto
+     * recién creado, sin kardex todavía).
+     */
+    @GetMapping("/kardex/ultimo-costo-promedio")
+    public ResponseEntity<?> obtenerUltimoCostoPromedio(@RequestParam Long productoVarianteId) {
+        try {
+            Double costoPromedio = movimientoService.obtenerUltimoCostoPromedio(productoVarianteId);
+            return ResponseEntity.ok(Map.of("costoPromedio", costoPromedio == null ? 0 : costoPromedio));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
     private String resolverLogin(HttpServletRequest request) {
         try {
             if (request.getCookies() != null) {

@@ -47,4 +47,10 @@ public interface MovimientoInventarioService {
 
     boolean bodegaTieneRegistrosKardex(Integer bodegaId);
 
+    // Costo promedio del registro de kardex MÁS RECIENTE de esa variante (cualquier
+    // bodega). Usado en el formulario de producto: al editar, "Costo promedio" se
+    // precarga con este valor en vez de dejarlo editable. null si la variante nunca
+    // tuvo movimientos de inventario.
+    Double obtenerUltimoCostoPromedio(Long productoVarianteId);
+
 }
