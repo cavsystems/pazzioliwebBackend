@@ -45,6 +45,7 @@ public class TerceroimplemenDTO  implements TerceroDtoresponse{
 	    private String matriculaMercantil;
 	    private Integer actividadEconomicaId;
 	    private TipoPersonaDTOImpl tipoPersona;
+	    private Integer vendedorId;
 	    
 	    public List<RetencionesDTO> getRetenciones() {
 			return retenciones;
@@ -115,6 +116,9 @@ public class TerceroimplemenDTO  implements TerceroDtoresponse{
 		
 		public TipoPersonaDTOImpl getTipoPersona() {return tipoPersona;}
 		public void setTipoPersona(TipoPersonaDTOImpl tipoPersona) {this.tipoPersona = tipoPersona;}
+
+		public Integer getVendedorId() { return vendedorId; }
+		public void setVendedorId(Integer vendedorId) { this.vendedorId = vendedorId; }
 
 		private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 		// Método helper para convertir desde la entidad
@@ -187,7 +191,9 @@ public class TerceroimplemenDTO  implements TerceroDtoresponse{
 	        if(t.getTipoPersona() != null) {
 	        	dto.setTipoPersona(TipoPersonaDTOImpl.fromEntity(t.getTipoPersona()));
 	        }
-	        
+
+	        dto.setVendedorId(t.getVendedorId());
+
 	        return dto;
 	    }
 	    

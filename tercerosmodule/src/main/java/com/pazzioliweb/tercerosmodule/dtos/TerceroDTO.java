@@ -34,4 +34,5 @@ public interface TerceroDTO {
     com.pazzioliweb.tercerosmodule.dtos.DepartamentoInfoDTOImpl getDepartamento();
     com.pazzioliweb.tercerosmodule.dtos.MunicipioInfoDTOImpl getCiudad();
     String getCodigoPostal();
+    Integer getVendedorId();
 }

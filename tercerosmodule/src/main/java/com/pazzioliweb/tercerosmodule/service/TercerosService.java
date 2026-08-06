@@ -331,6 +331,7 @@ public class TercerosService {
             tercero.setMatriculaMercantil(dto.getMatriculaMercantil());
         }
 
+        tercero.setVendedorId(dto.getVendedorId());
 
         List<EmpresaContactoDTO> empresas = empresaRepositori.findAllContactoInfo();
 
@@ -479,6 +480,9 @@ public class TercerosService {
         if (dto.getMatriculaMercantil() != null) {
             tercero.setMatriculaMercantil(dto.getMatriculaMercantil());
         }
+
+        // vendedorId: se actualiza siempre (null también es válido)
+        tercero.setVendedorId(dto.getVendedorId());
 
         // SEDES
         if (dto.getSedes() != null) {

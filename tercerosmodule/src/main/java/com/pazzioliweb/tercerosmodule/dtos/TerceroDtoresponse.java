@@ -33,4 +33,5 @@ public interface TerceroDtoresponse {
     String getMatriculaMercantil();
     Integer getActividadEconomicaId();
     TipoPersonaDTO getTipoPersona();
+    Integer getVendedorId();
 }

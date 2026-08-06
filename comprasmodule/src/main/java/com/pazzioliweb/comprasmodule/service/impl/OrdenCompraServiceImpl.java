@@ -871,7 +871,11 @@ public class OrdenCompraServiceImpl implements OrdenCompraService {
                     DetalleOrdenCompra detalle = new DetalleOrdenCompra();
                     detalle.setOrdenCompra(orden);
                     detalle.setCodigoProducto(product.getCodigo());
-                    detalle.setCodigoBarras(variante.getCodigobarravariante());
+                    String cbVariante = variante.getCodigobarravariante();
+                    if (cbVariante == null || cbVariante.trim().isEmpty() || "0".equals(cbVariante.trim())) {
+                        cbVariante = product.getCodigobarras();
+                    }
+                    detalle.setCodigoBarras(cbVariante);
                     detalle.setDescripcionProducto(product.getDescripcion());
                     detalle.setObservacionProducto(variante.getNotas() != null ? String.join(", ", variante.getNotas()) : "");
                     detalle.setReferenciaVariantes(variante.getReferenciaVariantes());

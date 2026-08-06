@@ -555,7 +555,7 @@ public class ProductosServiceImpl implements ProductosService{
                     // resuelve la variante por su fallback findBySku(codigoProducto).
                     variante.setSku(codBarraValido ? codBarraVar : dto.getCodigo());
                 }
-                variante.setCodigoBarras(codBarraValido ? codBarraVar : null);
+                variante.setCodigoBarras(codBarraValido ? codBarraVar : dto.getCodigoBarras());
                 // Referencia: idem, no pisar la referencia existente con el código de barras.
                 if (varianteDto.getReferenciaVariantes() != null) {
                     variante.setReferenciaVariantes(varianteDto.getReferenciaVariantes());

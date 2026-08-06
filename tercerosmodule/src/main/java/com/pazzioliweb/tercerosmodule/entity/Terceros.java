@@ -284,6 +284,9 @@ public class Terceros {
 	@Column(name = "saldofavor_empresa")
 	private Double saldofavorEmpresa = 0.0;
 
+	@Column(name = "vendedor_id")
+	private Integer vendedorId;
+
 	public LocalDate getFechaNacimiento() {
 		return fechaNacimiento;
 	}
@@ -343,6 +346,9 @@ public class Terceros {
 	public void setTipoPersona(Tipopersona tipoPersona) {
 		this.tipoPersona = tipoPersona;
 	}
+
+	public Integer getVendedorId() { return vendedorId; }
+	public void setVendedorId(Integer vendedorId) { this.vendedorId = vendedorId; }
 
 	public Departamento getDepartamento() { return departamento; }
 	public void setDepartamento(Departamento departamento) { this.departamento = departamento; }

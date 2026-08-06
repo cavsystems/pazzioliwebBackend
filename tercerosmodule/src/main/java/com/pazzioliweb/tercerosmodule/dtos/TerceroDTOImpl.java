@@ -85,6 +85,7 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
     private String codigoPostal;
     private String estado;
     private String ultimoMovimiento;
+    private Integer vendedorId;
     
     public List<RetencionesDTO> getRetenciones() {
 		return retenciones;
@@ -170,6 +171,9 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
 
 	public String getUltimoMovimiento() { return ultimoMovimiento; }
 	public void setUltimoMovimiento(String ultimoMovimiento) { this.ultimoMovimiento = ultimoMovimiento; }
+
+	public Integer getVendedorId() { return vendedorId; }
+	public void setVendedorId(Integer vendedorId) { this.vendedorId = vendedorId; }
 
 	private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	// Método helper para convertir desde la entidad
@@ -263,6 +267,8 @@ public class TerceroDTOImpl implements com.pazzioliweb.tercerosmodule.dtos.Terce
         if(t.getUltimoMovimiento() != null) {
             dto.setUltimoMovimiento(t.getUltimoMovimiento().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         }
+
+        dto.setVendedorId(t.getVendedorId());
 
         return dto;
     }
