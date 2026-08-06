@@ -1,3 +1,17 @@
+> **Este proceso manual queda reemplazado por Flyway.** Desde `V8__fix_facturas_fk_comprobante.sql` en
+> adelante, todo cambio de esquema se escribe como `Vn__descripcion.sql` en
+> `common/src/main/resources/db/migration/common/`. `TenantMigrationRunner` (llamado desde
+> `TenantTemplateInitializer` al arrancar el backend) aplica esos `Vn` automáticamente a `_tenant_template`
+> Y a todos los tenants reales existentes — ya no hace falta regenerar `00_estructura_completa.sql` a mano
+> ni aplicar `db_migrations/*.sql` tenant por tenant. Los archivos de esta carpeta quedan como snapshot
+> histórico de cómo se reconstruyó el template la última vez que se hizo a mano (2026-07-31).
+>
+> Reglas para un `Vn` nuevo (ver los V8-V10 como ejemplo): nunca `DROP TABLE`/`CREATE TABLE` sobre tablas
+> con datos (los Vn corren de verdad contra tenants reales, no solo contra el template desechable); DDL vía
+> chequeo `information_schema` + `PREPARE`/`EXECUTE` (MySQL no soporta `CREATE INDEX IF NOT EXISTS` ni
+> `ALTER TABLE ... ADD INDEX IF NOT EXISTS`, se probó y da error de sintaxis); datos de catálogo siempre
+> `INSERT IGNORE` sobre una clave única, nunca `INSERT` a secas.
+
 # Seed del template de tenants (`_tenant_template`)
 
 Regenera el schema plantilla `_tenant_template` como una **empresa en blanco correcta**: estructura
