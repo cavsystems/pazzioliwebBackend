@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import com.pazzioliweb.empresaback.dtos.EmpresaTenantProjection;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.pazzioliweb.commonbacken.events.EmpresaCreadaEvent;
 import com.pazzioliweb.commonbacken.repositorio.DepartamentoRepositori;
 import com.pazzioliweb.commonbacken.repositorio.ImpuestosRepositori;
 import com.pazzioliweb.commonbacken.repositorio.MunicipioRepositori;
@@ -38,6 +40,7 @@ import com.pazzioliweb.productosmodule.entity.Bodegas;
 import com.pazzioliweb.productosmodule.repositori.BodegasRepository;
 import com.pazzioliweb.commonbacken.repositorio.TipoidentificacionRepository;
 import com.pazzioliweb.usuariosbacken.entity.Tipopersona;
+import com.pazzioliweb.usuariosbacken.entity.Usuario;
 import com.pazzioliweb.usuariosbacken.repositorio.TipopersonaRepository;
 
 import jakarta.persistence.EntityManager;
@@ -95,6 +98,8 @@ public class Empresacontroller {
 	  private  TenantRegister register;
 	  @Autowired
 	  private EmpresaService serv;
+	  @Autowired
+	  private ApplicationEventPublisher eventPublisher;
 	  private Map<String, Object> response = new HashMap<>();
 	  private Map<String, Boolean> responseempresa = new HashMap<>();
 	 	 @Transactional
@@ -169,9 +174,21 @@ public class Empresacontroller {
 				  
 			   }
 		   }
-		   serv.crearempresa(dto,schema,archivo);
+		   // Devuelve los usuarios creados con la empresa (normalmente uno, el admin del
+		   // wizard de cavsystems); se toma el primero como "usuario admin" para el cajero
+		   // por defecto — no hay ningún flag "es admin" en el DTO del wizard.
+		   List<Usuario> usuariosCreados = serv.crearempresa(dto,schema,archivo);
+		   Integer usuarioIdAdmin = (usuariosCreados != null && !usuariosCreados.isEmpty())
+				   ? usuariosCreados.get(0).getCodigo() : null;
 		   // modoPOS: aplicar la configuración de contabilidad (suite/POS puro) al schema recién creado.
 		   aplicarModoContabilidad(schema, dto);
+		   // Comprobantes contables por defecto + cajero por defecto del usuario admin: lo
+		   // escuchan comprobantesmodule (ComprobantesPorDefectoListener) y cajerosmodule
+		   // (CajeroPorDefectoListener) para no crear un ciclo de dependencias Maven entre
+		   // empresas y esos módulos. Cada paso se aisla en su listener, así que un fallo
+		   // puntual (p.ej. el comprobante de ventas, ligado a facturación electrónica) no
+		   // le impide al resto quedar creado ni afecta la empresa ya creada.
+		   eventPublisher.publishEvent(new EmpresaCreadaEvent(this, schema, usuarioIdAdmin));
 		   response.put("respuesta", new mensajesuccesempres("Empresa creada",true) );
 		   return ResponseEntity.status(HttpStatus.CREATED).body(response);
 		 	 }

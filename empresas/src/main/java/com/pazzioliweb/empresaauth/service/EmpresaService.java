@@ -168,7 +168,7 @@ public class EmpresaService {
 
 	
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
-	public void crearempresa(Empresaresponse empre,String db, MultipartFile archivo) throws Exception{
+	public List<Usuario> crearempresa(Empresaresponse empre,String db, MultipartFile archivo) throws Exception{
 		if(!empre.getSucursales().isEmpty()) {
 			List<Integer> municipioCodes = empre.getSucursales().stream()
 				.map(s -> s.getMunicipio().getCodigo()).distinct().collect(Collectors.toList());
@@ -272,16 +272,7 @@ public class EmpresaService {
 		
 		// Primero procesar roles y sus permisos, luego crear usuarios
 		procesarRolesYPermisos(empre.getRolespermisos());
-		crearUsuarioParaEmpresa(empre);
-		
-		
-		
-		
-		
-		  
-		
-		
-		
+		return crearUsuarioParaEmpresa(empre);
 	}
 
       public  EmpresaTenantProjection actulizarlicencia(Empresaresponse empre, int codigoempresa){
@@ -505,37 +496,40 @@ public class EmpresaService {
 
 	}
 
-	private void crearUsuarioParaEmpresa(Empresaresponse empre) {
+	private List<Usuario> crearUsuarioParaEmpresa(Empresaresponse empre) {
+		List<Usuario> creados = new ArrayList<>();
 		try {
 			// Verificar si hay usuarios para crear
 			if (empre.getUsuarios() == null || empre.getUsuarios().isEmpty()) {
 				System.out.println("No hay usuarios para crear");
-				return;
+				return creados;
 			}
-			
+
 			// Procesar cada usuario de la lista
 			for (Empresaresponse.usuario usuarioDto : empre.getUsuarios()) {
-				crearUsuarioIndividual(usuarioDto, empre);
+				Usuario creado = crearUsuarioIndividual(usuarioDto, empre);
+				if (creado != null) creados.add(creado);
 			}
-			
+
 		} catch (Exception e) {
 			// En caso de error, lo registramos pero no interrumpimos la creación de la empresa
 			System.err.println("Error al crear usuarios para la empresa: " + e.getMessage());
 			e.printStackTrace();
 		}
+		return creados;
 	}
-	
-	private void crearUsuarioIndividual(Empresaresponse.usuario usuarioDto, Empresaresponse empre) {
+
+	private Usuario crearUsuarioIndividual(Empresaresponse.usuario usuarioDto, Empresaresponse empre) {
 		try {
 			// El rol ya fue creado/verificado en procesarRolesYPermisos — solo buscarlo
 			if (usuarioDto.getRol() == null || usuarioDto.getRol().trim().isEmpty()) {
 				System.err.println("El usuario " + usuarioDto.getUsuario() + " no tiene rol definido");
-				return;
+				return null;
 			}
 			Roles rol = rolesRepository.findByNombreIgnoreCase(usuarioDto.getRol().trim()).orElse(null);
 			if (rol == null) {
 				System.err.println("No se encontró el rol: " + usuarioDto.getRol() + " para el usuario: " + usuarioDto.getUsuario());
-				return;
+				return null;
 			}
 
 			Usuario nuevoUsuario = new Usuario();
@@ -564,10 +558,12 @@ public class EmpresaService {
 
 			Usuario guardado = usuarioRepository.save(nuevoUsuario);
 			System.out.println("Usuario guardado con ID: " + guardado.getCodigo());
+			return guardado;
 
 		} catch (Exception e) {
 			System.err.println("Error al crear usuario individual " + usuarioDto.getUsuario() + ": " + e.getMessage());
 			e.printStackTrace();
+			return null;
 		}
 	}
 	

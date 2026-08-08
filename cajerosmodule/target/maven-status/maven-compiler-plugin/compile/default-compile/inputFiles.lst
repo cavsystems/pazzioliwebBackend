@@ -2,6 +2,7 @@ D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\c
 D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\cajerosmodule\entity\Cajero.java
 D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\cajerosmodule\repositori\MovimientoCajeroRepository.java
 D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\cajerosmodule\scheduler\CajaMidnightScheduler.java
+D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\cajerosmodule\service\CajeroPorDefectoListener.java
 D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\cajerosmodule\dtos\CuadreCajaDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\cajerosmodule\dtos\CajeroDTO.java
 D:\Pazzioli WEB\pazzioliwebBackend\cajerosmodule\src\main\java\com\pazzioliweb\cajerosmodule\dtos\InformeDiarioVentasDTO.java
