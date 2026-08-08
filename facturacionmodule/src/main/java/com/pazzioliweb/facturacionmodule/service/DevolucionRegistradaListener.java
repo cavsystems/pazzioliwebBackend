@@ -1,6 +1,7 @@
 package com.pazzioliweb.facturacionmodule.service;
 
 import com.pazzioliweb.commonbacken.events.DevolucionRegistradaEvent;
+import com.pazzioliweb.commonbacken.services.NotificacionService;
 import com.pazzioliweb.comprobantesmodule.entity.ComprobanteContable;
 import com.pazzioliweb.comprobantesmodule.enums.TipoMovimientoComprobante;
 import com.pazzioliweb.comprobantesmodule.repositori.ComprobanteContableRepository;
@@ -50,6 +51,7 @@ public class DevolucionRegistradaListener {
     private final ProveedorFacturacionElectronica proveedorDian;
     private final DianConfig dianConfig;
     private final com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante;
+    private final NotificacionService notificacionService;
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.transaction.PlatformTransactionManager transactionManager;
@@ -74,7 +76,8 @@ public class DevolucionRegistradaListener {
                                          EmpresaRepositori empresaRepositori,
                                          ProveedorFacturacionElectronica proveedorDian,
                                          DianConfig dianConfig,
-                                         com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante) {
+                                         com.pazzioliweb.comprobantesmodule.service.AsignacionComprobanteService asignacionComprobante,
+                                         NotificacionService notificacionService) {
         this.devolucionRepository = devolucionRepository;
         this.facturasRepository = facturasRepository;
         this.comprobantesRepository = comprobantesRepository;
@@ -82,6 +85,18 @@ public class DevolucionRegistradaListener {
         this.proveedorDian = proveedorDian;
         this.dianConfig = dianConfig;
         this.asignacionComprobante = asignacionComprobante;
+        this.notificacionService = notificacionService;
+    }
+
+    /** Notificación visible en el navbar para cualquier desenlace de la NC que exija
+     *  acción del usuario (PENDIENTE = falta configurar algo; RECHAZADA = falló el envío). */
+    private void notificarNc(Long devolucionId, String estado, String mensaje) {
+        String tipo = "RECHAZADA".equalsIgnoreCase(estado) ? "NC_RECHAZADA" : "NC_PENDIENTE";
+        String titulo = "RECHAZADA".equalsIgnoreCase(estado)
+                ? "Nota crédito rechazada" : "Nota crédito pendiente";
+        notificacionService.crear(tipo, titulo,
+                "Devolución #" + devolucionId + ": " + (mensaje != null ? mensaje : "sin detalle"),
+                "DEVOLUCION", devolucionId);
     }
 
     // fallbackExecution=true: el endpoint de REENVÍO publica el evento SIN transacción
@@ -170,6 +185,7 @@ public class DevolucionRegistradaListener {
                         " sin autorizar por la DIAN (estado " + facturaOriginal.getEstadoDian() +
                         "): la NC se emitirá al reenviar cuando esté autorizada.");
                 devolucionRepository.save(devolucion);
+                notificarNc(event.getDevolucionId(), "PENDIENTE", devolucion.getMensajeDianNc());
                 return;
             }
 
@@ -189,6 +205,7 @@ public class DevolucionRegistradaListener {
                 devolucion.setMensajeDianNc(truncar("Comprobante NC " + compNcPre.getPrefijo() +
                         " sin resolución DIAN completa: configure la resolución y reenvíe la NC."));
                 devolucionRepository.save(devolucion);
+                notificarNc(event.getDevolucionId(), "PENDIENTE", devolucion.getMensajeDianNc());
                 return;
             }
 
@@ -207,6 +224,7 @@ public class DevolucionRegistradaListener {
                 devolucion.setEstadoDianNc("PENDIENTE");
                 devolucion.setMensajeDianNc(truncar("No se pudo asignar numeración NC: " + ex.getMessage()));
                 devolucionRepository.save(devolucion);
+                notificarNc(event.getDevolucionId(), "PENDIENTE", devolucion.getMensajeDianNc());
                 return;
             }
             ComprobanteContable compNC = rNC.getComprobante();
@@ -236,6 +254,7 @@ public class DevolucionRegistradaListener {
                 devolucion.setMensajeDianNc("Comprobante NC " + compNC.getPrefijo() +
                         " sin resolución DIAN completa: configure la resolución y reenvíe la NC.");
                 devolucionRepository.save(devolucion);
+                notificarNc(event.getDevolucionId(), "PENDIENTE", devolucion.getMensajeDianNc());
                 return;
             }
 
@@ -256,6 +275,7 @@ public class DevolucionRegistradaListener {
                 devolucion.setMensajeDianNc(truncar("Error al enviar la NC: " + envEx.getMessage()));
                 final Devolucion dErr = devolucion;
                 txCorta().execute(status -> devolucionRepository.save(dErr));
+                notificarNc(event.getDevolucionId(), "RECHAZADA", dErr.getMensajeDianNc());
                 return;
             }
 
@@ -270,6 +290,9 @@ public class DevolucionRegistradaListener {
             devolucion.setQrDataNc(resp.getQrData());
             final Devolucion dOk = devolucion;
             txCorta().execute(status -> devolucionRepository.save(dOk));
+            if (!"AUTORIZADA".equalsIgnoreCase(resp.getEstadoDian())) {
+                notificarNc(event.getDevolucionId(), resp.getEstadoDian(), dOk.getMensajeDianNc());
+            }
 
             log.info("✅ Nota Crédito generada: {} - Estado DIAN: {} - CUDE: {}",
                     devolucion.getNumeroNc(), resp.getEstadoDian(),
@@ -287,6 +310,7 @@ public class DevolucionRegistradaListener {
                     d.setEstadoDianNc("RECHAZADA");
                     d.setMensajeDianNc(truncar("Error generando NC: " + e.getMessage()));
                     txCorta().execute(status -> devolucionRepository.save(d));
+                    notificarNc(event.getDevolucionId(), "RECHAZADA", d.getMensajeDianNc());
                 }
             } catch (Exception ignored) {
                 log.warn("No se pudo registrar el error de NC en la devolución {}", event.getDevolucionId());

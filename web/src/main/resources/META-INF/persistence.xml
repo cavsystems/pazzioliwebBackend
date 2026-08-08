@@ -33,6 +33,7 @@
         <class>com.pazzioliweb.commonbacken.entity.Pais</class>
         <class>com.pazzioliweb.commonbacken.entity.Tipoidentificacion</class>
         <class>com.pazzioliweb.commonbacken.entity.Retenciones</class>
+        <class>com.pazzioliweb.commonbacken.entity.Notificacion</class>
 
         <!--  Productos -->
         <class>com.pazzioliweb.productosmodule.entity.Bodegas</class>

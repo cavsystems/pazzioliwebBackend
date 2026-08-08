@@ -1,6 +1,7 @@
 package com.pazzioliweb.comprobantesmodule.service;
 
 import com.pazzioliweb.commonbacken.events.FacturaAutorizadaEvent;
+import com.pazzioliweb.commonbacken.services.NotificacionService;
 import com.pazzioliweb.comprobantesmodule.entity.AsientoContable;
 import com.pazzioliweb.comprobantesmodule.repositori.AsientoContableRepository;
 import org.slf4j.Logger;
@@ -27,9 +28,11 @@ public class FacturaAutorizadaListener {
     private static final Logger log = LoggerFactory.getLogger(FacturaAutorizadaListener.class);
 
     private final AsientoContableRepository asientoRepo;
+    private final NotificacionService notificacionService;
 
-    public FacturaAutorizadaListener(AsientoContableRepository asientoRepo) {
+    public FacturaAutorizadaListener(AsientoContableRepository asientoRepo, NotificacionService notificacionService) {
         this.asientoRepo = asientoRepo;
+        this.notificacionService = notificacionService;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -38,6 +41,20 @@ public class FacturaAutorizadaListener {
         if (event.getVentaId() == null) {
             log.warn("[FacturaAutorizada] Evento sin ventaId, ignorando.");
             return;
+        }
+
+        // Notificación visible en el navbar: solo para el caso que requiere acción del
+        // usuario (rechazo). No se notifica AUTORIZADA/SIMULADA para no llenar la campana
+        // de ruido con el camino feliz (la mayoría de facturas se autorizan sin problema).
+        if ("RECHAZADA".equalsIgnoreCase(event.getEstadoDian())) {
+            notificacionService.crear(
+                    "FACTURA_RECHAZADA",
+                    "Factura rechazada por la DIAN",
+                    "La factura de la venta #" + event.getVentaId() + " fue rechazada"
+                            + (event.getMensajeDian() != null ? ": " + event.getMensajeDian() : "."),
+                    "FACTURA",
+                    event.getFacturaId() != null ? event.getFacturaId().longValue() : null
+            );
         }
 
         // El asiento se identifica por (documento_origen_tipo, documento_origen_id).

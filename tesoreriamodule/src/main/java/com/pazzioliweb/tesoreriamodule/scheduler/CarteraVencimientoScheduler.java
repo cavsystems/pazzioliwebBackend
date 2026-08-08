@@ -2,6 +2,7 @@ package com.pazzioliweb.tesoreriamodule.scheduler;
 
 import com.pazzioliweb.commonbacken.conexiondb.MultiTenantDataSource;
 import com.pazzioliweb.commonbacken.conexiondb.TenantContext;
+import com.pazzioliweb.commonbacken.services.NotificacionService;
 import com.pazzioliweb.tesoreriamodule.service.CarteraVencimientoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,6 +27,9 @@ public class CarteraVencimientoScheduler {
     @Autowired
     private MultiTenantDataSource multiTenantDataSource;
 
+    @Autowired
+    private NotificacionService notificacionService;
+
     /** Todos los días a las 00:15 hora Colombia (después del cierre de caja de medianoche). */
     @Scheduled(cron = "0 15 0 * * *", zone = "America/Bogota")
     public void marcarCarteraVencida() {
@@ -37,6 +41,8 @@ public class CarteraVencimientoScheduler {
                 int[] r = carteraVencimientoService.marcarVencidas(hoy);
                 if (r[0] > 0 || r[1] > 0) {
                     System.out.println("✅ [CARTERA][" + tenant + "] CxC vencidas: " + r[0] + " | CxP vencidas: " + r[1]);
+                    String mensaje = "Hoy vencieron " + r[0] + " cuenta(s) por cobrar y " + r[1] + " cuenta(s) por pagar.";
+                    notificacionService.crearSiNoExisteHoy("CARTERA_VENCIDA", "Cartera vencida", mensaje, null, null);
                 }
             } catch (Exception e) {
                 System.out.println("❌ [CARTERA][" + tenant + "] Error: " + e.getMessage());
