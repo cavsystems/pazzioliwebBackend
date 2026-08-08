@@ -42,6 +42,11 @@ public class TenantService {
 			.dataSource(ds)
 			.schemas(TEMPLATE_SCHEMA)
 			.locations("classpath:db/migration/common")
+			// outOfOrder: _tenant_template/algunos tenants tienen la versión 6 ocupada por
+			// un registro viejo mal etiquetado ("subpermisos", previo a la convención Vn)
+			// en vez del V6 real (add_vendedor_id_terceros). Sin esto Flyway se niega a
+			// avanzar aunque el V6 real sea un ALTER idempotente y seguro de aplicar tarde.
+			.outOfOrder(true)
 			.load();
 
 		// Repair para alinear checksums si algún archivo de migración se editó.

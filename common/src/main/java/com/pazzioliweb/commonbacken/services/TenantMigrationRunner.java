@@ -59,7 +59,23 @@ public class TenantMigrationRunner {
 					.locations("classpath:db/migration/common")
 					.baselineOnMigrate(!yaTieneHistorial)
 					.baselineVersion(ULTIMO_VX_DESTRUCTIVO)
+					// outOfOrder: algunos tenants tienen la versión 6 ocupada por un registro
+					// viejo mal etiquetado ("subpermisos", previo a la convención Vn) en vez
+					// del V6 real (add_vendedor_id_terceros). Sin esto Flyway se niega a avanzar
+					// aunque el V6 real sea un ALTER idempotente y seguro de aplicar tarde.
+					.outOfOrder(true)
 					.load();
+
+			// Repair antes de migrar (mismo patrón que TenantService.initTemplateSchema):
+			// limpia filas de migraciones fallidas (p.ej. un intento previo con un archivo
+			// que tenía un error de sintaxis) y realinea checksums si algún Vn se editó.
+			// Sin esto, un fallo puntual deja el tenant bloqueado en cada arranque hasta
+			// una intervención manual.
+			try {
+				flyway.repair();
+			} catch (Exception e) {
+				System.out.println("[TenantMigration] " + schema + " -> repair() omitido: " + e.getMessage());
+			}
 
 			MigrateResult resultado = flyway.migrate();
 			System.out.println("[TenantMigration] " + schema + " -> OK"
